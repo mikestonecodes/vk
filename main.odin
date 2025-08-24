@@ -30,6 +30,9 @@ main :: proc() {
 	for wayland_should_quit() == 0 {
 		wayland_poll_events()
 		
+		// Handle window resize
+		handle_resize()
+		
 		// Hot reload shaders if changed
 		if check_shader_reload() do recreate_pipeline()
 		

@@ -10,10 +10,48 @@ import "core:strings"
 foreign import vulkan "system:vulkan"
 
 
-//-------
+render_frame :: proc(start_time: time.Time) {
+	// 1. Get next swapchain image
+	current_element := &elements[current_frame]
+	if !acquire_next_image(current_element.startSemaphore) do return
 
+	// 2. Wait for previous frame, reset fence
+	element := &elements[image_index]
+	prepare_frame(element)
+
+	// 3. Record draw commands
+	record_commands(element, start_time)
+
+	// 4. Submit to GPU and present
+	submit_commands(element, current_element.startSemaphore)
+	present_frame()
+
+	current_frame = (current_frame + 1) % image_count
+}
+
+
+// Update window size from Wayland
+update_window_size :: proc() {
+	width = c.uint32_t(get_window_width())
+	height = c.uint32_t(get_window_height())
+}
+
+// Handle window resize
+handle_resize :: proc() {
+	if wayland_resize_needed() != 0 {
+		update_window_size()
+		vkDeviceWaitIdle(device)
+		destroy_swapchain()
+		create_swapchain()
+		// Pipeline needs to be recreated with new viewport
+		recreate_graphics_pipeline()
+	}
+}
 
 vulkan_init :: proc() -> (ok: bool) {
+	// Get initial window size
+	update_window_size()
+
 	if !init_vulkan() do return false
 	create_swapchain()
 	if !create_graphics_pipeline() do return false
@@ -457,8 +495,8 @@ pipeline_layout: VkPipelineLayout
 graphics_pipeline: VkPipeline
 elements: [^]SwapchainElement
 format: VkFormat = VK_FORMAT_UNDEFINED
-width: c.uint32_t = 1600
-height: c.uint32_t = 900
+width: c.uint32_t = 800
+height: c.uint32_t = 600
 current_frame: c.uint32_t = 0
 image_index: c.uint32_t = 0
 image_count: c.uint32_t = 0

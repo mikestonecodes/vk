@@ -18,6 +18,9 @@ foreign wayland_wrapper {
     get_wayland_surface :: proc() -> wl_surface ---
     wayland_should_quit :: proc() -> c.int ---
     wayland_poll_events :: proc() ---
+    get_window_width :: proc() -> c.int32_t ---
+    get_window_height :: proc() -> c.int32_t ---
+    wayland_resize_needed :: proc() -> c.int ---
 }
 
 init_platform :: proc() -> bool {

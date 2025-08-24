@@ -13,6 +13,9 @@ static struct xdg_wm_base *shell = NULL;
 static struct xdg_surface *shell_surface = NULL;
 static struct xdg_toplevel *toplevel = NULL;
 static int quit = 0;
+static int32_t window_width = 800;  // Default size
+static int32_t window_height = 600;
+static int resize_needed = 0;
 
 // XDG Shell listeners
 static void shell_ping(void *data, struct xdg_wm_base *shell, uint32_t serial) {
@@ -33,7 +36,14 @@ static const struct xdg_surface_listener shell_surface_listener = {
 
 static void toplevel_configure(void *data, struct xdg_toplevel *toplevel,
                               int32_t width, int32_t height, struct wl_array *states) {
-    // Handle resize
+    if (width > 0 && height > 0) {
+        if (window_width != width || window_height != height) {
+            window_width = width;
+            window_height = height;
+            resize_needed = 1;
+            printf("Window resized to %dx%d\n", width, height);
+        }
+    }
 }
 
 static void toplevel_close(void *data, struct xdg_toplevel *toplevel) {
@@ -178,4 +188,18 @@ void wayland_poll_events(void) {
         wl_display_dispatch_pending(display);
         wl_display_roundtrip(display);
     }
+}
+
+int32_t get_window_width(void) {
+    return window_width;
+}
+
+int32_t get_window_height(void) {
+    return window_height;
+}
+
+int wayland_resize_needed(void) {
+    int needed = resize_needed;
+    resize_needed = 0;  // Reset flag
+    return needed;
 }

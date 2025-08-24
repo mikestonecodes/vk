@@ -7,25 +7,41 @@ import "core:time"
 import "base:runtime"
 import "core:strings"
 
-render_frame :: proc(start_time: time.Time) {
-	// 1. Get next swapchain image
-	current_element := &elements[current_frame]
-	if !acquire_next_image(current_element.startSemaphore) do return
+record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
+	// Begin command buffer
+	begin_info := VkCommandBufferBeginInfo{
+		sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+	}
+	vkResetCommandBuffer(element.commandBuffer, 0)
+	vkBeginCommandBuffer(element.commandBuffer, &begin_info)
 
-	// 2. Wait for previous frame, reset fence
-	element := &elements[image_index]
-	prepare_frame(element)
+	// Begin render pass (clears screen to black)
+	clear_value := VkClearValue{color = {float32 = {0.0, 0.0, 0.0, 1.0}}}
+	render_pass_begin := VkRenderPassBeginInfo{
+		sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+		renderPass = render_pass,
+		framebuffer = element.framebuffer,
+		renderArea = {offset = {0, 0}, extent = {width, height}},
+		clearValueCount = 1, pClearValues = &clear_value,
+	}
 
-	// 3. Record draw commands
-	record_commands(element, start_time)
+	vkCmdBeginRenderPass(element.commandBuffer, &render_pass_begin, VK_SUBPASS_CONTENTS_INLINE)
 
-	// 4. Submit to GPU and present
-	submit_commands(element, current_element.startSemaphore)
-	present_frame()
+	// Bind pipeline
+	vkCmdBindPipeline(element.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline)
 
-	current_frame = (current_frame + 1) % image_count
+	// Push time constant for rotation
+	elapsed_time := f32(time.duration_seconds(time.diff(start_time, time.now())))
+	vkCmdPushConstants(element.commandBuffer, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, size_of(f32), &elapsed_time)
+
+	// Draw particles (6 vertices per quad, 100 instances)
+	vkCmdDraw(element.commandBuffer, 6, 100000, 0, 0)
+
+	// End render pass and command buffer
+	vkCmdEndRenderPass(element.commandBuffer)
+	vkEndCommandBuffer(element.commandBuffer)
 }
-
 
 
 create_graphics_pipeline :: proc() -> bool {
@@ -75,7 +91,7 @@ create_graphics_pipeline :: proc() -> bool {
 		{sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, stage = VK_SHADER_STAGE_FRAGMENT_BIT, module = frag_shader_module, pName = "fs_main"},
 	}
 
-	// Vertex input - no vertices, using hardcoded triangle in shader
+	// Vertex input - no vertex buffers, using hardcoded quad vertices in shader
 	vertex_input_info := VkPipelineVertexInputStateCreateInfo{sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO}
 
 	// Input assembly - drawing triangles
@@ -154,39 +170,4 @@ create_graphics_pipeline :: proc() -> bool {
 }
 
 
-record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
-	// Begin command buffer
-	begin_info := VkCommandBufferBeginInfo{
-		sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-		flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-	}
-	vkResetCommandBuffer(element.commandBuffer, 0)
-	vkBeginCommandBuffer(element.commandBuffer, &begin_info)
-
-	// Begin render pass (clears screen to black)
-	clear_value := VkClearValue{color = {float32 = {0.0, 0.0, 0.0, 1.0}}}
-	render_pass_begin := VkRenderPassBeginInfo{
-		sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-		renderPass = render_pass,
-		framebuffer = element.framebuffer,
-		renderArea = {offset = {0, 0}, extent = {width, height}},
-		clearValueCount = 1, pClearValues = &clear_value,
-	}
-
-	vkCmdBeginRenderPass(element.commandBuffer, &render_pass_begin, VK_SUBPASS_CONTENTS_INLINE)
-
-	// Bind pipeline
-	vkCmdBindPipeline(element.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline)
-
-	// Push time constant for rotation
-	elapsed_time := f32(time.duration_seconds(time.diff(start_time, time.now())))
-	vkCmdPushConstants(element.commandBuffer, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, size_of(f32), &elapsed_time)
-
-	// Draw triangle (3 vertices, 1 instance)
-	vkCmdDraw(element.commandBuffer, 3, 1, 0, 0)
-
-	// End render pass and command buffer
-	vkCmdEndRenderPass(element.commandBuffer)
-	vkEndCommandBuffer(element.commandBuffer)
-}
 
