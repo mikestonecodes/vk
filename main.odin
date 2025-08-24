@@ -3,14 +3,14 @@ package main
 import "core:time"
 import "core:os"
 
-// Global state 
+// Global state
 display: wl_display
 surface: wl_surface
 
 main :: proc() {
 	// Handle command line arguments
 	for arg in os.args[1:] {
-		if arg == "-validation" do ENABLE_VALIDATION = true
+		if arg == "-release" do ENABLE_VALIDATION = false
 	}
 
 	start_time := time.now()
@@ -29,13 +29,13 @@ main :: proc() {
 	// Main render loop
 	for wayland_should_quit() == 0 {
 		wayland_poll_events()
-		
+
 		// Handle window resize
 		handle_resize()
-		
+
 		// Hot reload shaders if changed
 		if check_shader_reload() do recreate_pipeline()
-		
+
 		// Render frame
 		render_frame(start_time)
 	}

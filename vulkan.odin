@@ -480,7 +480,7 @@ layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
 device_extension_names := [?]cstring{"VK_KHR_swapchain"}
 
 // Global Vulkan state
-ENABLE_VALIDATION := false
+ENABLE_VALIDATION := true
 instance: VkInstance
 debug_messenger: VkDebugUtilsMessengerEXT
 vulkan_surface: VkSurfaceKHR
