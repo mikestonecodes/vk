@@ -3,11 +3,144 @@ package main
 import "core:fmt"
 import "core:c"
 import "core:os"
+import "core:time"
 import "base:runtime"
+import "core:strings"
 
 foreign import vulkan "system:vulkan"
 
-// Vulkan types
+
+//-------
+
+
+vulkan_init :: proc() -> (ok: bool) {
+	if !init_vulkan() do return false
+	create_swapchain()
+	if !create_graphics_pipeline() do return false
+	return true
+}
+
+vulkan_cleanup :: proc() {
+	vkDeviceWaitIdle(device)
+	destroy_swapchain()
+	vkDestroyPipeline(device, graphics_pipeline, nil)
+	vkDestroyPipelineLayout(device, pipeline_layout, nil)
+	vkDestroyCommandPool(device, command_pool, nil)
+	vkDestroyDevice(device, nil)
+	vkDestroySurfaceKHR(instance, vulkan_surface, nil)
+	if ENABLE_VALIDATION {
+		vkDestroyDebugUtilsMessengerEXT := cast(proc "c" (VkInstance, VkDebugUtilsMessengerEXT, rawptr))vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT")
+		if vkDestroyDebugUtilsMessengerEXT != nil do vkDestroyDebugUtilsMessengerEXT(instance, debug_messenger, nil)
+	}
+	vkDestroyInstance(instance, nil)
+}
+
+// Hot reload pipeline when shaders change
+recreate_pipeline :: proc() {
+	if !recreate_graphics_pipeline() do fmt.println("Failed to recreate pipeline")
+}
+
+submit_commands :: proc(element: ^SwapchainElement, wait_semaphore: VkSemaphore) {
+	wait_stage: c.uint32_t = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+	wait_sem := wait_semaphore
+	submit_info := VkSubmitInfo{
+		sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		waitSemaphoreCount = 1, pWaitSemaphores = &wait_sem, pWaitDstStageMask = &wait_stage,
+		commandBufferCount = 1, pCommandBuffers = &element.commandBuffer,
+	}
+
+	vkQueueSubmit(queue, 1, &submit_info, element.fence)
+	vkWaitForFences(device, 1, &element.fence, VK_TRUE, UINT64_MAX)
+}
+
+present_frame :: proc() {
+	present_info := VkPresentInfoKHR{
+		sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+		swapchainCount = 1, pSwapchains = &swapchain, pImageIndices = &image_index,
+	}
+
+	result := vkQueuePresentKHR(queue, &present_info)
+	if result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR {
+		vkDeviceWaitIdle(device)
+		destroy_swapchain()
+		create_swapchain()
+	}
+}
+
+
+
+recreate_graphics_pipeline :: proc() -> bool {
+	vkDeviceWaitIdle(device)
+	vkDestroyPipeline(device, graphics_pipeline, nil)
+	vkDestroyPipelineLayout(device, pipeline_layout, nil)
+	return create_graphics_pipeline()
+}
+
+acquire_next_image :: proc(semaphore: VkSemaphore) -> bool {
+	result := vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, semaphore, VK_NULL_HANDLE, &image_index)
+
+	if result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR {
+		vkDeviceWaitIdle(device)
+		destroy_swapchain()
+		create_swapchain()
+		return false
+	}
+
+	return result == VK_SUCCESS
+}
+
+prepare_frame :: proc(element: ^SwapchainElement) {
+	if element.lastFence != VK_NULL_HANDLE {
+		vkWaitForFences(device, 1, &element.lastFence, VK_TRUE, UINT64_MAX)
+	}
+	vkResetFences(device, 1, &element.fence)
+	element.lastFence = element.fence
+}
+
+last_vertex_time: time.Time
+last_fragment_time: time.Time
+
+init_shader_times :: proc() {
+	if info, err := os.stat("vertex.wgsl"); err == nil do last_vertex_time = info.modification_time
+	if info, err := os.stat("fragment.wgsl"); err == nil do last_fragment_time = info.modification_time
+}
+
+check_shader_reload :: proc() -> bool {
+	vertex_info, vertex_err := os.stat("vertex.wgsl")
+	fragment_info, fragment_err := os.stat("fragment.wgsl")
+	if vertex_err != nil || fragment_err != nil do return false
+
+	vertex_changed := vertex_info.modification_time != last_vertex_time
+	fragment_changed := fragment_info.modification_time != last_fragment_time
+
+	if vertex_changed || fragment_changed {
+		last_vertex_time = vertex_info.modification_time
+		last_fragment_time = fragment_info.modification_time
+		return compile_shaders(vertex_changed, fragment_changed)
+	}
+
+	return false
+}
+
+compile_shaders :: proc(vertex_changed, fragment_changed: bool) -> bool {
+	fmt.println("Recompiling shaders...")
+	success := true
+
+	if vertex_changed {
+		vertex_cmd := strings.clone_to_cstring("./naga vertex.wgsl vertex.spv")
+		defer delete(vertex_cmd)
+		if system(vertex_cmd) != 0 do success = false
+	}
+
+	if fragment_changed {
+		fragment_cmd := strings.clone_to_cstring("./naga fragment.wgsl fragment.spv")
+		defer delete(fragment_cmd)
+		if system(fragment_cmd) != 0 do success = false
+	}
+
+	return success
+}
+
 VkResult :: c.int
 VkInstance :: rawptr
 VkSurfaceKHR :: rawptr
@@ -29,7 +162,6 @@ VkFence :: rawptr
 VkFormat :: c.uint32_t
 VkDebugUtilsMessengerEXT :: rawptr
 
-// Vulkan constants - only the ones actually used
 VK_SUCCESS :: 0
 VK_NULL_HANDLE: rawptr = nil
 VK_ERROR_OUT_OF_DATE_KHR :: -1000001004
@@ -39,7 +171,6 @@ VK_FALSE :: 0
 UINT64_MAX :: 0xFFFFFFFFFFFFFFFF
 VK_API_VERSION_1_0: c.uint32_t = (1 << 22) | (0 << 12) | 0
 
-// Structure type constants
 VK_STRUCTURE_TYPE_APPLICATION_INFO :: 0
 VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO :: 1
 VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR :: 1000006000
@@ -70,7 +201,6 @@ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO :: 30
 VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT :: 1000128004
 VK_STRUCTURE_TYPE_PUSH_CONSTANT_RANGE :: 31
 
-// Vulkan flags and enums - only used ones
 VK_QUEUE_GRAPHICS_BIT :: 0x00000001
 VK_FORMAT_UNDEFINED :: 0
 VK_FORMAT_B8G8R8A8_UNORM :: 44
@@ -109,7 +239,6 @@ VK_COLOR_COMPONENT_G_BIT :: 0x00000002
 VK_COLOR_COMPONENT_B_BIT :: 0x00000004
 VK_COLOR_COMPONENT_A_BIT :: 0x00000008
 
-// Debug constants
 VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT :: 0x00000001
 VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT :: 0x00000010
 VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT :: 0x00000100
@@ -118,459 +247,201 @@ VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT :: 0x00000001
 VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT :: 0x00000002
 VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT :: 0x00000004
 
-// Vulkan structs - only used ones
-VkExtent2D :: struct {
-    width: c.uint32_t,
-    height: c.uint32_t,
-}
-
+// Vulkan structs - keeping all the same ones
+VkExtent2D :: struct { width: c.uint32_t, height: c.uint32_t }
 VkSurfaceCapabilitiesKHR :: struct {
-    minImageCount: c.uint32_t,
-    maxImageCount: c.uint32_t,
-    currentExtent: VkExtent2D,
-    minImageExtent: VkExtent2D,
-    maxImageExtent: VkExtent2D,
+    minImageCount: c.uint32_t, maxImageCount: c.uint32_t,
+    currentExtent: VkExtent2D, minImageExtent: VkExtent2D, maxImageExtent: VkExtent2D,
     maxImageArrayLayers: c.uint32_t,
-    supportedTransforms: c.uint32_t,
-    currentTransform: c.uint32_t,
-    supportedCompositeAlpha: c.uint32_t,
-    supportedUsageFlags: c.uint32_t,
+    supportedTransforms: c.uint32_t, currentTransform: c.uint32_t,
+    supportedCompositeAlpha: c.uint32_t, supportedUsageFlags: c.uint32_t,
 }
-
-VkSurfaceFormatKHR :: struct {
-    format: c.uint32_t,
-    colorSpace: c.uint32_t,
-}
-
+VkSurfaceFormatKHR :: struct { format: c.uint32_t, colorSpace: c.uint32_t }
 VkSwapchainCreateInfoKHR :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    surface: VkSurfaceKHR,
-    minImageCount: c.uint32_t,
-    imageFormat: c.uint32_t,
-    imageColorSpace: c.uint32_t,
-    imageExtent: VkExtent2D,
-    imageArrayLayers: c.uint32_t,
-    imageUsage: c.uint32_t,
-    imageSharingMode: c.uint32_t,
-    queueFamilyIndexCount: c.uint32_t,
-    pQueueFamilyIndices: [^]c.uint32_t,
-    preTransform: c.uint32_t,
-    compositeAlpha: c.uint32_t,
-    presentMode: c.uint32_t,
-    clipped: c.uint32_t,
-    oldSwapchain: VkSwapchainKHR,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t, surface: VkSurfaceKHR,
+    minImageCount: c.uint32_t, imageFormat: c.uint32_t, imageColorSpace: c.uint32_t,
+    imageExtent: VkExtent2D, imageArrayLayers: c.uint32_t, imageUsage: c.uint32_t,
+    imageSharingMode: c.uint32_t, queueFamilyIndexCount: c.uint32_t, pQueueFamilyIndices: [^]c.uint32_t,
+    preTransform: c.uint32_t, compositeAlpha: c.uint32_t, presentMode: c.uint32_t,
+    clipped: c.uint32_t, oldSwapchain: VkSwapchainKHR,
 }
-
 VkImageViewCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    image: VkImage,
-    viewType: c.uint32_t,
-    format: c.uint32_t,
-    components: [4]c.uint32_t,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t, image: VkImage,
+    viewType: c.uint32_t, format: c.uint32_t, components: [4]c.uint32_t,
     subresourceRange: struct {
-        aspectMask: c.uint32_t,
-        baseMipLevel: c.uint32_t,
-        levelCount: c.uint32_t,
-        baseArrayLayer: c.uint32_t,
-        layerCount: c.uint32_t,
+        aspectMask: c.uint32_t, baseMipLevel: c.uint32_t, levelCount: c.uint32_t,
+        baseArrayLayer: c.uint32_t, layerCount: c.uint32_t,
     },
 }
-
 VkAttachmentDescription :: struct {
-    flags: c.uint32_t,
-    format: c.uint32_t,
-    samples: c.uint32_t,
-    loadOp: c.uint32_t,
-    storeOp: c.uint32_t,
-    stencilLoadOp: c.uint32_t,
-    stencilStoreOp: c.uint32_t,
-    initialLayout: c.uint32_t,
-    finalLayout: c.uint32_t,
+    flags: c.uint32_t, format: c.uint32_t, samples: c.uint32_t,
+    loadOp: c.uint32_t, storeOp: c.uint32_t,
+    stencilLoadOp: c.uint32_t, stencilStoreOp: c.uint32_t,
+    initialLayout: c.uint32_t, finalLayout: c.uint32_t,
 }
-
-VkAttachmentReference :: struct {
-    attachment: c.uint32_t,
-    layout: c.uint32_t,
-}
-
+VkAttachmentReference :: struct { attachment: c.uint32_t, layout: c.uint32_t }
 VkSubpassDescription :: struct {
-    flags: c.uint32_t,
-    pipelineBindPoint: c.uint32_t,
-    inputAttachmentCount: c.uint32_t,
-    pInputAttachments: [^]VkAttachmentReference,
-    colorAttachmentCount: c.uint32_t,
-    pColorAttachments: [^]VkAttachmentReference,
-    pResolveAttachments: [^]VkAttachmentReference,
-    pDepthStencilAttachment: ^VkAttachmentReference,
-    preserveAttachmentCount: c.uint32_t,
-    pPreserveAttachments: [^]c.uint32_t,
+    flags: c.uint32_t, pipelineBindPoint: c.uint32_t,
+    inputAttachmentCount: c.uint32_t, pInputAttachments: [^]VkAttachmentReference,
+    colorAttachmentCount: c.uint32_t, pColorAttachments: [^]VkAttachmentReference,
+    pResolveAttachments: [^]VkAttachmentReference, pDepthStencilAttachment: ^VkAttachmentReference,
+    preserveAttachmentCount: c.uint32_t, pPreserveAttachments: [^]c.uint32_t,
 }
-
 VkRenderPassCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    attachmentCount: c.uint32_t,
-    pAttachments: [^]VkAttachmentDescription,
-    subpassCount: c.uint32_t,
-    pSubpasses: [^]VkSubpassDescription,
-    dependencyCount: c.uint32_t,
-    pDependencies: rawptr,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t,
+    attachmentCount: c.uint32_t, pAttachments: [^]VkAttachmentDescription,
+    subpassCount: c.uint32_t, pSubpasses: [^]VkSubpassDescription,
+    dependencyCount: c.uint32_t, pDependencies: rawptr,
 }
-
 VkCommandPoolCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    queueFamilyIndex: c.uint32_t,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t, queueFamilyIndex: c.uint32_t,
 }
-
 VkCommandBufferAllocateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    commandPool: VkCommandPool,
-    level: c.uint32_t,
-    commandBufferCount: c.uint32_t,
+    sType: c.uint32_t, pNext: rawptr, commandPool: VkCommandPool,
+    level: c.uint32_t, commandBufferCount: c.uint32_t,
 }
-
 VkFramebufferCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    renderPass: VkRenderPass,
-    attachmentCount: c.uint32_t,
-    pAttachments: [^]VkImageView,
-    width: c.uint32_t,
-    height: c.uint32_t,
-    layers: c.uint32_t,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t, renderPass: VkRenderPass,
+    attachmentCount: c.uint32_t, pAttachments: [^]VkImageView,
+    width: c.uint32_t, height: c.uint32_t, layers: c.uint32_t,
 }
-
-VkClearValue :: struct {
-    color: struct {
-        float32: [4]f32,
-    },
-}
-
+VkClearValue :: struct { color: struct { float32: [4]f32 } }
 VkRenderPassBeginInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    renderPass: VkRenderPass,
-    framebuffer: VkFramebuffer,
-    renderArea: struct {
-        offset: struct { x: c.int32_t, y: c.int32_t },
-        extent: VkExtent2D,
-    },
-    clearValueCount: c.uint32_t,
-    pClearValues: [^]VkClearValue,
+    sType: c.uint32_t, pNext: rawptr, renderPass: VkRenderPass, framebuffer: VkFramebuffer,
+    renderArea: struct { offset: struct { x: c.int32_t, y: c.int32_t }, extent: VkExtent2D },
+    clearValueCount: c.uint32_t, pClearValues: [^]VkClearValue,
 }
-
 VkSubmitInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    waitSemaphoreCount: c.uint32_t,
-    pWaitSemaphores: ^VkSemaphore,
-    pWaitDstStageMask: ^c.uint32_t,
-    commandBufferCount: c.uint32_t,
-    pCommandBuffers: ^VkCommandBuffer,
-    signalSemaphoreCount: c.uint32_t,
-    pSignalSemaphores: ^VkSemaphore,
+    sType: c.uint32_t, pNext: rawptr,
+    waitSemaphoreCount: c.uint32_t, pWaitSemaphores: ^VkSemaphore, pWaitDstStageMask: ^c.uint32_t,
+    commandBufferCount: c.uint32_t, pCommandBuffers: ^VkCommandBuffer,
+    signalSemaphoreCount: c.uint32_t, pSignalSemaphores: ^VkSemaphore,
 }
-
 VkPresentInfoKHR :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    waitSemaphoreCount: c.uint32_t,
-    pWaitSemaphores: ^VkSemaphore,
-    swapchainCount: c.uint32_t,
-    pSwapchains: ^VkSwapchainKHR,
-    pImageIndices: ^c.uint32_t,
-    pResults: ^VkResult,
+    sType: c.uint32_t, pNext: rawptr,
+    waitSemaphoreCount: c.uint32_t, pWaitSemaphores: ^VkSemaphore,
+    swapchainCount: c.uint32_t, pSwapchains: ^VkSwapchainKHR,
+    pImageIndices: ^c.uint32_t, pResults: ^VkResult,
 }
-
 VkCommandBufferBeginInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    pInheritanceInfo: rawptr,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t, pInheritanceInfo: rawptr,
 }
-
 VkApplicationInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    pApplicationName: cstring,
-    applicationVersion: c.uint32_t,
-    pEngineName: cstring,
-    engineVersion: c.uint32_t,
-    apiVersion: c.uint32_t,
+    sType: c.uint32_t, pNext: rawptr, pApplicationName: cstring,
+    applicationVersion: c.uint32_t, pEngineName: cstring, engineVersion: c.uint32_t, apiVersion: c.uint32_t,
 }
-
 VkInstanceCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    pApplicationInfo: ^VkApplicationInfo,
-    enabledLayerCount: c.uint32_t,
-    ppEnabledLayerNames: [^]cstring,
-    enabledExtensionCount: c.uint32_t,
-    ppEnabledExtensionNames: [^]cstring,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t, pApplicationInfo: ^VkApplicationInfo,
+    enabledLayerCount: c.uint32_t, ppEnabledLayerNames: [^]cstring,
+    enabledExtensionCount: c.uint32_t, ppEnabledExtensionNames: [^]cstring,
 }
-
 VkWaylandSurfaceCreateInfoKHR :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    display: wl_display,
-    surface: wl_surface,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t, display: wl_display, surface: wl_surface,
 }
-
 VkQueueFamilyProperties :: struct {
-    queueFlags: c.uint32_t,
-    queueCount: c.uint32_t,
-    timestampValidBits: c.uint32_t,
+    queueFlags: c.uint32_t, queueCount: c.uint32_t, timestampValidBits: c.uint32_t,
     minImageTransferGranularity: [3]c.uint32_t,
 }
-
 VkDeviceQueueCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    queueFamilyIndex: c.uint32_t,
-    queueCount: c.uint32_t,
-    pQueuePriorities: [^]f32,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t,
+    queueFamilyIndex: c.uint32_t, queueCount: c.uint32_t, pQueuePriorities: [^]f32,
 }
-
 VkDeviceCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    queueCreateInfoCount: c.uint32_t,
-    pQueueCreateInfos: [^]VkDeviceQueueCreateInfo,
-    enabledLayerCount: c.uint32_t,
-    ppEnabledLayerNames: [^]cstring,
-    enabledExtensionCount: c.uint32_t,
-    ppEnabledExtensionNames: [^]cstring,
-    pEnabledFeatures: rawptr,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t,
+    queueCreateInfoCount: c.uint32_t, pQueueCreateInfos: [^]VkDeviceQueueCreateInfo,
+    enabledLayerCount: c.uint32_t, ppEnabledLayerNames: [^]cstring,
+    enabledExtensionCount: c.uint32_t, ppEnabledExtensionNames: [^]cstring, pEnabledFeatures: rawptr,
 }
-
-VkSemaphoreCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-}
-
-VkFenceCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-}
-
+VkSemaphoreCreateInfo :: struct { sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t }
+VkFenceCreateInfo :: struct { sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t }
 VkShaderModuleCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    codeSize: c.size_t,
-    pCode: [^]c.uint32_t,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t, codeSize: c.size_t, pCode: [^]c.uint32_t,
 }
-
 VkPipelineShaderStageCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    stage: c.uint32_t,
-    module: VkShaderModule,
-    pName: cstring,
-    pSpecializationInfo: rawptr,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t, stage: c.uint32_t,
+    module: VkShaderModule, pName: cstring, pSpecializationInfo: rawptr,
 }
-
 VkPipelineVertexInputStateCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    vertexBindingDescriptionCount: c.uint32_t,
-    pVertexBindingDescriptions: rawptr,
-    vertexAttributeDescriptionCount: c.uint32_t,
-    pVertexAttributeDescriptions: rawptr,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t,
+    vertexBindingDescriptionCount: c.uint32_t, pVertexBindingDescriptions: rawptr,
+    vertexAttributeDescriptionCount: c.uint32_t, pVertexAttributeDescriptions: rawptr,
 }
-
 VkPipelineInputAssemblyStateCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    topology: c.uint32_t,
-    primitiveRestartEnable: c.uint32_t,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t, topology: c.uint32_t, primitiveRestartEnable: c.uint32_t,
 }
-
-VkViewport :: struct {
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    minDepth: f32,
-    maxDepth: f32,
-}
-
+VkViewport :: struct { x: f32, y: f32, width: f32, height: f32, minDepth: f32, maxDepth: f32 }
 VkRect2D :: struct {
-    offset: struct {
-        x: c.int32_t,
-        y: c.int32_t,
-    },
-    extent: VkExtent2D,
+    offset: struct { x: c.int32_t, y: c.int32_t }, extent: VkExtent2D,
 }
-
 VkPipelineViewportStateCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    viewportCount: c.uint32_t,
-    pViewports: [^]VkViewport,
-    scissorCount: c.uint32_t,
-    pScissors: [^]VkRect2D,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t,
+    viewportCount: c.uint32_t, pViewports: [^]VkViewport,
+    scissorCount: c.uint32_t, pScissors: [^]VkRect2D,
 }
-
 VkPipelineRasterizationStateCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    depthClampEnable: c.uint32_t,
-    rasterizerDiscardEnable: c.uint32_t,
-    polygonMode: c.uint32_t,
-    cullMode: c.uint32_t,
-    frontFace: c.uint32_t,
-    depthBiasEnable: c.uint32_t,
-    depthBiasConstantFactor: f32,
-    depthBiasClamp: f32,
-    depthBiasSlopeFactor: f32,
-    lineWidth: f32,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t,
+    depthClampEnable: c.uint32_t, rasterizerDiscardEnable: c.uint32_t, polygonMode: c.uint32_t,
+    cullMode: c.uint32_t, frontFace: c.uint32_t, depthBiasEnable: c.uint32_t,
+    depthBiasConstantFactor: f32, depthBiasClamp: f32, depthBiasSlopeFactor: f32, lineWidth: f32,
 }
-
 VkPipelineMultisampleStateCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    rasterizationSamples: c.uint32_t,
-    sampleShadingEnable: c.uint32_t,
-    minSampleShading: f32,
-    pSampleMask: [^]c.uint32_t,
-    alphaToCoverageEnable: c.uint32_t,
-    alphaToOneEnable: c.uint32_t,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t, rasterizationSamples: c.uint32_t,
+    sampleShadingEnable: c.uint32_t, minSampleShading: f32, pSampleMask: [^]c.uint32_t,
+    alphaToCoverageEnable: c.uint32_t, alphaToOneEnable: c.uint32_t,
 }
-
 VkPipelineColorBlendAttachmentState :: struct {
     blendEnable: c.uint32_t,
-    srcColorBlendFactor: c.uint32_t,
-    dstColorBlendFactor: c.uint32_t,
-    colorBlendOp: c.uint32_t,
-    srcAlphaBlendFactor: c.uint32_t,
-    dstAlphaBlendFactor: c.uint32_t,
-    alphaBlendOp: c.uint32_t,
+    srcColorBlendFactor: c.uint32_t, dstColorBlendFactor: c.uint32_t, colorBlendOp: c.uint32_t,
+    srcAlphaBlendFactor: c.uint32_t, dstAlphaBlendFactor: c.uint32_t, alphaBlendOp: c.uint32_t,
     colorWriteMask: c.uint32_t,
 }
-
 VkPipelineColorBlendStateCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    logicOpEnable: c.uint32_t,
-    logicOp: c.uint32_t,
-    attachmentCount: c.uint32_t,
-    pAttachments: [^]VkPipelineColorBlendAttachmentState,
-    blendConstants: [4]f32,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t, logicOpEnable: c.uint32_t, logicOp: c.uint32_t,
+    attachmentCount: c.uint32_t, pAttachments: [^]VkPipelineColorBlendAttachmentState, blendConstants: [4]f32,
 }
-
-VkPushConstantRange :: struct {
-    stageFlags: c.uint32_t,
-    offset: c.uint32_t,
-    size: c.uint32_t,
-}
-
+VkPushConstantRange :: struct { stageFlags: c.uint32_t, offset: c.uint32_t, size: c.uint32_t }
 VkPipelineLayoutCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    setLayoutCount: c.uint32_t,
-    pSetLayouts: rawptr,
-    pushConstantRangeCount: c.uint32_t,
-    pPushConstantRanges: [^]VkPushConstantRange,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t,
+    setLayoutCount: c.uint32_t, pSetLayouts: rawptr,
+    pushConstantRangeCount: c.uint32_t, pPushConstantRanges: [^]VkPushConstantRange,
 }
-
 VkGraphicsPipelineCreateInfo :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    stageCount: c.uint32_t,
-    pStages: [^]VkPipelineShaderStageCreateInfo,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t,
+    stageCount: c.uint32_t, pStages: [^]VkPipelineShaderStageCreateInfo,
     pVertexInputState: ^VkPipelineVertexInputStateCreateInfo,
-    pInputAssemblyState: ^VkPipelineInputAssemblyStateCreateInfo,
-    pTessellationState: rawptr,
+    pInputAssemblyState: ^VkPipelineInputAssemblyStateCreateInfo, pTessellationState: rawptr,
     pViewportState: ^VkPipelineViewportStateCreateInfo,
     pRasterizationState: ^VkPipelineRasterizationStateCreateInfo,
-    pMultisampleState: ^VkPipelineMultisampleStateCreateInfo,
-    pDepthStencilState: rawptr,
-    pColorBlendState: ^VkPipelineColorBlendStateCreateInfo,
-    pDynamicState: rawptr,
-    layout: VkPipelineLayout,
-    renderPass: VkRenderPass,
-    subpass: c.uint32_t,
-    basePipelineHandle: VkPipeline,
-    basePipelineIndex: c.int32_t,
+    pMultisampleState: ^VkPipelineMultisampleStateCreateInfo, pDepthStencilState: rawptr,
+    pColorBlendState: ^VkPipelineColorBlendStateCreateInfo, pDynamicState: rawptr,
+    layout: VkPipelineLayout, renderPass: VkRenderPass, subpass: c.uint32_t,
+    basePipelineHandle: VkPipeline, basePipelineIndex: c.int32_t,
 }
-
 VkDebugUtilsMessengerCallbackDataEXT :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    pMessageIdName: cstring,
-    messageIdNumber: c.int32_t,
-    pMessage: cstring,
-    queueLabelCount: c.uint32_t,
-    pQueueLabels: rawptr,
-    cmdBufLabelCount: c.uint32_t,
-    pCmdBufLabels: rawptr,
-    objectCount: c.uint32_t,
-    pObjects: rawptr,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t, pMessageIdName: cstring,
+    messageIdNumber: c.int32_t, pMessage: cstring,
+    queueLabelCount: c.uint32_t, pQueueLabels: rawptr,
+    cmdBufLabelCount: c.uint32_t, pCmdBufLabels: rawptr,
+    objectCount: c.uint32_t, pObjects: rawptr,
 }
-
 VkDebugUtilsMessengerCreateInfoEXT :: struct {
-    sType: c.uint32_t,
-    pNext: rawptr,
-    flags: c.uint32_t,
-    messageSeverity: c.uint32_t,
-    messageType: c.uint32_t,
+    sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t,
+    messageSeverity: c.uint32_t, messageType: c.uint32_t,
     pfnUserCallback: proc "c" (messageSeverity: c.uint32_t, messageType: c.uint32_t, pCallbackData: ^VkDebugUtilsMessengerCallbackDataEXT, pUserData: rawptr) -> c.uint32_t,
     pUserData: rawptr,
 }
 
 SwapchainElement :: struct {
-    commandBuffer: VkCommandBuffer,
-    image: VkImage,
-    imageView: VkImageView,
-    framebuffer: VkFramebuffer,
-    startSemaphore: VkSemaphore,
-    endSemaphore: VkSemaphore,
-    fence: VkFence,
-    lastFence: VkFence,
+    commandBuffer: VkCommandBuffer, image: VkImage, imageView: VkImageView, framebuffer: VkFramebuffer,
+    startSemaphore: VkSemaphore, endSemaphore: VkSemaphore, fence: VkFence, lastFence: VkFence,
 }
 
 // Extension and layer names
-instance_extension_names := [?]cstring{
-    "VK_KHR_surface",
-    "VK_KHR_wayland_surface",
-    "VK_EXT_debug_utils",
-}
+instance_extension_names := [?]cstring{"VK_KHR_surface", "VK_KHR_wayland_surface", "VK_EXT_debug_utils"}
+layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
+device_extension_names := [?]cstring{"VK_KHR_swapchain"}
 
-layer_names := [?]cstring{
-    "VK_LAYER_KHRONOS_validation",
-}
-
-device_extension_names := [?]cstring{
-    "VK_KHR_swapchain",
-}
-
-// Global Vulkan variables
+// Global Vulkan state
 ENABLE_VALIDATION := false
 instance: VkInstance
 debug_messenger: VkDebugUtilsMessengerEXT
@@ -592,7 +463,7 @@ current_frame: c.uint32_t = 0
 image_index: c.uint32_t = 0
 image_count: c.uint32_t = 0
 
-// Vulkan function declarations - only the ones actually used
+// Vulkan function declarations
 @(default_calling_convention="c")
 foreign vulkan {
     vkCreateInstance :: proc(create_info: ^VkInstanceCreateInfo, allocator: rawptr, instance: ^VkInstance) -> VkResult ---
@@ -647,14 +518,16 @@ foreign vulkan {
     vkCmdPushConstants :: proc(command_buffer: VkCommandBuffer, layout: VkPipelineLayout, stageFlags: c.uint32_t, offset: c.uint32_t, size: c.uint32_t, pValues: rawptr) ---
 }
 
-// Debug callback
+// =============================================================================
+// BORING INITIALIZATION CODE - Surface, Device, Swapchain setup
+// =============================================================================
+
 debug_callback :: proc "c" (messageSeverity: c.uint32_t, messageType: c.uint32_t, pCallbackData: ^VkDebugUtilsMessengerCallbackDataEXT, pUserData: rawptr) -> c.uint32_t {
     context = runtime.default_context()
     fmt.printf("Validation layer: %s\n", pCallbackData.pMessage)
     return 0
 }
 
-// Utility functions
 load_shader_spirv :: proc(filename: string) -> ([]c.uint32_t, bool) {
     data, ok := os.read_entire_file(filename)
     if !ok do return nil, false
@@ -674,189 +547,6 @@ load_shader_spirv :: proc(filename: string) -> ([]c.uint32_t, bool) {
     }
 
     return spirv_data, true
-}
-
-create_graphics_pipeline :: proc() -> bool {
-    vertex_shader_code, vert_ok := load_shader_spirv("vertex.spv")
-    if !vert_ok {
-        fmt.println("Failed to load vertex shader")
-        return false
-    }
-    defer delete(vertex_shader_code)
-
-    fragment_shader_code, frag_ok := load_shader_spirv("fragment.spv")
-    if !frag_ok {
-        fmt.println("Failed to load fragment shader")
-        return false
-    }
-    defer delete(fragment_shader_code)
-
-    vert_shader_create_info := VkShaderModuleCreateInfo{
-        sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        codeSize = len(vertex_shader_code) * size_of(c.uint32_t),
-        pCode = raw_data(vertex_shader_code),
-    }
-
-    vert_shader_module: VkShaderModule
-    result := vkCreateShaderModule(device, &vert_shader_create_info, nil, &vert_shader_module)
-    if result != VK_SUCCESS {
-        fmt.printf("Failed to create vertex shader module: %d\n", result)
-        return false
-    }
-    defer vkDestroyShaderModule(device, vert_shader_module, nil)
-
-    frag_shader_create_info := VkShaderModuleCreateInfo{
-        sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        codeSize = len(fragment_shader_code) * size_of(c.uint32_t),
-        pCode = raw_data(fragment_shader_code),
-    }
-
-    frag_shader_module: VkShaderModule
-    result = vkCreateShaderModule(device, &frag_shader_create_info, nil, &frag_shader_module)
-    if result != VK_SUCCESS {
-        fmt.printf("Failed to create fragment shader module: %d\n", result)
-        return false
-    }
-    defer vkDestroyShaderModule(device, frag_shader_module, nil)
-
-    vert_shader_stage_info := VkPipelineShaderStageCreateInfo{
-        sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-        stage = VK_SHADER_STAGE_VERTEX_BIT,
-        module = vert_shader_module,
-        pName = "vs_main",
-    }
-
-    frag_shader_stage_info := VkPipelineShaderStageCreateInfo{
-        sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-        stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-        module = frag_shader_module,
-        pName = "fs_main",
-    }
-
-    shader_stages := [?]VkPipelineShaderStageCreateInfo{vert_shader_stage_info, frag_shader_stage_info}
-
-    vertex_input_info := VkPipelineVertexInputStateCreateInfo{
-        sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-    }
-
-    input_assembly := VkPipelineInputAssemblyStateCreateInfo{
-        sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        primitiveRestartEnable = VK_FALSE,
-    }
-
-    viewport := VkViewport{
-        x = 0.0,
-        y = 0.0,
-        width = f32(width),
-        height = f32(height),
-        minDepth = 0.0,
-        maxDepth = 1.0,
-    }
-
-    scissor := VkRect2D{
-        offset = {0, 0},
-        extent = {width, height},
-    }
-
-    viewport_state := VkPipelineViewportStateCreateInfo{
-        sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-        viewportCount = 1,
-        pViewports = &viewport,
-        scissorCount = 1,
-        pScissors = &scissor,
-    }
-
-    rasterizer := VkPipelineRasterizationStateCreateInfo{
-        sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-        depthClampEnable = VK_FALSE,
-        rasterizerDiscardEnable = VK_FALSE,
-        polygonMode = VK_POLYGON_MODE_FILL,
-        lineWidth = 1.0,
-        cullMode = 0,
-        frontFace = VK_FRONT_FACE_CLOCKWISE,
-        depthBiasEnable = VK_FALSE,
-    }
-
-    multisampling := VkPipelineMultisampleStateCreateInfo{
-        sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        sampleShadingEnable = VK_FALSE,
-        rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-    }
-
-    color_write_mask := VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
-    color_blend_attachment := VkPipelineColorBlendAttachmentState{
-        blendEnable = 0,
-        srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
-        dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
-        colorBlendOp = VK_BLEND_OP_ADD,
-        srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-        dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
-        alphaBlendOp = VK_BLEND_OP_ADD,
-        colorWriteMask = c.uint32_t(color_write_mask),
-    }
-
-    color_blending := VkPipelineColorBlendStateCreateInfo{
-        sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-        logicOpEnable = VK_FALSE,
-        attachmentCount = 1,
-        pAttachments = &color_blend_attachment,
-    }
-
-    push_constant_range := VkPushConstantRange{
-        stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-        offset = 0,
-        size = size_of(f32),
-    }
-
-    pipeline_layout_info := VkPipelineLayoutCreateInfo{
-        sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        pushConstantRangeCount = 1,
-        pPushConstantRanges = &push_constant_range,
-    }
-
-    result = vkCreatePipelineLayout(device, &pipeline_layout_info, nil, &pipeline_layout)
-    if result != VK_SUCCESS {
-        fmt.printf("Failed to create pipeline layout: %d\n", result)
-        return false
-    }
-
-    pipeline_info := VkGraphicsPipelineCreateInfo{
-        sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        stageCount = 2,
-        pStages = raw_data(shader_stages[:]),
-        pVertexInputState = &vertex_input_info,
-        pInputAssemblyState = &input_assembly,
-        pViewportState = &viewport_state,
-        pRasterizationState = &rasterizer,
-        pMultisampleState = &multisampling,
-        pColorBlendState = &color_blending,
-        layout = pipeline_layout,
-        renderPass = render_pass,
-        subpass = 0,
-        basePipelineHandle = VK_NULL_HANDLE,
-        basePipelineIndex = -1,
-    }
-
-    result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, nil, &graphics_pipeline)
-    if result != VK_SUCCESS {
-        fmt.printf("Failed to create graphics pipeline: %d\n", result)
-        return false
-    }
-
-    return true
-}
-
-recreate_graphics_pipeline :: proc() -> bool {
-    // Wait for device to be idle
-    vkDeviceWaitIdle(device)
-    
-    // Destroy old pipeline
-    vkDestroyPipeline(device, graphics_pipeline, nil)
-    vkDestroyPipelineLayout(device, pipeline_layout, nil)
-    
-    // Recreate pipeline
-    return create_graphics_pipeline()
 }
 
 create_swapchain :: proc() {
@@ -1136,24 +826,20 @@ init_vulkan :: proc() -> bool {
 
 setup_debug_messenger :: proc() -> bool {
     vkCreateDebugUtilsMessengerEXT := cast(proc "c" (instance: VkInstance, create_info: ^VkDebugUtilsMessengerCreateInfoEXT, allocator: rawptr, debug_messenger: ^VkDebugUtilsMessengerEXT) -> VkResult)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT")
-    
+
     debug_create_info := VkDebugUtilsMessengerCreateInfoEXT{
         sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
         messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
         messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
         pfnUserCallback = debug_callback,
     }
-    
+
     if vkCreateDebugUtilsMessengerEXT != nil {
         result := vkCreateDebugUtilsMessengerEXT(instance, &debug_create_info, nil, &debug_messenger)
         if result != VK_SUCCESS {
             fmt.printf("Failed to create debug messenger: %d\n", result)
             return false
-        } else {
-            fmt.println("Debug messenger created successfully")
         }
-    } else {
-        fmt.println("Debug utils extension not available")
     }
     return true
 }
@@ -1225,4 +911,9 @@ create_logical_device :: proc() -> bool {
 
     vkGetDeviceQueue(device, queue_family_index, 0, &queue)
     return true
+}
+
+foreign import libc "system:c"
+foreign libc {
+	system :: proc(command: cstring) -> c.int ---
 }
