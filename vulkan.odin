@@ -11,22 +11,24 @@ foreign import vulkan "system:vulkan"
 
 
 render_frame :: proc(start_time: time.Time) {
+	fmt.println("DEBUG: Starting render frame")
 	// 1. Get next swapchain image
-	current_element := &elements[current_frame]
-	if !acquire_next_image(current_element.startSemaphore) do return
+	if !acquire_next_image() do return
+	fmt.println("DEBUG: Acquired next image")
 
-	// 2. Wait for previous frame, reset fence
+	// 2. Record draw commands
 	element := &elements[image_index]
-	prepare_frame(element)
-
-	// 3. Record draw commands
+	fmt.println("DEBUG: Recording commands")
 	record_commands(element, start_time)
 
-	// 4. Submit to GPU and present
-	submit_commands(element, current_element.startSemaphore)
+	// 3. Submit to GPU and present
+	fmt.println("DEBUG: Submitting commands")
+	submit_commands(element)
+	fmt.println("DEBUG: Presenting frame")
 	present_frame()
 
 	current_frame = (current_frame + 1) % image_count
+	fmt.println("DEBUG: Frame complete")
 }
 
 
@@ -50,11 +52,16 @@ handle_resize :: proc() {
 
 vulkan_init :: proc() -> (ok: bool) {
 	// Get initial window size
+	fmt.println("DEBUG: Getting window size")
 	update_window_size()
 
+	fmt.println("DEBUG: Initializing Vulkan")
 	if !init_vulkan() do return false
+	fmt.println("DEBUG: Creating swapchain")
 	create_swapchain()
+	fmt.println("DEBUG: Creating graphics pipeline")
 	if !create_graphics_pipeline() do return false
+	fmt.println("DEBUG: Vulkan init complete")
 	return true
 }
 
@@ -63,6 +70,8 @@ vulkan_cleanup :: proc() {
 	destroy_swapchain()
 	vkDestroyPipeline(device, graphics_pipeline, nil)
 	vkDestroyPipelineLayout(device, pipeline_layout, nil)
+	vkDestroySemaphore(device, timeline_semaphore, nil)
+	vkDestroySemaphore(device, image_available_semaphore, nil)
 	vkDestroyCommandPool(device, command_pool, nil)
 	vkDestroyDevice(device, nil)
 	vkDestroySurfaceKHR(instance, vulkan_surface, nil)
@@ -78,22 +87,24 @@ recreate_pipeline :: proc() {
 	if !recreate_graphics_pipeline() do fmt.println("Failed to recreate pipeline")
 }
 
-submit_commands :: proc(element: ^SwapchainElement, wait_semaphore: VkSemaphore) {
-	wait_stage: c.uint32_t = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-	wait_sem := wait_semaphore
+submit_commands :: proc(element: ^SwapchainElement) {
+	wait_stages := c.uint32_t(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+	
 	submit_info := VkSubmitInfo{
 		sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		waitSemaphoreCount = 1, pWaitSemaphores = &wait_sem, pWaitDstStageMask = &wait_stage,
+		waitSemaphoreCount = 1, pWaitSemaphores = &image_available_semaphore,
+		pWaitDstStageMask = &wait_stages,
 		commandBufferCount = 1, pCommandBuffers = &element.commandBuffer,
+		signalSemaphoreCount = 1, pSignalSemaphores = &timeline_semaphore,
 	}
 
-	vkQueueSubmit(queue, 1, &submit_info, element.fence)
-	vkWaitForFences(device, 1, &element.fence, VK_TRUE, UINT64_MAX)
+	vkQueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE)
 }
 
 present_frame :: proc() {
 	present_info := VkPresentInfoKHR{
 		sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+		waitSemaphoreCount = 1, pWaitSemaphores = &timeline_semaphore,
 		swapchainCount = 1, pSwapchains = &swapchain, pImageIndices = &image_index,
 	}
 
@@ -114,8 +125,9 @@ recreate_graphics_pipeline :: proc() -> bool {
 	return create_graphics_pipeline()
 }
 
-acquire_next_image :: proc(semaphore: VkSemaphore) -> bool {
-	result := vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, semaphore, VK_NULL_HANDLE, &image_index)
+acquire_next_image :: proc() -> bool {
+	result := vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &image_index)
+	semaphore_value += 1
 
 	if result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR {
 		vkDeviceWaitIdle(device)
@@ -127,13 +139,6 @@ acquire_next_image :: proc(semaphore: VkSemaphore) -> bool {
 	return result == VK_SUCCESS
 }
 
-prepare_frame :: proc(element: ^SwapchainElement) {
-	if element.lastFence != VK_NULL_HANDLE {
-		vkWaitForFences(device, 1, &element.lastFence, VK_TRUE, UINT64_MAX)
-	}
-	vkResetFences(device, 1, &element.fence)
-	element.lastFence = element.fence
-}
 
 last_vertex_time: time.Time
 last_fragment_time: time.Time
@@ -195,9 +200,8 @@ VkFramebuffer :: rawptr
 VkCommandPool :: rawptr
 VkCommandBuffer :: rawptr
 VkShaderModule :: rawptr
-VkSemaphore :: rawptr
-VkFence :: rawptr
 VkFormat :: c.uint32_t
+VkSemaphore :: rawptr
 VkDebugUtilsMessengerEXT :: rawptr
 
 VK_SUCCESS :: 0
@@ -207,7 +211,7 @@ VK_SUBOPTIMAL_KHR :: 1000001003
 VK_TRUE :: 1
 VK_FALSE :: 0
 UINT64_MAX :: 0xFFFFFFFFFFFFFFFF
-VK_API_VERSION_1_0: c.uint32_t = (1 << 22) | (0 << 12) | 0
+VK_API_VERSION_1_2: c.uint32_t = (1 << 22) | (2 << 12) | 0
 
 VK_STRUCTURE_TYPE_APPLICATION_INFO :: 0
 VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO :: 1
@@ -224,7 +228,7 @@ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO :: 43
 VK_STRUCTURE_TYPE_SUBMIT_INFO :: 4
 VK_STRUCTURE_TYPE_PRESENT_INFO_KHR :: 1000001001
 VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO :: 9
-VK_STRUCTURE_TYPE_FENCE_CREATE_INFO :: 8
+VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO :: 1000207002
 VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO :: 42
 VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO :: 16
 VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO :: 18
@@ -238,6 +242,7 @@ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO :: 28
 VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO :: 30
 VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT :: 1000128004
 VK_STRUCTURE_TYPE_PUSH_CONSTANT_RANGE :: 31
+VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES :: 1000207000
 
 VK_QUEUE_GRAPHICS_BIT :: 0x00000001
 VK_FORMAT_UNDEFINED :: 0
@@ -258,7 +263,6 @@ VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT :: 0x00000002
 VK_COMMAND_BUFFER_LEVEL_PRIMARY :: 0
 VK_IMAGE_VIEW_TYPE_2D :: 1
 VK_COMPONENT_SWIZZLE_IDENTITY :: 0
-VK_FENCE_CREATE_SIGNALED_BIT :: 0x00000001
 VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT :: 0x00000001
 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT :: 0x00000400
 VK_SAMPLE_COUNT_1_BIT :: 0x00000001
@@ -269,6 +273,7 @@ VK_SHADER_STAGE_FRAGMENT_BIT :: 0x00000010
 VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST :: 3
 VK_POLYGON_MODE_FILL :: 0
 VK_FRONT_FACE_CLOCKWISE :: 0
+VK_SEMAPHORE_TYPE_TIMELINE :: 1
 VK_BLEND_FACTOR_ONE :: 0
 VK_BLEND_FACTOR_ZERO :: 1
 VK_BLEND_OP_ADD :: 0
@@ -351,7 +356,8 @@ VkRenderPassBeginInfo :: struct {
 }
 VkSubmitInfo :: struct {
     sType: c.uint32_t, pNext: rawptr,
-    waitSemaphoreCount: c.uint32_t, pWaitSemaphores: ^VkSemaphore, pWaitDstStageMask: ^c.uint32_t,
+    waitSemaphoreCount: c.uint32_t, pWaitSemaphores: ^VkSemaphore,
+    pWaitDstStageMask: ^c.uint32_t,
     commandBufferCount: c.uint32_t, pCommandBuffers: ^VkCommandBuffer,
     signalSemaphoreCount: c.uint32_t, pSignalSemaphores: ^VkSemaphore,
 }
@@ -390,8 +396,6 @@ VkDeviceCreateInfo :: struct {
     enabledLayerCount: c.uint32_t, ppEnabledLayerNames: [^]cstring,
     enabledExtensionCount: c.uint32_t, ppEnabledExtensionNames: [^]cstring, pEnabledFeatures: rawptr,
 }
-VkSemaphoreCreateInfo :: struct { sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t }
-VkFenceCreateInfo :: struct { sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t }
 VkShaderModuleCreateInfo :: struct {
     sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t, codeSize: c.size_t, pCode: [^]c.uint32_t,
 }
@@ -408,6 +412,13 @@ VkPipelineInputAssemblyStateCreateInfo :: struct {
     sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t, topology: c.uint32_t, primitiveRestartEnable: c.uint32_t,
 }
 VkViewport :: struct { x: f32, y: f32, width: f32, height: f32, minDepth: f32, maxDepth: f32 }
+VkSemaphoreCreateInfo :: struct { sType: c.uint32_t, pNext: rawptr, flags: c.uint32_t }
+VkSemaphoreTypeCreateInfo :: struct {
+    sType: c.uint32_t, pNext: rawptr, semaphoreType: c.uint32_t, initialValue: c.uint64_t,
+}
+VkPhysicalDeviceTimelineSemaphoreFeatures :: struct {
+    sType: c.uint32_t, pNext: rawptr, timelineSemaphore: c.uint32_t,
+}
 VkRect2D :: struct {
     offset: struct { x: c.int32_t, y: c.int32_t }, extent: VkExtent2D,
 }
@@ -471,7 +482,6 @@ VkDebugUtilsMessengerCreateInfoEXT :: struct {
 
 SwapchainElement :: struct {
     commandBuffer: VkCommandBuffer, image: VkImage, imageView: VkImageView, framebuffer: VkFramebuffer,
-    startSemaphore: VkSemaphore, endSemaphore: VkSemaphore, fence: VkFence, lastFence: VkFence,
 }
 
 // Extension and layer names
@@ -500,6 +510,9 @@ height: c.uint32_t = 600
 current_frame: c.uint32_t = 0
 image_index: c.uint32_t = 0
 image_count: c.uint32_t = 0
+timeline_semaphore: VkSemaphore
+image_available_semaphore: VkSemaphore
+semaphore_value: c.uint64_t = 0
 
 // Vulkan function declarations
 @(default_calling_convention="c")
@@ -534,15 +547,9 @@ foreign vulkan {
     vkEndCommandBuffer :: proc(command_buffer: VkCommandBuffer) -> VkResult ---
     vkCmdBeginRenderPass :: proc(command_buffer: VkCommandBuffer, render_pass_begin: ^VkRenderPassBeginInfo, contents: c.uint32_t) ---
     vkCmdEndRenderPass :: proc(command_buffer: VkCommandBuffer) ---
-    vkQueueSubmit :: proc(queue: VkQueue, submit_count: c.uint32_t, submits: ^VkSubmitInfo, fence: VkFence) -> VkResult ---
-    vkAcquireNextImageKHR :: proc(device: VkDevice, swapchain: VkSwapchainKHR, timeout: c.uint64_t, semaphore: VkSemaphore, fence: VkFence, image_index: ^c.uint32_t) -> VkResult ---
+    vkQueueSubmit :: proc(queue: VkQueue, submit_count: c.uint32_t, submits: ^VkSubmitInfo, fence: rawptr) -> VkResult ---
+    vkAcquireNextImageKHR :: proc(device: VkDevice, swapchain: VkSwapchainKHR, timeout: c.uint64_t, semaphore: rawptr, fence: rawptr, image_index: ^c.uint32_t) -> VkResult ---
     vkQueuePresentKHR :: proc(queue: VkQueue, present_info: ^VkPresentInfoKHR) -> VkResult ---
-    vkCreateSemaphore :: proc(device: VkDevice, create_info: ^VkSemaphoreCreateInfo, allocator: rawptr, semaphore: ^VkSemaphore) -> VkResult ---
-    vkDestroySemaphore :: proc(device: VkDevice, semaphore: VkSemaphore, allocator: rawptr) ---
-    vkCreateFence :: proc(device: VkDevice, create_info: ^VkFenceCreateInfo, allocator: rawptr, fence: ^VkFence) -> VkResult ---
-    vkDestroyFence :: proc(device: VkDevice, fence: VkFence, allocator: rawptr) ---
-    vkWaitForFences :: proc(device: VkDevice, fence_count: c.uint32_t, fences: ^VkFence, wait_all: c.uint32_t, timeout: c.uint64_t) -> VkResult ---
-    vkResetFences :: proc(device: VkDevice, fence_count: c.uint32_t, fences: ^VkFence) -> VkResult ---
     vkCreateShaderModule :: proc(device: VkDevice, create_info: ^VkShaderModuleCreateInfo, allocator: rawptr, shader_module: ^VkShaderModule) -> VkResult ---
     vkDestroyShaderModule :: proc(device: VkDevice, shader_module: VkShaderModule, allocator: rawptr) ---
     vkCreatePipelineLayout :: proc(device: VkDevice, create_info: ^VkPipelineLayoutCreateInfo, allocator: rawptr, pipeline_layout: ^VkPipelineLayout) -> VkResult ---
@@ -554,6 +561,8 @@ foreign vulkan {
     vkResetCommandBuffer :: proc(command_buffer: VkCommandBuffer, flags: c.uint32_t) -> VkResult ---
     vkGetInstanceProcAddr :: proc(instance: VkInstance, pName: cstring) -> rawptr ---
     vkCmdPushConstants :: proc(command_buffer: VkCommandBuffer, layout: VkPipelineLayout, stageFlags: c.uint32_t, offset: c.uint32_t, size: c.uint32_t, pValues: rawptr) ---
+    vkCreateSemaphore :: proc(device: VkDevice, create_info: ^VkSemaphoreCreateInfo, allocator: rawptr, semaphore: ^VkSemaphore) -> VkResult ---
+    vkDestroySemaphore :: proc(device: VkDevice, semaphore: VkSemaphore, allocator: rawptr) ---
 }
 
 // =============================================================================
@@ -747,40 +756,11 @@ create_swapchain :: proc() {
             return
         }
 
-        sem_info := VkSemaphoreCreateInfo{
-            sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-        }
-        result = vkCreateSemaphore(device, &sem_info, nil, &elements[i].startSemaphore)
-        if result != VK_SUCCESS {
-            fmt.printf("Error creating start semaphore: %d\n", result)
-            return
-        }
-
-        result = vkCreateSemaphore(device, &sem_info, nil, &elements[i].endSemaphore)
-        if result != VK_SUCCESS {
-            fmt.printf("Error creating end semaphore: %d\n", result)
-            return
-        }
-
-        fence_info := VkFenceCreateInfo{
-            sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-            flags = VK_FENCE_CREATE_SIGNALED_BIT,
-        }
-        result = vkCreateFence(device, &fence_info, nil, &elements[i].fence)
-        if result != VK_SUCCESS {
-            fmt.printf("Error creating fence: %d\n", result)
-            return
-        }
-
-        elements[i].lastFence = VK_NULL_HANDLE
     }
 }
 
 destroy_swapchain :: proc() {
     for i in 0..<image_count {
-        vkDestroyFence(device, elements[i].fence, nil)
-        vkDestroySemaphore(device, elements[i].endSemaphore, nil)
-        vkDestroySemaphore(device, elements[i].startSemaphore, nil)
         vkDestroyFramebuffer(device, elements[i].framebuffer, nil)
         vkDestroyImageView(device, elements[i].imageView, nil)
         vkFreeCommandBuffers(device, command_pool, 1, &elements[i].commandBuffer)
@@ -800,7 +780,7 @@ init_vulkan :: proc() -> bool {
         pApplicationName = "Wayland Vulkan Example",
         applicationVersion = 1,
         engineVersion = 1,
-        apiVersion = VK_API_VERSION_1_0,
+        apiVersion = VK_API_VERSION_1_2,
     }
 
     create_info := VkInstanceCreateInfo{
@@ -856,6 +836,35 @@ init_vulkan :: proc() -> bool {
     result = vkCreateCommandPool(device, &pool_info, nil, &command_pool)
     if result != VK_SUCCESS {
         fmt.printf("Failed to create command pool: %d\n", result)
+        return false
+    }
+
+    // Create timeline semaphore
+    timeline_type_info := VkSemaphoreTypeCreateInfo{
+        sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+        semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+        initialValue = 0,
+    }
+
+    sem_info := VkSemaphoreCreateInfo{
+        sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        pNext = &timeline_type_info,
+    }
+
+    result = vkCreateSemaphore(device, &sem_info, nil, &timeline_semaphore)
+    if result != VK_SUCCESS {
+        fmt.printf("Failed to create timeline semaphore: %d\n", result)
+        return false
+    }
+
+    // Create binary semaphore for image acquisition
+    binary_sem_info := VkSemaphoreCreateInfo{
+        sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    }
+    
+    result = vkCreateSemaphore(device, &binary_sem_info, nil, &image_available_semaphore)
+    if result != VK_SUCCESS {
+        fmt.printf("Failed to create image available semaphore: %d\n", result)
         return false
     }
 
@@ -931,8 +940,15 @@ create_logical_device :: proc() -> bool {
         pQueuePriorities = &queue_priority,
     }
 
+    // Enable timeline semaphore features
+    timeline_features := VkPhysicalDeviceTimelineSemaphoreFeatures{
+        sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
+        timelineSemaphore = VK_TRUE,
+    }
+
     device_create_info := VkDeviceCreateInfo{
         sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        pNext = &timeline_features,
         queueCreateInfoCount = 1,
         pQueueCreateInfos = &queue_create_info,
         enabledLayerCount = ENABLE_VALIDATION ? len(layer_names) : 0,
