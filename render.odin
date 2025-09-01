@@ -1,11 +1,6 @@
 package main
-
-import "core:fmt"
 import "core:c"
-import "core:os"
 import "core:time"
-import "base:runtime"
-import "core:strings"
 
 record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 	// Begin command buffer
@@ -31,12 +26,12 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 	// Bind pipeline
 	vkCmdBindPipeline(element.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline)
 
-	// Push time constant for rotation
+	// Push time constant for animation
 	elapsed_time := f32(time.duration_seconds(time.diff(start_time, time.now())))
-	vkCmdPushConstants(element.commandBuffer, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, size_of(f32), &elapsed_time)
+	vkCmdPushConstants(element.commandBuffer, pipeline_layout, VK_SHADER_STAGE_TASK_BIT_NV | VK_SHADER_STAGE_MESH_BIT_NV, 0, size_of(f32), &elapsed_time)
 
-	// Draw particles (6 vertices per quad, 100 instances)
-	vkCmdDraw(element.commandBuffer, 6, 100000, 0, 0)
+	// Dispatch single mesh task for 16x16 grid
+	vkCmdDrawMeshTasksNV(element.commandBuffer, 1, 0)
 
 	// End render pass and command buffer
 	vkCmdEndRenderPass(element.commandBuffer)
@@ -46,32 +41,46 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 
 create_graphics_pipeline :: proc() -> bool {
 	// Load compiled shaders
-	vertex_shader_code, vert_ok := load_shader_spirv("vertex.spv")
-	if !vert_ok {
-		fmt.println("Failed to load vertex shader")
+	task_shader_code, task_ok := load_shader_spirv("task.spv")
+	if !task_ok {
 		return false
 	}
-	defer delete(vertex_shader_code)
+	defer delete(task_shader_code)
+
+	mesh_shader_code, mesh_ok := load_shader_spirv("mesh.spv")
+	if !mesh_ok {
+		return false
+	}
+	defer delete(mesh_shader_code)
 
 	fragment_shader_code, frag_ok := load_shader_spirv("fragment.spv")
 	if !frag_ok {
-		fmt.println("Failed to load fragment shader")
 		return false
 	}
 	defer delete(fragment_shader_code)
 
 	// Create shader modules
-	vert_shader_create_info := VkShaderModuleCreateInfo{
+	task_shader_create_info := VkShaderModuleCreateInfo{
 		sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		codeSize = len(vertex_shader_code) * size_of(c.uint32_t),
-		pCode = raw_data(vertex_shader_code),
+		codeSize = len(task_shader_code) * size_of(c.uint32_t),
+		pCode = raw_data(task_shader_code),
 	}
-	vert_shader_module: VkShaderModule
-	if vkCreateShaderModule(device, &vert_shader_create_info, nil, &vert_shader_module) != VK_SUCCESS {
-		fmt.println("Failed to create vertex shader module")
+	task_shader_module: VkShaderModule
+	if vkCreateShaderModule(device, &task_shader_create_info, nil, &task_shader_module) != VK_SUCCESS {
 		return false
 	}
-	defer vkDestroyShaderModule(device, vert_shader_module, nil)
+	defer vkDestroyShaderModule(device, task_shader_module, nil)
+
+	mesh_shader_create_info := VkShaderModuleCreateInfo{
+		sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+		codeSize = len(mesh_shader_code) * size_of(c.uint32_t),
+		pCode = raw_data(mesh_shader_code),
+	}
+	mesh_shader_module: VkShaderModule
+	if vkCreateShaderModule(device, &mesh_shader_create_info, nil, &mesh_shader_module) != VK_SUCCESS {
+		return false
+	}
+	defer vkDestroyShaderModule(device, mesh_shader_module, nil)
 
 	frag_shader_create_info := VkShaderModuleCreateInfo{
 		sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -80,29 +89,39 @@ create_graphics_pipeline :: proc() -> bool {
 	}
 	frag_shader_module: VkShaderModule
 	if vkCreateShaderModule(device, &frag_shader_create_info, nil, &frag_shader_module) != VK_SUCCESS {
-		fmt.println("Failed to create fragment shader module")
 		return false
 	}
 	defer vkDestroyShaderModule(device, frag_shader_module, nil)
 
-	// Pipeline stages - vertex and fragment shaders
-	shader_stages := [2]VkPipelineShaderStageCreateInfo{
-		{sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, stage = VK_SHADER_STAGE_VERTEX_BIT, module = vert_shader_module, pName = "vs_main"},
+	// Pipeline stages - task, mesh and fragment shaders
+	shader_stages := [3]VkPipelineShaderStageCreateInfo{
+		{sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, stage = VK_SHADER_STAGE_TASK_BIT_NV, module = task_shader_module, pName = "task_main"},
+		{sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, stage = VK_SHADER_STAGE_MESH_BIT_NV, module = mesh_shader_module, pName = "mesh_main"},
 		{sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, stage = VK_SHADER_STAGE_FRAGMENT_BIT, module = frag_shader_module, pName = "fs_main"},
 	}
 
-	// Vertex input - no vertex buffers, using hardcoded quad vertices in shader
-	vertex_input_info := VkPipelineVertexInputStateCreateInfo{sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO}
+	// Mesh shaders don't use vertex input or input assembly
 
-	// Input assembly - drawing triangles
-	input_assembly := VkPipelineInputAssemblyStateCreateInfo{
-		sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-		topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-		primitiveRestartEnable = VK_FALSE,
+	// Viewport and scissor - maintain aspect ratio
+	aspect_ratio := f32(width) / f32(height)
+	viewport_width, viewport_height: f32
+	viewport_x, viewport_y: f32
+
+	if aspect_ratio > 1.0 {
+		// Window is wider than tall
+		viewport_height = f32(height)
+		viewport_width = viewport_height
+		viewport_x = (f32(width) - viewport_width) / 2.0
+		viewport_y = 0.0
+	} else {
+		// Window is taller than wide
+		viewport_width = f32(width)
+		viewport_height = viewport_width
+		viewport_x = 0.0
+		viewport_y = (f32(height) - viewport_height) / 2.0
 	}
 
-	// Viewport and scissor
-	viewport := VkViewport{x = 0.0, y = 0.0, width = f32(width), height = f32(height), minDepth = 0.0, maxDepth = 1.0}
+	viewport := VkViewport{x = viewport_x, y = viewport_y, width = viewport_width, height = viewport_height, minDepth = 0.0, maxDepth = 1.0}
 	scissor := VkRect2D{offset = {0, 0}, extent = {width, height}}
 	viewport_state := VkPipelineViewportStateCreateInfo{
 		sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -135,22 +154,21 @@ create_graphics_pipeline :: proc() -> bool {
 	}
 
 	// Pipeline layout - for push constants (time)
-	push_constant_range := VkPushConstantRange{stageFlags = VK_SHADER_STAGE_VERTEX_BIT, offset = 0, size = size_of(f32)}
+	push_constant_range := VkPushConstantRange{stageFlags = VK_SHADER_STAGE_TASK_BIT_NV | VK_SHADER_STAGE_MESH_BIT_NV, offset = 0, size = size_of(f32)}
 	pipeline_layout_info := VkPipelineLayoutCreateInfo{
 		sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 		pushConstantRangeCount = 1, pPushConstantRanges = &push_constant_range,
 	}
 	if vkCreatePipelineLayout(device, &pipeline_layout_info, nil, &pipeline_layout) != VK_SUCCESS {
-		fmt.println("Failed to create pipeline layout")
 		return false
 	}
 
 	// Create the graphics pipeline
 	pipeline_info := VkGraphicsPipelineCreateInfo{
 		sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-		stageCount = 2, pStages = raw_data(shader_stages[:]),
-		pVertexInputState = &vertex_input_info,
-		pInputAssemblyState = &input_assembly,
+		stageCount = 3, pStages = raw_data(shader_stages[:]),
+		pVertexInputState = nil,  // Mesh shaders don't use vertex input
+		pInputAssemblyState = nil,  // Mesh shaders don't use input assembly
 		pViewportState = &viewport_state,
 		pRasterizationState = &rasterizer,
 		pMultisampleState = &multisampling,
@@ -162,7 +180,6 @@ create_graphics_pipeline :: proc() -> bool {
 	}
 
 	if vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, nil, &graphics_pipeline) != VK_SUCCESS {
-		fmt.println("Failed to create graphics pipeline")
 		return false
 	}
 

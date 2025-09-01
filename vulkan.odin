@@ -1,6 +1,5 @@
 package main
 
-import "core:fmt"
 import "core:c"
 import "core:os"
 import "core:time"
@@ -11,24 +10,18 @@ foreign import vulkan "system:vulkan"
 
 
 render_frame :: proc(start_time: time.Time) {
-	fmt.println("DEBUG: Starting render frame")
 	// 1. Get next swapchain image
 	if !acquire_next_image() do return
-	fmt.println("DEBUG: Acquired next image")
 
 	// 2. Record draw commands
 	element := &elements[image_index]
-	fmt.println("DEBUG: Recording commands")
 	record_commands(element, start_time)
 
 	// 3. Submit to GPU and present
-	fmt.println("DEBUG: Submitting commands")
 	submit_commands(element)
-	fmt.println("DEBUG: Presenting frame")
 	present_frame()
 
 	current_frame = (current_frame + 1) % image_count
-	fmt.println("DEBUG: Frame complete")
 }
 
 
@@ -52,16 +45,11 @@ handle_resize :: proc() {
 
 vulkan_init :: proc() -> (ok: bool) {
 	// Get initial window size
-	fmt.println("DEBUG: Getting window size")
 	update_window_size()
 
-	fmt.println("DEBUG: Initializing Vulkan")
 	if !init_vulkan() do return false
-	fmt.println("DEBUG: Creating swapchain")
 	create_swapchain()
-	fmt.println("DEBUG: Creating graphics pipeline")
 	if !create_graphics_pipeline() do return false
-	fmt.println("DEBUG: Vulkan init complete")
 	return true
 }
 
@@ -84,12 +72,12 @@ vulkan_cleanup :: proc() {
 
 // Hot reload pipeline when shaders change
 recreate_pipeline :: proc() {
-	if !recreate_graphics_pipeline() do fmt.println("Failed to recreate pipeline")
+	if !recreate_graphics_pipeline() do return
 }
 
 submit_commands :: proc(element: ^SwapchainElement) {
 	wait_stages := c.uint32_t(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
-	
+
 	submit_info := VkSubmitInfo{
 		sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 		waitSemaphoreCount = 1, pWaitSemaphores = &image_available_semaphore,
@@ -127,7 +115,6 @@ recreate_graphics_pipeline :: proc() -> bool {
 
 acquire_next_image :: proc() -> bool {
 	result := vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &image_index)
-	semaphore_value += 1
 
 	if result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR {
 		vkDeviceWaitIdle(device)
@@ -144,39 +131,37 @@ last_vertex_time: time.Time
 last_fragment_time: time.Time
 
 init_shader_times :: proc() {
-	if info, err := os.stat("vertex.wgsl"); err == nil do last_vertex_time = info.modification_time
-	if info, err := os.stat("fragment.wgsl"); err == nil do last_fragment_time = info.modification_time
+	if info, err := os.stat("fragment.hlsl"); err == nil do last_fragment_time = info.modification_time
 }
 
 check_shader_reload :: proc() -> bool {
-	vertex_info, vertex_err := os.stat("vertex.wgsl")
-	fragment_info, fragment_err := os.stat("fragment.wgsl")
-	if vertex_err != nil || fragment_err != nil do return false
+	fragment_info, fragment_err := os.stat("fragment.hlsl")
+	if fragment_err != nil do return false
 
-	vertex_changed := vertex_info.modification_time != last_vertex_time
 	fragment_changed := fragment_info.modification_time != last_fragment_time
 
-	if vertex_changed || fragment_changed {
-		last_vertex_time = vertex_info.modification_time
+	if fragment_changed {
 		last_fragment_time = fragment_info.modification_time
-		return compile_shaders(vertex_changed, fragment_changed)
+		return compile_shaders(false, fragment_changed)
 	}
 
 	return false
 }
 
 compile_shaders :: proc(vertex_changed, fragment_changed: bool) -> bool {
-	fmt.println("Recompiling shaders...")
 	success := true
 
-	if vertex_changed {
-		vertex_cmd := strings.clone_to_cstring("./naga vertex.wgsl vertex.spv")
-		defer delete(vertex_cmd)
-		if system(vertex_cmd) != 0 do success = false
-	}
-
 	if fragment_changed {
-		fragment_cmd := strings.clone_to_cstring("./naga fragment.wgsl fragment.spv")
+		// Compile all three shaders from fragment.hlsl
+		task_cmd := strings.clone_to_cstring("dxc -spirv -T as_6_6 -E task_main fragment.hlsl -Fo task.spv")
+		defer delete(task_cmd)
+		if system(task_cmd) != 0 do success = false
+
+		mesh_cmd := strings.clone_to_cstring("dxc -spirv -T ms_6_6 -E mesh_main fragment.hlsl -Fo mesh.spv")
+		defer delete(mesh_cmd)
+		if system(mesh_cmd) != 0 do success = false
+
+		fragment_cmd := strings.clone_to_cstring("dxc -spirv -T ps_6_6 -E fs_main fragment.hlsl -Fo fragment.spv")
 		defer delete(fragment_cmd)
 		if system(fragment_cmd) != 0 do success = false
 	}
@@ -270,6 +255,8 @@ VK_SUBPASS_CONTENTS_INLINE :: 0
 VK_PRESENT_MODE_FIFO_KHR :: 2
 VK_SHADER_STAGE_VERTEX_BIT :: 0x00000001
 VK_SHADER_STAGE_FRAGMENT_BIT :: 0x00000010
+VK_SHADER_STAGE_TASK_BIT_NV :: 0x00000040
+VK_SHADER_STAGE_MESH_BIT_NV :: 0x00000080
 VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST :: 3
 VK_POLYGON_MODE_FILL :: 0
 VK_FRONT_FACE_CLOCKWISE :: 0
@@ -487,7 +474,7 @@ SwapchainElement :: struct {
 // Extension and layer names
 instance_extension_names := [?]cstring{"VK_KHR_surface", "VK_KHR_wayland_surface", "VK_EXT_debug_utils"}
 layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
-device_extension_names := [?]cstring{"VK_KHR_swapchain"}
+device_extension_names := [?]cstring{"VK_KHR_swapchain", "VK_NV_mesh_shader"}
 
 // Global Vulkan state
 ENABLE_VALIDATION := true
@@ -512,7 +499,9 @@ image_index: c.uint32_t = 0
 image_count: c.uint32_t = 0
 timeline_semaphore: VkSemaphore
 image_available_semaphore: VkSemaphore
-semaphore_value: c.uint64_t = 0
+
+// Extension function pointers
+vkCmdDrawMeshTasksNV: proc "c" (command_buffer: VkCommandBuffer, taskCount: c.uint32_t, firstTask: c.uint32_t)
 
 // Vulkan function declarations
 @(default_calling_convention="c")
@@ -571,7 +560,6 @@ foreign vulkan {
 
 debug_callback :: proc "c" (messageSeverity: c.uint32_t, messageType: c.uint32_t, pCallbackData: ^VkDebugUtilsMessengerCallbackDataEXT, pUserData: rawptr) -> c.uint32_t {
     context = runtime.default_context()
-    fmt.printf("Validation layer: %s\n", pCallbackData.pMessage)
     return 0
 }
 
@@ -602,14 +590,12 @@ create_swapchain :: proc() {
     capabilities: VkSurfaceCapabilitiesKHR
     result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(phys_device, vulkan_surface, &capabilities)
     if result != VK_SUCCESS {
-        fmt.printf("Error getting surface capabilities: %d\n", result)
         return
     }
 
     format_count: c.uint32_t
     result = vkGetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &format_count, nil)
     if result != VK_SUCCESS {
-        fmt.printf("Error getting surface format count: %d\n", result)
         return
     }
 
@@ -617,7 +603,6 @@ create_swapchain :: proc() {
     defer free(formats)
     result = vkGetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &format_count, formats)
     if result != VK_SUCCESS {
-        fmt.printf("Error getting surface formats: %d\n", result)
         return
     }
 
@@ -654,7 +639,6 @@ create_swapchain :: proc() {
 
     result = vkCreateSwapchainKHR(device, &create_info, nil, &swapchain)
     if result != VK_SUCCESS {
-        fmt.printf("Error creating swapchain: %d\n", result)
         return
     }
 
@@ -690,13 +674,11 @@ create_swapchain :: proc() {
 
     result = vkCreateRenderPass(device, &render_pass_info, nil, &render_pass)
     if result != VK_SUCCESS {
-        fmt.printf("Error creating render pass: %d\n", result)
         return
     }
 
     result = vkGetSwapchainImagesKHR(device, swapchain, &image_count, nil)
     if result != VK_SUCCESS {
-        fmt.printf("Error getting swapchain image count: %d\n", result)
         return
     }
 
@@ -704,7 +686,6 @@ create_swapchain :: proc() {
     defer free(images)
     result = vkGetSwapchainImagesKHR(device, swapchain, &image_count, images)
     if result != VK_SUCCESS {
-        fmt.printf("Error getting swapchain images: %d\n", result)
         return
     }
 
@@ -737,7 +718,6 @@ create_swapchain :: proc() {
         }
         result = vkCreateImageView(device, &view_info, nil, &elements[i].imageView)
         if result != VK_SUCCESS {
-            fmt.printf("Error creating image view: %d\n", result)
             return
         }
 
@@ -752,7 +732,6 @@ create_swapchain :: proc() {
         }
         result = vkCreateFramebuffer(device, &fb_info, nil, &elements[i].framebuffer)
         if result != VK_SUCCESS {
-            fmt.printf("Error creating framebuffer: %d\n", result)
             return
         }
 
@@ -794,7 +773,6 @@ init_vulkan :: proc() -> bool {
 
     result = vkCreateInstance(&create_info, nil, &instance)
     if result != VK_SUCCESS {
-        fmt.printf("Failed to create instance: %d\n", result)
         return false
     }
 
@@ -812,7 +790,6 @@ init_vulkan :: proc() -> bool {
 
     result = vkCreateWaylandSurfaceKHR(instance, &surface_info, nil, &vulkan_surface)
     if result != VK_SUCCESS {
-        fmt.printf("Failed to create surface: %d\n", result)
         return false
     }
 
@@ -835,7 +812,6 @@ init_vulkan :: proc() -> bool {
 
     result = vkCreateCommandPool(device, &pool_info, nil, &command_pool)
     if result != VK_SUCCESS {
-        fmt.printf("Failed to create command pool: %d\n", result)
         return false
     }
 
@@ -853,7 +829,6 @@ init_vulkan :: proc() -> bool {
 
     result = vkCreateSemaphore(device, &sem_info, nil, &timeline_semaphore)
     if result != VK_SUCCESS {
-        fmt.printf("Failed to create timeline semaphore: %d\n", result)
         return false
     }
 
@@ -861,10 +836,15 @@ init_vulkan :: proc() -> bool {
     binary_sem_info := VkSemaphoreCreateInfo{
         sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
     }
-    
+
     result = vkCreateSemaphore(device, &binary_sem_info, nil, &image_available_semaphore)
     if result != VK_SUCCESS {
-        fmt.printf("Failed to create image available semaphore: %d\n", result)
+        return false
+    }
+
+    // Load mesh shader extension functions
+    vkCmdDrawMeshTasksNV = cast(proc "c" (command_buffer: VkCommandBuffer, taskCount: c.uint32_t, firstTask: c.uint32_t))vkGetInstanceProcAddr(instance, "vkCmdDrawMeshTasksNV")
+    if vkCmdDrawMeshTasksNV == nil {
         return false
     }
 
@@ -884,7 +864,6 @@ setup_debug_messenger :: proc() -> bool {
     if vkCreateDebugUtilsMessengerEXT != nil {
         result := vkCreateDebugUtilsMessengerEXT(instance, &debug_create_info, nil, &debug_messenger)
         if result != VK_SUCCESS {
-            fmt.printf("Failed to create debug messenger: %d\n", result)
             return false
         }
     }
@@ -895,7 +874,6 @@ setup_physical_device :: proc() -> bool {
     device_count: c.uint32_t
     vkEnumeratePhysicalDevices(instance, &device_count, nil)
     if device_count == 0 {
-        fmt.println("No physical devices found")
         return false
     }
 
@@ -924,7 +902,6 @@ setup_physical_device :: proc() -> bool {
     }
 
     if !found_queue_family {
-        fmt.println("No suitable queue family found")
         return false
     }
 
@@ -959,7 +936,6 @@ create_logical_device :: proc() -> bool {
 
     result := vkCreateDevice(phys_device, &device_create_info, nil, &device)
     if result != VK_SUCCESS {
-        fmt.printf("Failed to create device: %d\n", result)
         return false
     }
 

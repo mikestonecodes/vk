@@ -1,7 +1,6 @@
 package main
 
 import "core:c"
-import "core:fmt"
 
 // Opaque types for Wayland objects
 wl_display :: rawptr
@@ -25,14 +24,12 @@ foreign wayland_wrapper {
 
 init_platform :: proc() -> bool {
     if wayland_init() == 0 {
-        fmt.println("Failed to initialize Wayland")
         return false
     }
 
     display = get_wayland_display()
     surface = get_wayland_surface()
     if display == nil || surface == nil {
-        fmt.println("Failed to get Wayland display/surface")
         return false
     }
 
