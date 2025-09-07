@@ -63,7 +63,7 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32, @builtin(instance_index) in
         final_pos.y                  // Keep Y unchanged
     );
 
-    out.clip_position = vec4<f32>(corrected_pos, 0.0, 1.0);
+    out.clip_position = vec4<f32>(corrected_pos, f32(instance_index) * 0.0001, 1.0);
     out.color = particle.color;
     out.tex_coord = tex_coords[vertex_index];
     return out;

@@ -41,6 +41,8 @@ main :: proc() {
 
 		// Only render when window is visible
 		if wayland_window_visible() != 0 {
+			// Reset descriptor pool each frame to prevent exhaustion
+			reset_descriptor_pool()
 			render_frame(start_time)
 		} else {
 			// Sleep when window is hidden to avoid busy waiting

@@ -41,52 +41,94 @@ DescriptorResource :: union {
 	vk.Sampler,
 }
 
+// Cached descriptor set with resource tracking
+CachedDescriptorSet :: struct {
+	descriptor_set: vk.DescriptorSet,
+	resource_hash: u64,
+}
+
+// Global descriptor set cache with resource tracking
+descriptor_set_cache: map[string]CachedDescriptorSet
+
+// Global descriptor pool for all descriptor sets
+global_descriptor_pool: vk.DescriptorPool
+
+// Initialize global descriptor pool
+init_descriptor_pool :: proc() -> bool {
+	pool_sizes := [4]vk.DescriptorPoolSize {
+		{type = .STORAGE_BUFFER, descriptorCount = 1000},
+		{type = .UNIFORM_BUFFER, descriptorCount = 1000},
+		{type = .SAMPLED_IMAGE, descriptorCount = 1000},
+		{type = .SAMPLER, descriptorCount = 1000},
+	}
+
+	pool_info := vk.DescriptorPoolCreateInfo {
+		sType         = vk.StructureType.DESCRIPTOR_POOL_CREATE_INFO,
+		flags         = {},
+		poolSizeCount = len(pool_sizes),
+		pPoolSizes    = raw_data(pool_sizes[:]),
+		maxSets       = 1000,
+	}
+
+	if vk.CreateDescriptorPool(device, &pool_info, nil, &global_descriptor_pool) != vk.Result.SUCCESS {
+		return false
+	}
+	return true
+}
+
+// Hash resources to detect changes
+hash_resources :: proc(resources: []DescriptorResource) -> u64 {
+	hash: u64 = 0
+	for resource in resources {
+		switch r in resource {
+		case vk.Buffer:
+			hash = hash * 31 + u64(uintptr(r))
+		case vk.ImageView:
+			hash = hash * 31 + u64(uintptr(r))
+		case vk.Sampler:
+			hash = hash * 31 + u64(uintptr(r))
+		}
+	}
+	return hash
+}
+
 // Create a descriptor set using the pipeline's layout with flexible resources
 create_pipeline_descriptor_generic :: proc(
 	pipeline_name: string,
 	resources: []DescriptorResource,
 	bindings: []vk.DescriptorSetLayoutBinding = nil,
+	cache_key: string = "",
 ) -> (
 	vk.DescriptorSet,
 	bool,
 ) {
+	// Use cache_key if provided, otherwise use pipeline_name
+	key := cache_key if cache_key != "" else pipeline_name
+	
+	// Hash the resources to detect changes
+	resource_hash := hash_resources(resources)
+	
+	// Check if we already have a cached descriptor set with matching resources
+	if cached, exists := descriptor_set_cache[key]; exists && cached.resource_hash == resource_hash {
+		return cached.descriptor_set, true
+	}
+
 	layout, ok := get_pipeline_descriptor_layout(pipeline_name)
 	if !ok {
 		fmt.printf("Pipeline %s not found or has no descriptor layouts\n", pipeline_name)
 		return {}, false
 	}
 
-	// Need to determine pool sizes from the pipeline's layout
-	// For now, create a pool that can handle common descriptor types
-	pool_sizes := [4]vk.DescriptorPoolSize {
-		{type = .STORAGE_BUFFER, descriptorCount = 4},
-		{type = .UNIFORM_BUFFER, descriptorCount = 4},
-		{type = .SAMPLED_IMAGE, descriptorCount = 4},
-		{type = .SAMPLER, descriptorCount = 4},
-	}
-
-	pool_info := vk.DescriptorPoolCreateInfo {
-		sType         = vk.StructureType.DESCRIPTOR_POOL_CREATE_INFO,
-		poolSizeCount = len(pool_sizes),
-		pPoolSizes    = raw_data(pool_sizes[:]),
-		maxSets       = 1,
-	}
-
-	pool: vk.DescriptorPool
-	if vk.CreateDescriptorPool(device, &pool_info, nil, &pool) != vk.Result.SUCCESS {
-		return {}, false
-	}
-
 	alloc_info := vk.DescriptorSetAllocateInfo {
 		sType              = vk.StructureType.DESCRIPTOR_SET_ALLOCATE_INFO,
-		descriptorPool     = pool,
+		descriptorPool     = global_descriptor_pool,
 		descriptorSetCount = 1,
 		pSetLayouts        = &layout,
 	}
 
 	set: vk.DescriptorSet
 	if vk.AllocateDescriptorSets(device, &alloc_info, &set) != vk.Result.SUCCESS {
-		vk.DestroyDescriptorPool(device, pool, nil)
+		fmt.printf("Failed to allocate descriptor set for pipeline %s\n", pipeline_name)
 		return {}, false
 	}
 
@@ -100,54 +142,82 @@ create_pipeline_descriptor_generic :: proc(
 	image_infos := make([dynamic]vk.DescriptorImageInfo)
 	defer delete(image_infos)
 
+	// Only write descriptors for the resources we have
 	for resource, i in resources {
-		write := vk.WriteDescriptorSet {
-			sType           = vk.StructureType.WRITE_DESCRIPTOR_SET,
-			dstSet          = set,
-			dstBinding      = u32(i),
-			dstArrayElement = 0,
-			descriptorCount = 1,
+		if i < len(resources) { // Bound check
+			write := vk.WriteDescriptorSet {
+				sType           = vk.StructureType.WRITE_DESCRIPTOR_SET,
+				dstSet          = set,
+				dstBinding      = u32(i),
+				dstArrayElement = 0,
+				descriptorCount = 1,
+			}
+
+			switch r in resource {
+			case vk.Buffer:
+				if r != {} { // Only write if valid buffer
+					write.descriptorType = .STORAGE_BUFFER
+					buffer_info := vk.DescriptorBufferInfo {
+						buffer = r,
+						offset = 0,
+						range  = vk.DeviceSize(vk.WHOLE_SIZE),
+					}
+					append(&buffer_infos, buffer_info)
+					write.pBufferInfo = &buffer_infos[len(buffer_infos) - 1]
+					append(&writes, write)
+				}
+
+			case vk.ImageView:
+				if r != {} { // Only write if valid image view
+					write.descriptorType = .SAMPLED_IMAGE
+					image_info := vk.DescriptorImageInfo {
+						imageView   = r,
+						imageLayout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
+					}
+					append(&image_infos, image_info)
+					write.pImageInfo = &image_infos[len(image_infos) - 1]
+					append(&writes, write)
+				}
+
+			case vk.Sampler:
+				if r != {} { // Only write if valid sampler
+					write.descriptorType = .SAMPLER
+					sampler_info := vk.DescriptorImageInfo {
+						sampler = r,
+					}
+					append(&image_infos, sampler_info)
+					write.pImageInfo = &image_infos[len(image_infos) - 1]
+					append(&writes, write)
+				}
+			}
 		}
-
-		switch r in resource {
-		case vk.Buffer:
-			write.descriptorType = .STORAGE_BUFFER
-			buffer_info := vk.DescriptorBufferInfo {
-				buffer = r,
-				offset = 0,
-				range  = vk.DeviceSize(vk.WHOLE_SIZE),
-			}
-			append(&buffer_infos, buffer_info)
-			write.pBufferInfo = &buffer_infos[len(buffer_infos) - 1]
-
-		case vk.ImageView:
-			write.descriptorType = .SAMPLED_IMAGE
-			image_info := vk.DescriptorImageInfo {
-				imageView   = r,
-				imageLayout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
-			}
-			append(&image_infos, image_info)
-			write.pImageInfo = &image_infos[len(image_infos) - 1]
-
-		case vk.Sampler:
-			write.descriptorType = .SAMPLER
-			sampler_info := vk.DescriptorImageInfo {
-				sampler = r,
-			}
-			append(&image_infos, sampler_info)
-			write.pImageInfo = &image_infos[len(image_infos) - 1]
-		}
-
-		append(&writes, write)
 	}
 
 	if len(writes) > 0 {
 		vk.UpdateDescriptorSets(device, u32(len(writes)), raw_data(writes), 0, nil)
 	}
 
+	// Cache the descriptor set for reuse
+	descriptor_set_cache[key] = CachedDescriptorSet{
+		descriptor_set = set,
+		resource_hash = resource_hash,
+	}
+
 	return set, true
 }
 
+// Clear descriptor set cache (call when resources change)
+clear_descriptor_cache :: proc() {
+	delete(descriptor_set_cache)
+	descriptor_set_cache = make(map[string]CachedDescriptorSet)
+}
+
+// Reset descriptor pool (call each frame to clear all descriptor sets)
+reset_descriptor_pool :: proc() {
+	vk.ResetDescriptorPool(device, global_descriptor_pool, {})
+	delete(descriptor_set_cache)
+	descriptor_set_cache = make(map[string]CachedDescriptorSet)
+}
 
 pipeline_cache: map[string]PipelineEntry
 
@@ -277,8 +347,8 @@ execute_compute_pass :: proc(encoder: ^CommandEncoder, pass: ^ComputePassInfo) {
 
 	vk.CmdBindPipeline(encoder.command_buffer, .COMPUTE, pipeline)
 
-	// Auto-create descriptor set from resources
-	if len(pass.resources) > 0 {
+	// Always create and bind descriptor set if pipeline expects descriptors
+	if descriptor_layout, has_descriptors := get_pipeline_descriptor_layout(pass.shader); has_descriptors {
 		if descriptor_set, ok := create_pipeline_descriptor_generic(pass.shader, pass.resources);
 		   ok {
 			vk.CmdBindDescriptorSets(
@@ -291,6 +361,8 @@ execute_compute_pass :: proc(encoder: ^CommandEncoder, pass: ^ComputePassInfo) {
 				0,
 				nil,
 			)
+		} else {
+			fmt.printf("Warning: Failed to create descriptor set for compute shader: %s\n", pass.shader)
 		}
 	}
 
@@ -341,17 +413,22 @@ execute_graphics_pass :: proc(encoder: ^CommandEncoder, pass: ^GraphicsPassInfo)
 	vk.CmdBeginRenderPass(encoder.command_buffer, &begin_info, .INLINE)
 	vk.CmdBindPipeline(encoder.command_buffer, .GRAPHICS, pipeline)
 
-	// Auto-create descriptor set from resources
-	if len(pass.resources) > 0 {
-		graphics_key := fmt.aprintf(
-			"%s+%s+%dx%d",
-			pass.vertex_shader,
-			pass.fragment_shader,
-			width,
-			height,
-		)
-		defer delete(graphics_key)
-		if descriptor_set, ok := create_pipeline_descriptor_generic(graphics_key, pass.resources);
+	// Always create and bind descriptor set if pipeline expects descriptors
+	graphics_key := fmt.aprintf(
+		"%s+%s+%dx%d",
+		pass.vertex_shader,
+		pass.fragment_shader,
+		width,
+		height,
+	)
+	defer delete(graphics_key)
+	
+	// Use shader names only for descriptor set caching (dimensions don't affect descriptor layout)
+	descriptor_key := fmt.aprintf("%s+%s", pass.vertex_shader, pass.fragment_shader)
+	defer delete(descriptor_key)
+	
+	if descriptor_layout, has_descriptors := get_pipeline_descriptor_layout(graphics_key); has_descriptors {
+		if descriptor_set, ok := create_pipeline_descriptor_generic(graphics_key, pass.resources, {}, descriptor_key);
 		   ok {
 			vk.CmdBindDescriptorSets(
 				encoder.command_buffer,
@@ -363,6 +440,9 @@ execute_graphics_pass :: proc(encoder: ^CommandEncoder, pass: ^GraphicsPassInfo)
 				0,
 				nil,
 			)
+		} else {
+			fmt.printf("Warning: Failed to create descriptor set for graphics pipeline: %s + %s\n", 
+				pass.vertex_shader, pass.fragment_shader)
 		}
 	}
 
@@ -491,6 +571,11 @@ cleanup_pipelines :: proc() {
 		delete(key)
 	}
 	delete(pipeline_cache)
+	
+	// Cleanup global descriptor pool
+	if global_descriptor_pool != {} {
+		vk.DestroyDescriptorPool(device, global_descriptor_pool, nil)
+	}
 }
 // Generic pipeline creation
 get_graphics_pipeline :: proc(

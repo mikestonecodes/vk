@@ -10,18 +10,15 @@ import "core:time"
 import vk "vendor:vulkan"
 
 submit_commands :: proc(element: ^SwapchainElement) {
-	// Increment timeline for this frame
+	// Increment timeline value for this frame
 	timeline_value += 1
 
 	wait_stages := [1]vk.PipelineStageFlags {
 		vk.PipelineStageFlags{vk.PipelineStageFlag.COLOR_ATTACHMENT_OUTPUT},
 	}
 
-	// Timeline semaphore submit info
 	timeline_submit_info := vk.TimelineSemaphoreSubmitInfo {
 		sType = vk.StructureType.TIMELINE_SEMAPHORE_SUBMIT_INFO,
-		waitSemaphoreValueCount = 0,
-		pWaitSemaphoreValues = nil,
 		signalSemaphoreValueCount = 1,
 		pSignalSemaphoreValues = &timeline_value,
 	}
@@ -38,11 +35,11 @@ submit_commands :: proc(element: ^SwapchainElement) {
 		pSignalSemaphores    = &timeline_semaphore,
 	}
 
-	vk.QueueSubmit(queue, 1, &submit_info, {})
+	vk.QueueSubmit(queue, 1, &submit_info, element.fence)
 }
 
 present_frame :: proc() {
-	// Wait for timeline semaphore to reach current value (render complete)
+	// Wait for current frame to complete before present
 	wait_info := vk.SemaphoreWaitInfo {
 		sType = vk.StructureType.SEMAPHORE_WAIT_INFO,
 		semaphoreCount = 1,
@@ -51,19 +48,16 @@ present_frame :: proc() {
 	}
 	vk.WaitSemaphores(device, &wait_info, max(u64))
 
-	// Present with no semaphore wait (we already waited above)
+	// Simple present without semaphore wait
 	present_info := vk.PresentInfoKHR {
-		sType              = vk.StructureType.PRESENT_INFO_KHR,
-		waitSemaphoreCount = 0,
-		pWaitSemaphores    = nil,
-		swapchainCount     = 1,
-		pSwapchains        = &swapchain,
-		pImageIndices      = &image_index,
+		sType         = vk.StructureType.PRESENT_INFO_KHR,
+		swapchainCount = 1,
+		pSwapchains   = &swapchain,
+		pImageIndices = &image_index,
 	}
 
 	result := vk.QueuePresentKHR(queue, &present_info)
 	if result == vk.Result.ERROR_OUT_OF_DATE_KHR || result == vk.Result.SUBOPTIMAL_KHR {
-		vk.DeviceWaitIdle(device)
 		destroy_swapchain()
 		create_swapchain()
 	}
@@ -74,13 +68,16 @@ render_frame :: proc(start_time: time.Time) {
 	// 1. Get next swapchain image
 	if !acquire_next_image() do return
 
-	// 2. Record draw commands
+	// 2. Wait for this frame's fence instead of all GPU work
 	element := &elements[image_index]
+	vk.WaitForFences(device, 1, &element.fence, true, ~u64(0))
+	vk.ResetFences(device, 1, &element.fence)
+
+	// 3. Record draw commands
 	record_commands(element, start_time)
-	// 3. Submit to GPU and present
+	// 4. Submit to GPU and present
 	submit_commands(element)
 	present_frame()
-	// No need to track current_frame with this simple approach
 }
 
 // Update window size from Wayland
@@ -93,7 +90,9 @@ update_window_size :: proc() {
 handle_resize :: proc() {
 	if wayland_resize_needed() != 0 {
 		update_window_size()
-		vk.DeviceWaitIdle(device)
+		
+		// Wait only for queue idle instead of full device
+		vk.QueueWaitIdle(queue)
 
 		// Clear pipeline cache so pipelines are recreated with new viewport
 		clear_pipeline_cache()
@@ -135,7 +134,6 @@ acquire_next_image :: proc() -> bool {
 	)
 
 	if result == vk.Result.ERROR_OUT_OF_DATE_KHR || result == vk.Result.SUBOPTIMAL_KHR {
-		vk.DeviceWaitIdle(device)
 		destroy_swapchain()
 		create_swapchain()
 		return false
@@ -269,6 +267,7 @@ clear_pipeline_cache :: proc() {
 	}
 
 	delete(pipeline_cache)
+	clear_descriptor_cache()
 	pipeline_cache = make(map[string]PipelineEntry)
 }
 
@@ -278,6 +277,7 @@ SwapchainElement :: struct {
 	image:         vk.Image,
 	imageView:     vk.ImageView,
 	framebuffer:   vk.Framebuffer,
+	fence:         vk.Fence,
 }
 
 // Extension and layer names
@@ -308,10 +308,9 @@ width: c.uint32_t = 800
 height: c.uint32_t = 600
 image_index: c.uint32_t = 0
 image_count: c.uint32_t = 0
-// Timeline semaphore for proper synchronization
+// Timeline semaphore for render synchronization + binary for acquire
 timeline_semaphore: vk.Semaphore
 timeline_value: c.uint64_t = 0
-// Binary semaphore for swapchain
 image_available_semaphore: vk.Semaphore
 
 
@@ -481,6 +480,13 @@ create_swapchain :: proc() {
 		}
 		vk.AllocateCommandBuffers(device, &alloc_info, &elements[i].commandBuffer)
 
+		// Create fence for tracking frame completion
+		fence_info := vk.FenceCreateInfo {
+			sType = vk.StructureType.FENCE_CREATE_INFO,
+			flags = {.SIGNALED}, // Start signaled so first frame doesn't wait
+		}
+		vk.CreateFence(device, &fence_info, nil, &elements[i].fence)
+
 		elements[i].image = images[i]
 
 		view_info := vk.ImageViewCreateInfo {
@@ -531,7 +537,11 @@ destroy_swapchain :: proc() {
 	for i in 0 ..< image_count {
 		vk.DestroyFramebuffer(device, elements[i].framebuffer, nil)
 		vk.DestroyImageView(device, elements[i].imageView, nil)
-		vk.FreeCommandBuffers(device, command_pool, 1, &elements[i].commandBuffer)
+		vk.DestroyFence(device, elements[i].fence, nil)
+		// Reset command buffer instead of freeing for better performance
+		if elements[i].commandBuffer != {} {
+			vk.ResetCommandBuffer(elements[i].commandBuffer, {})
+		}
 	}
 
 	free(elements)
@@ -660,7 +670,7 @@ init_vulkan :: proc() -> bool {
 		return false
 	}
 
-	// Create binary semaphore for image acquisition
+	// Create binary semaphore for image acquisition only
 	binary_sem_info := vk.SemaphoreCreateInfo {
 		sType = vk.StructureType.SEMAPHORE_CREATE_INFO,
 	}
@@ -819,6 +829,11 @@ VertexPushConstants :: struct {
 }
 
 init_vulkan_resources :: proc() -> bool {
+	// Initialize global descriptor pool first
+	if !init_descriptor_pool() {
+		return false
+	}
+
 	// Create post-processing resources first (includes texture sampler and render pass)
 	if !create_post_process_resources() {
 		return false
@@ -1181,6 +1196,14 @@ create_texture_sampler :: proc() -> bool {
 
 vulkan_cleanup :: proc() {
 	vk.DeviceWaitIdle(device)
+	
+	// Free command buffers properly before destroying command pool
+	for i in 0 ..< image_count {
+		if elements[i].commandBuffer != {} {
+			vk.FreeCommandBuffers(device, command_pool, 1, &elements[i].commandBuffer)
+		}
+	}
+	
 	destroy_swapchain()
 
 	cleanup_pipelines()
