@@ -23,9 +23,20 @@ var<private> positions: array<vec2<f32>, 6> = array<vec2<f32>, 6>(
     vec2<f32>(-0.5, 0.5)    // Top left
 );
 
+// Texture coordinates for the quad
+var<private> tex_coords: array<vec2<f32>, 6> = array<vec2<f32>, 6>(
+    vec2<f32>(0.0, 1.0),  // Bottom left
+    vec2<f32>(1.0, 1.0),  // Bottom right
+    vec2<f32>(0.0, 0.0),  // Top left
+    vec2<f32>(1.0, 1.0),  // Bottom right
+    vec2<f32>(1.0, 0.0),  // Top right
+    vec2<f32>(0.0, 0.0)   // Top left
+);
+
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec3<f32>,
+    @location(1) tex_coord: vec2<f32>,
 }
 
 @vertex
@@ -39,12 +50,12 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32, @builtin(instance_index) in
     let particle = particles[instance_index];
 
     // Scale down the particle (make it smaller)
-    let particle_size = 0.01;
+    let particle_size = 0.1;
     let scaled_vertex = vertex_pos * particle_size;
 
     // Final position = particle center + scaled vertex offset
     let final_pos = particle.position + scaled_vertex;
-    
+
     // Apply aspect ratio correction - always scale to maintain circular particles
     let aspect_ratio = push_constants.screen_width / push_constants.screen_height;
     let corrected_pos = vec2<f32>(
@@ -54,5 +65,6 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32, @builtin(instance_index) in
 
     out.clip_position = vec4<f32>(corrected_pos, 0.0, 1.0);
     out.color = particle.color;
+    out.tex_coord = tex_coords[vertex_index];
     return out;
 }

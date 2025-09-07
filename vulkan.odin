@@ -868,7 +868,7 @@ create_post_process_framebuffer :: proc() -> bool {
 
 
 // Generic buffer creation
-createBuffer :: proc(size_bytes: int, usage: vk.BufferUsageFlags) -> (vk.Buffer, vk.DeviceMemory) {
+createBuffer :: proc(size_bytes: int, usage: vk.BufferUsageFlags, memory_properties: vk.MemoryPropertyFlags = {vk.MemoryPropertyFlag.DEVICE_LOCAL}) -> (vk.Buffer, vk.DeviceMemory) {
 	buffer_info := vk.BufferCreateInfo{
 		sType = vk.StructureType.BUFFER_CREATE_INFO,
 		size = vk.DeviceSize(size_bytes),
@@ -888,7 +888,7 @@ createBuffer :: proc(size_bytes: int, usage: vk.BufferUsageFlags) -> (vk.Buffer,
 	alloc_info := vk.MemoryAllocateInfo{
 		sType = vk.StructureType.MEMORY_ALLOCATE_INFO,
 		allocationSize = mem_requirements.size,
-		memoryTypeIndex = find_memory_type(mem_requirements.memoryTypeBits, {vk.MemoryPropertyFlag.DEVICE_LOCAL}),
+		memoryTypeIndex = find_memory_type(mem_requirements.memoryTypeBits, memory_properties),
 	}
 
 	buffer_memory: vk.DeviceMemory
@@ -968,6 +968,178 @@ createImage :: proc(w: u32, h: u32, img_format: vk.Format, usage: vk.ImageUsageF
 	return image, image_memory, image_view
 }
 
+// Load texture from raw RGBA data
+loadTextureFromData :: proc(data: []u8, w: u32, h: u32) -> (vk.Image, vk.DeviceMemory, vk.ImageView, bool) {
+	image_size := vk.DeviceSize(len(data))
+
+	// Create staging buffer
+	staging_buffer, staging_buffer_memory := createBuffer(
+		int(image_size),
+		{vk.BufferUsageFlag.TRANSFER_SRC},
+		{vk.MemoryPropertyFlag.HOST_VISIBLE, vk.MemoryPropertyFlag.HOST_COHERENT},
+	)
+	defer {
+		vk.DestroyBuffer(device, staging_buffer, nil)
+		vk.FreeMemory(device, staging_buffer_memory, nil)
+	}
+
+	// Copy data to staging buffer
+	staging_data: rawptr
+	vk.MapMemory(device, staging_buffer_memory, 0, image_size, {}, &staging_data)
+	copy_slice(([^]u8)(staging_data)[:len(data)], data[:])
+	vk.UnmapMemory(device, staging_buffer_memory)
+
+	// Create texture image
+	image, image_memory, image_view := createImage(
+		w, h,
+		vk.Format.R8G8B8A8_SRGB,
+		{vk.ImageUsageFlag.TRANSFER_DST, vk.ImageUsageFlag.SAMPLED},
+	)
+
+	if image == {} {
+		return {}, {}, {}, false
+	}
+
+	// Transition image layout and copy data
+	transitionImageLayout(image, vk.Format.R8G8B8A8_SRGB, vk.ImageLayout.UNDEFINED, vk.ImageLayout.TRANSFER_DST_OPTIMAL)
+	copyBufferToImage(staging_buffer, image, w, h)
+	transitionImageLayout(image, vk.Format.R8G8B8A8_SRGB, vk.ImageLayout.TRANSFER_DST_OPTIMAL, vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL)
+
+	return image, image_memory, image_view, true
+}
+
+// Create a simple 4x4 test texture pattern
+createTestTexture :: proc() -> (vk.Image, vk.DeviceMemory, vk.ImageView, bool) {
+	width: u32 = 4
+	height: u32 = 4
+	
+	// Create a simple checkerboard pattern (RGBA format)
+	data := make([]u8, width * height * 4)
+	defer delete(data)
+
+	for y in 0..<height {
+		for x in 0..<width {
+			idx := (y * width + x) * 4
+			// Checkerboard pattern
+			if (x + y) % 2 == 0 {
+				data[idx] = 255     // R - white
+				data[idx + 1] = 255 // G
+				data[idx + 2] = 255 // B
+				data[idx + 3] = 255 // A
+			} else {
+				data[idx] = 255     // R - red
+				data[idx + 1] = 0   // G
+				data[idx + 2] = 0   // B
+				data[idx + 3] = 255 // A
+			}
+		}
+	}
+
+	return loadTextureFromData(data[:], width, height)
+}
+
+transitionImageLayout :: proc(image: vk.Image, format: vk.Format, old_layout: vk.ImageLayout, new_layout: vk.ImageLayout) {
+	cmd_buffer := beginSingleTimeCommands()
+	defer endSingleTimeCommands(cmd_buffer)
+
+	barrier := vk.ImageMemoryBarrier{
+		sType = vk.StructureType.IMAGE_MEMORY_BARRIER,
+		oldLayout = old_layout,
+		newLayout = new_layout,
+		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		image = image,
+		subresourceRange = {
+			aspectMask = {vk.ImageAspectFlag.COLOR},
+			baseMipLevel = 0,
+			levelCount = 1,
+			baseArrayLayer = 0,
+			layerCount = 1,
+		},
+	}
+
+	source_stage: vk.PipelineStageFlags
+	destination_stage: vk.PipelineStageFlags
+
+	if old_layout == vk.ImageLayout.UNDEFINED && new_layout == vk.ImageLayout.TRANSFER_DST_OPTIMAL {
+		barrier.srcAccessMask = {}
+		barrier.dstAccessMask = {vk.AccessFlag.TRANSFER_WRITE}
+		source_stage = {vk.PipelineStageFlag.TOP_OF_PIPE}
+		destination_stage = {vk.PipelineStageFlag.TRANSFER}
+	} else if old_layout == vk.ImageLayout.TRANSFER_DST_OPTIMAL && new_layout == vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL {
+		barrier.srcAccessMask = {vk.AccessFlag.TRANSFER_WRITE}
+		barrier.dstAccessMask = {vk.AccessFlag.SHADER_READ}
+		source_stage = {vk.PipelineStageFlag.TRANSFER}
+		destination_stage = {vk.PipelineStageFlag.FRAGMENT_SHADER}
+	}
+
+	vk.CmdPipelineBarrier(
+		cmd_buffer,
+		source_stage, destination_stage,
+		{},
+		0, nil,
+		0, nil,
+		1, &barrier,
+	)
+}
+
+copyBufferToImage :: proc(buffer: vk.Buffer, image: vk.Image, width: u32, height: u32) {
+	cmd_buffer := beginSingleTimeCommands()
+	defer endSingleTimeCommands(cmd_buffer)
+
+	region := vk.BufferImageCopy{
+		bufferOffset = 0,
+		bufferRowLength = 0,
+		bufferImageHeight = 0,
+		imageSubresource = {
+			aspectMask = {vk.ImageAspectFlag.COLOR},
+			mipLevel = 0,
+			baseArrayLayer = 0,
+			layerCount = 1,
+		},
+		imageOffset = {x = 0, y = 0, z = 0},
+		imageExtent = {width = width, height = height, depth = 1},
+	}
+
+	vk.CmdCopyBufferToImage(cmd_buffer, buffer, image, vk.ImageLayout.TRANSFER_DST_OPTIMAL, 1, &region)
+}
+
+beginSingleTimeCommands :: proc() -> vk.CommandBuffer {
+	alloc_info := vk.CommandBufferAllocateInfo{
+		sType = vk.StructureType.COMMAND_BUFFER_ALLOCATE_INFO,
+		level = vk.CommandBufferLevel.PRIMARY,
+		commandPool = command_pool,
+		commandBufferCount = 1,
+	}
+
+	cmd_buffer: vk.CommandBuffer
+	vk.AllocateCommandBuffers(device, &alloc_info, &cmd_buffer)
+
+	begin_info := vk.CommandBufferBeginInfo{
+		sType = vk.StructureType.COMMAND_BUFFER_BEGIN_INFO,
+		flags = {vk.CommandBufferUsageFlag.ONE_TIME_SUBMIT},
+	}
+
+	vk.BeginCommandBuffer(cmd_buffer, &begin_info)
+	return cmd_buffer
+}
+
+endSingleTimeCommands :: proc(cmd_buffer: vk.CommandBuffer) {
+	vk.EndCommandBuffer(cmd_buffer)
+
+	cmd_buffer_ptr := cmd_buffer
+	submit_info := vk.SubmitInfo{
+		sType = vk.StructureType.SUBMIT_INFO,
+		commandBufferCount = 1,
+		pCommandBuffers = &cmd_buffer_ptr,
+	}
+
+	vk.QueueSubmit(queue, 1, &submit_info, {})
+	vk.QueueWaitIdle(queue)
+	vk.FreeCommandBuffers(device, command_pool, 1, &cmd_buffer_ptr)
+}
+
+
 
 
 getOffscreenImageView :: proc() -> vk.ImageView {
@@ -1010,6 +1182,7 @@ vulkan_cleanup :: proc() {
 	vk.DeviceWaitIdle(device)
 	destroy_swapchain()
 
+	cleanup_pipelines()
 	// Cleanup render resources (buffers, images, descriptors)
 	cleanup_render_resources()
 
