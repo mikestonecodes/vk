@@ -1,486 +1,784 @@
 package main
 
-import "core:fmt"
-import "core:c"
-import "core:os"
-import "core:time"
-import "base:runtime"
-import "core:strings"
 import vk "vendor:vulkan"
+import "core:fmt"
+import "core:strings"
+import "core:os"
+import "core:c"
+import "core:strconv"
 
-ComputePass :: struct {
-	shader: string,
-	descriptor_sets: []vk.DescriptorSet,
-	push_data: rawptr,
-	push_size: u32,
-	workgroups: [3]u32,
-}
-
-RenderPass :: struct {
-	vertex_shader: string,
-	fragment_shader: string,
-	descriptor_sets: []vk.DescriptorSet,
-	push_data: rawptr,
-	push_size: u32,
-	push_stages: vk.ShaderStageFlags,
-	render_pass: vk.RenderPass,
-	framebuffer: vk.Framebuffer,
-	clear_values: []vk.ClearValue,
-	vertices: u32,
-	instances: u32,
-}
-
-MemorySync :: struct {
-	src_access: vk.AccessFlags,
-	dst_access: vk.AccessFlags,
-	src_stage: vk.PipelineStageFlags,
-	dst_stage: vk.PipelineStageFlags,
-	image: vk.Image,
-	old_layout: vk.ImageLayout,
-	new_layout: vk.ImageLayout,
-}
-
-Encoder :: struct {
-	cmd: vk.CommandBuffer,
-}
-
-begin_encoding :: proc(element: ^SwapchainElement) -> Encoder {
-	begin_info := vk.CommandBufferBeginInfo{
-		sType = vk.StructureType.COMMAND_BUFFER_BEGIN_INFO,
-		flags = {vk.CommandBufferUsageFlag.ONE_TIME_SUBMIT},
-	}
-	vk.ResetCommandBuffer(element.commandBuffer, {})
-	vk.BeginCommandBuffer(element.commandBuffer, &begin_info)
-	return {cmd = element.commandBuffer}
-}
-
-encode_compute :: proc(encoder: ^Encoder, pass: ^ComputePass) {
-	pipeline, layout := get_compute_pipeline(pass.shader)
-	vk.CmdBindPipeline(encoder.cmd, vk.PipelineBindPoint.COMPUTE, pipeline)
-	if len(pass.descriptor_sets) > 0 {
-		vk.CmdBindDescriptorSets(encoder.cmd, vk.PipelineBindPoint.COMPUTE, layout, 0,
-			u32(len(pass.descriptor_sets)), raw_data(pass.descriptor_sets), 0, nil)
-	}
-	if pass.push_data != nil {
-		vk.CmdPushConstants(encoder.cmd, layout, {vk.ShaderStageFlag.COMPUTE}, 0, pass.push_size, pass.push_data)
-	}
-	vk.CmdDispatch(encoder.cmd, pass.workgroups.x, pass.workgroups.y, pass.workgroups.z)
-}
-
-encode_render :: proc(encoder: ^Encoder, pass: ^RenderPass) {
-	pipeline, layout := get_graphics_pipeline(pass.vertex_shader, pass.fragment_shader, pass.render_pass, pass.descriptor_sets)
-	render_area := vk.Rect2D{offset = {0, 0}, extent = {width, height}}
-	begin_info := vk.RenderPassBeginInfo{
-		sType = vk.StructureType.RENDER_PASS_BEGIN_INFO,
-		renderPass = pass.render_pass,
-		framebuffer = pass.framebuffer,
-		renderArea = render_area,
-		clearValueCount = u32(len(pass.clear_values)),
-		pClearValues = len(pass.clear_values) > 0 ? raw_data(pass.clear_values) : nil,
-	}
-
-	vk.CmdBeginRenderPass(encoder.cmd, &begin_info, vk.SubpassContents.INLINE)
-	vk.CmdBindPipeline(encoder.cmd, vk.PipelineBindPoint.GRAPHICS, pipeline)
-
-	if len(pass.descriptor_sets) > 0 {
-		vk.CmdBindDescriptorSets(encoder.cmd, vk.PipelineBindPoint.GRAPHICS, layout, 0,
-			u32(len(pass.descriptor_sets)), raw_data(pass.descriptor_sets), 0, nil)
-	}
-	if pass.push_data != nil {
-		vk.CmdPushConstants(encoder.cmd, layout, pass.push_stages, 0, pass.push_size, pass.push_data)
-	}
-
-	vk.CmdDraw(encoder.cmd, pass.vertices, pass.instances, 0, 0)
-	vk.CmdEndRenderPass(encoder.cmd)
-}
-
-encode_memory_barrier :: proc(encoder: ^Encoder, sync: ^MemorySync) {
-	if sync.image != {} {
-		barrier := vk.ImageMemoryBarrier{
-			sType = vk.StructureType.IMAGE_MEMORY_BARRIER,
-			srcAccessMask = sync.src_access,
-			dstAccessMask = sync.dst_access,
-			oldLayout = sync.old_layout,
-			newLayout = sync.new_layout,
-			srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-			dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-			image = sync.image,
-			subresourceRange = {
-				aspectMask = {vk.ImageAspectFlag.COLOR},
-				baseMipLevel = 0, levelCount = 1,
-				baseArrayLayer = 0, layerCount = 1,
-			},
-		}
-		vk.CmdPipelineBarrier(encoder.cmd, sync.src_stage, sync.dst_stage, {}, 0, nil, 0, nil, 1, &barrier)
-	} else {
-		barrier := vk.MemoryBarrier{
-			sType = vk.StructureType.MEMORY_BARRIER,
-			srcAccessMask = sync.src_access,
-			dstAccessMask = sync.dst_access,
-		}
-		vk.CmdPipelineBarrier(encoder.cmd, sync.src_stage, sync.dst_stage, {}, 1, &barrier, 0, nil, 0, nil)
-	}
-}
-
-finish_encoding :: proc(encoder: ^Encoder) {
-	vk.EndCommandBuffer(encoder.cmd)
-}
-
-pipeline_cache := make(map[string]struct{ pipeline: vk.Pipeline, layout: vk.PipelineLayout })
-
-compute_pass :: proc(shader: string, workgroups: [3]u32, descriptor_sets: []vk.DescriptorSet = nil, 
-	push_data: rawptr = nil, push_size: u32 = 0) -> ComputePass {
-	return {
-		shader = shader,
-		descriptor_sets = descriptor_sets,
-		push_data = push_data,
-		push_size = push_size,
-		workgroups = workgroups,
-	}
-}
-
-graphics_pass :: proc(vertex_shader: string, fragment_shader: string, render_pass: vk.RenderPass,
-	framebuffer: vk.Framebuffer, vertices: u32, instances: u32 = 1,
-	descriptor_sets: []vk.DescriptorSet = nil, push_data: rawptr = nil, push_size: u32 = 0,
-	push_stages: vk.ShaderStageFlags = {}, clear_values: []vk.ClearValue = nil) -> RenderPass {
-	return {
-		vertex_shader = vertex_shader,
-		fragment_shader = fragment_shader,
-		descriptor_sets = descriptor_sets,
-		push_data = push_data,
-		push_size = push_size,
-		push_stages = push_stages,
-		render_pass = render_pass,
-		framebuffer = framebuffer,
-		clear_values = clear_values,
-		vertices = vertices,
-		instances = instances,
-	}
-}
-
-compile_shader :: proc(wgsl_file: string) -> bool {
-	spv_file, _ := strings.replace(wgsl_file, ".wgsl", ".spv", 1)
-	defer delete(spv_file)
-	
-	cmd := fmt.aprintf("./naga %s %s", wgsl_file, spv_file)
-	defer delete(cmd)
-	cmd_cstr := strings.clone_to_cstring(cmd)
-	defer delete(cmd_cstr)
-	
-	if system(cmd_cstr) != 0 {
-		fmt.printf("Failed to compile %s\n", wgsl_file)
-		return false
-	}
-	return true
-}
-
-get_compute_pipeline :: proc(shader: string) -> (vk.Pipeline, vk.PipelineLayout) {
-	if cached, ok := pipeline_cache[shader]; ok {
-		return cached.pipeline, cached.layout
-	}
-	
-	if !compile_shader(shader) {
-		return {}, {}
-	}
-	
-	spv_file, _ := strings.replace(shader, ".wgsl", ".spv", 1)
-	defer delete(spv_file)
-	
-	shader_code, ok := load_shader_spirv(spv_file)
-	if !ok {
-		return {}, {}
-	}
-	defer delete(shader_code)
-	
-	shader_module: vk.ShaderModule
-	create_info := vk.ShaderModuleCreateInfo{
-		sType = vk.StructureType.SHADER_MODULE_CREATE_INFO,
-		codeSize = len(shader_code) * size_of(u32),
-		pCode = raw_data(shader_code),
-	}
-	if vk.CreateShaderModule(device, &create_info, nil, &shader_module) != vk.Result.SUCCESS {
-		return {}, {}
-	}
-	defer vk.DestroyShaderModule(device, shader_module, nil)
-	
-	push_range := vk.PushConstantRange{
-		stageFlags = {vk.ShaderStageFlag.COMPUTE},
-		offset = 0,
-		size = size_of(ComputePushConstants),
-	}
-	
-	layout_info := vk.PipelineLayoutCreateInfo{
-		sType = vk.StructureType.PIPELINE_LAYOUT_CREATE_INFO,
-		setLayoutCount = 1,
-		pSetLayouts = &descriptor_set_layout,
-		pushConstantRangeCount = 1,
-		pPushConstantRanges = &push_range,
-	}
-	
-	layout: vk.PipelineLayout
-	if vk.CreatePipelineLayout(device, &layout_info, nil, &layout) != vk.Result.SUCCESS {
-		return {}, {}
-	}
-	
-	pipeline_info := vk.ComputePipelineCreateInfo{
-		sType = vk.StructureType.COMPUTE_PIPELINE_CREATE_INFO,
-		stage = {
-			sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
-			stage = {vk.ShaderStageFlag.COMPUTE},
-			module = shader_module,
-			pName = "main",
-		},
-		layout = layout,
-	}
-	
-	pipeline: vk.Pipeline
-	if vk.CreateComputePipelines(device, {}, 1, &pipeline_info, nil, &pipeline) != vk.Result.SUCCESS {
-		vk.DestroyPipelineLayout(device, layout, nil)
-		return {}, {}
-	}
-	
-	pipeline_cache[strings.clone(shader)] = {pipeline, layout}
-	return pipeline, layout
-}
-
-get_graphics_pipeline :: proc(vertex_shader: string, fragment_shader: string, render_pass: vk.RenderPass, descriptor_sets: []vk.DescriptorSet = nil) -> (vk.Pipeline, vk.PipelineLayout) {
-	key := fmt.aprintf("%s+%s", vertex_shader, fragment_shader)
-	defer delete(key)
-	
-	if cached, ok := pipeline_cache[key]; ok {
-		return cached.pipeline, cached.layout
-	}
-	
-	if !compile_shader(vertex_shader) || !compile_shader(fragment_shader) {
-		return {}, {}
-	}
-	
-	vert_spv, _ := strings.replace(vertex_shader, ".wgsl", ".spv", 1)
-	frag_spv, _ := strings.replace(fragment_shader, ".wgsl", ".spv", 1)
-	defer delete(vert_spv)
-	defer delete(frag_spv)
-	
-	vert_code, vert_ok := load_shader_spirv(vert_spv)
-	frag_code, frag_ok := load_shader_spirv(frag_spv)
-	if !vert_ok || !frag_ok {
-		return {}, {}
-	}
-	defer delete(vert_code)
-	defer delete(frag_code)
-	
-	vert_module, frag_module: vk.ShaderModule
-	
-	vert_create := vk.ShaderModuleCreateInfo{
-		sType = vk.StructureType.SHADER_MODULE_CREATE_INFO,
-		codeSize = len(vert_code) * size_of(u32),
-		pCode = raw_data(vert_code),
-	}
-	frag_create := vk.ShaderModuleCreateInfo{
-		sType = vk.StructureType.SHADER_MODULE_CREATE_INFO,
-		codeSize = len(frag_code) * size_of(u32),
-		pCode = raw_data(frag_code),
-	}
-	
-	if vk.CreateShaderModule(device, &vert_create, nil, &vert_module) != vk.Result.SUCCESS ||
-	   vk.CreateShaderModule(device, &frag_create, nil, &frag_module) != vk.Result.SUCCESS {
-		return {}, {}
-	}
-	defer vk.DestroyShaderModule(device, vert_module, nil)
-	defer vk.DestroyShaderModule(device, frag_module, nil)
-	
-	stages := [2]vk.PipelineShaderStageCreateInfo{
-		{sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {vk.ShaderStageFlag.VERTEX}, module = vert_module, pName = "vs_main"},
-		{sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {vk.ShaderStageFlag.FRAGMENT}, module = frag_module, pName = "fs_main"},
-	}
-	
-	vertex_input := vk.PipelineVertexInputStateCreateInfo{sType = vk.StructureType.PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO}
-	input_assembly := vk.PipelineInputAssemblyStateCreateInfo{
-		sType = vk.StructureType.PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-		topology = vk.PrimitiveTopology.TRIANGLE_LIST,
-	}
-	
-	viewport := vk.Viewport{width = f32(width), height = f32(height), maxDepth = 1.0}
-	scissor := vk.Rect2D{extent = {width, height}}
-	viewport_state := vk.PipelineViewportStateCreateInfo{
-		sType = vk.StructureType.PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-		viewportCount = 1, pViewports = &viewport,
-		scissorCount = 1, pScissors = &scissor,
-	}
-	
-	rasterizer := vk.PipelineRasterizationStateCreateInfo{
-		sType = vk.StructureType.PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-		polygonMode = vk.PolygonMode.FILL,
-		lineWidth = 1.0,
-		frontFace = vk.FrontFace.CLOCKWISE,
-	}
-	
-	multisampling := vk.PipelineMultisampleStateCreateInfo{
-		sType = vk.StructureType.PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-		rasterizationSamples = {vk.SampleCountFlag._1},
-	}
-	
-	color_attachment := vk.PipelineColorBlendAttachmentState{
-		colorWriteMask = {vk.ColorComponentFlag.R, vk.ColorComponentFlag.G, vk.ColorComponentFlag.B, vk.ColorComponentFlag.A},
-	}
-	color_blending := vk.PipelineColorBlendStateCreateInfo{
-		sType = vk.StructureType.PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-		attachmentCount = 1, pAttachments = &color_attachment,
-	}
-	
-	// Use the correct descriptor set layout based on what we're binding
-	layout_to_use := descriptor_set_layout
-	if len(descriptor_sets) > 0 {
-		// Check if this is a post-process descriptor set by looking at the binding pattern
-		if len(descriptor_sets) == 1 && descriptor_sets[0] == post_process_descriptor_set {
-			layout_to_use = post_process_descriptor_set_layout
-		}
-	}
-	
-	layout_info := vk.PipelineLayoutCreateInfo{
-		sType = vk.StructureType.PIPELINE_LAYOUT_CREATE_INFO,
-		setLayoutCount = 1, pSetLayouts = &layout_to_use,
-	}
-	
-	// Add push constant support for fragment shaders if needed
-	push_ranges: [1]vk.PushConstantRange
-	push_count := u32(0)
-	if fragment_shader == "post_process.wgsl" {
-		push_ranges[0] = vk.PushConstantRange{
-			stageFlags = {vk.ShaderStageFlag.FRAGMENT},
-			offset = 0,
-			size = size_of(PostProcessPushConstants),
-		}
-		push_count = 1
-		layout_info.pushConstantRangeCount = push_count
-		layout_info.pPushConstantRanges = raw_data(push_ranges[:])
-	}
-	
-	layout: vk.PipelineLayout
-	if vk.CreatePipelineLayout(device, &layout_info, nil, &layout) != vk.Result.SUCCESS {
-		return {}, {}
-	}
-	
-	pipeline_info := vk.GraphicsPipelineCreateInfo{
-		sType = vk.StructureType.GRAPHICS_PIPELINE_CREATE_INFO,
-		stageCount = 2, pStages = raw_data(stages[:]),
-		pVertexInputState = &vertex_input,
-		pInputAssemblyState = &input_assembly,
-		pViewportState = &viewport_state,
-		pRasterizationState = &rasterizer,
-		pMultisampleState = &multisampling,
-		pColorBlendState = &color_blending,
-		layout = layout,
-		renderPass = render_pass,
-	}
-	
-	pipeline: vk.Pipeline
-	if vk.CreateGraphicsPipelines(device, {}, 1, &pipeline_info, nil, &pipeline) != vk.Result.SUCCESS {
-		vk.DestroyPipelineLayout(device, layout, nil)
-		return {}, {}
-	}
-	
-	pipeline_cache[strings.clone(key)] = {pipeline, layout}
-	return pipeline, layout
-}
-
-make_memory_sync :: proc(src_access: vk.AccessFlags, dst_access: vk.AccessFlags,
-	src_stage: vk.PipelineStageFlags, dst_stage: vk.PipelineStageFlags,
-	image: vk.Image = {}, old_layout: vk.ImageLayout = .UNDEFINED, new_layout: vk.ImageLayout = .UNDEFINED) -> MemorySync {
-	return {
-		src_access = src_access,
-		dst_access = dst_access,
-		src_stage = src_stage,
-		dst_stage = dst_stage,
-		image = image,
-		old_layout = old_layout,
-		new_layout = new_layout,
-	}
-}
-
+// Unified pass system for easy composition
 PassType :: enum {
-	COMPUTE,
-	GRAPHICS_OFFSCREEN, 
-	GRAPHICS_PRESENT,
+    COMPUTE,
+    GRAPHICS,
 }
 
-get_pass_type :: proc(pass: any) -> PassType {
-	switch p in pass {
-	case ^ComputePass, ComputePass:
-		return .COMPUTE
-	case ^RenderPass:
-		if p.vertex_shader == "post_process.wgsl" {
-			return .GRAPHICS_PRESENT
-		}
-		return .GRAPHICS_OFFSCREEN
-	case RenderPass:
-		if p.vertex_shader == "post_process.wgsl" {
-			return .GRAPHICS_PRESENT
-		}
-		return .GRAPHICS_OFFSCREEN
-	}
-	return .COMPUTE // fallback
+
+// Remove these - no longer needed
+
+CommandEncoder :: struct {
+    command_buffer: vk.CommandBuffer,
 }
 
-insert_automatic_barrier :: proc(encoder: ^Encoder, prev_type: PassType, curr_type: PassType, offscreen_image: vk.Image) {
-	switch {
-	case prev_type == .COMPUTE && curr_type == .GRAPHICS_OFFSCREEN:
-		// Compute -> Graphics: Shader writes to vertex buffer read
-		barrier := MemorySync{
-			src_access = {vk.AccessFlag.SHADER_WRITE},
-			dst_access = {vk.AccessFlag.VERTEX_ATTRIBUTE_READ},
-			src_stage = {vk.PipelineStageFlag.COMPUTE_SHADER},
-			dst_stage = {vk.PipelineStageFlag.VERTEX_INPUT},
-		}
-		encode_memory_barrier(encoder, &barrier)
-		
-	case prev_type == .GRAPHICS_OFFSCREEN && curr_type == .GRAPHICS_PRESENT:
-		// Offscreen render -> Post-process: Color attachment to shader read
-		barrier := MemorySync{
-			src_access = {vk.AccessFlag.COLOR_ATTACHMENT_WRITE},
-			dst_access = {vk.AccessFlag.SHADER_READ},
-			src_stage = {vk.PipelineStageFlag.COLOR_ATTACHMENT_OUTPUT},
-			dst_stage = {vk.PipelineStageFlag.FRAGMENT_SHADER},
-			image = offscreen_image,
-			old_layout = .COLOR_ATTACHMENT_OPTIMAL,
-			new_layout = .SHADER_READ_ONLY_OPTIMAL,
-		}
-		encode_memory_barrier(encoder, &barrier)
-	}
+PipelineEntry :: struct {
+    pipeline: vk.Pipeline,
+    layout: vk.PipelineLayout,
+    descriptor_set_layouts: []vk.DescriptorSetLayout,
 }
 
-encode_passes :: proc(encoder: ^Encoder, passes: ..any) {
-	prev_type: PassType = .COMPUTE // Initialize to avoid barriers on first pass
-	first_pass := true
-	
-	for pass in passes {
-		// Skip manual memory sync passes - we handle them automatically now
-		switch p in pass {
-		case ^MemorySync, MemorySync:
-			continue
-		}
-		
-		curr_type := get_pass_type(pass)
-		
-		// Insert automatic barrier if needed (skip for first pass)
-		if !first_pass {
-			// We need offscreen_image for image layout transitions
-			// For now, we'll assume it exists as a global - this could be parameterized
-			insert_automatic_barrier(encoder, prev_type, curr_type, offscreen_image)
-		}
-		
-		// Execute the actual pass
-		switch p in pass {
-		case ^ComputePass: encode_compute(encoder, p)
-		case ^RenderPass: encode_render(encoder, p)
-		case ComputePass:
-			temp := p
-			encode_compute(encoder, &temp)
-		case RenderPass:
-			temp := p
-			encode_render(encoder, &temp)
-		}
-		
-		prev_type = curr_type
-		first_pass = false
-	}
+// Function to get descriptor set layout for a specific pipeline
+get_pipeline_descriptor_layout :: proc(pipeline_name: string) -> (vk.DescriptorSetLayout, bool) {
+    if entry, ok := pipeline_cache[pipeline_name]; ok {
+        if len(entry.descriptor_set_layouts) > 0 {
+            return entry.descriptor_set_layouts[0], true
+        }
+    }
+    return {}, false
 }
+
+// Resource union for different descriptor types
+DescriptorResource :: union {
+    vk.Buffer,
+    struct { image_view: vk.ImageView, sampler: vk.Sampler },
+}
+
+// Create a descriptor set using the pipeline's layout with flexible resources
+create_pipeline_descriptor_generic :: proc(pipeline_name: string, resources: []DescriptorResource) -> (vk.DescriptorSet, bool) {
+    layout, ok := get_pipeline_descriptor_layout(pipeline_name)
+    if !ok {
+        fmt.printf("Pipeline %s not found or has no descriptor layouts\n", pipeline_name)
+        return {}, false
+    }
+    
+    // Need to determine pool sizes from the pipeline's layout
+    // For now, create a pool that can handle common descriptor types
+    pool_sizes := [4]vk.DescriptorPoolSize{
+        {type = .STORAGE_BUFFER, descriptorCount = 4},
+        {type = .UNIFORM_BUFFER, descriptorCount = 4}, 
+        {type = .SAMPLED_IMAGE, descriptorCount = 4},
+        {type = .SAMPLER, descriptorCount = 4},
+    }
+    
+    pool_info := vk.DescriptorPoolCreateInfo{
+        sType = vk.StructureType.DESCRIPTOR_POOL_CREATE_INFO,
+        poolSizeCount = len(pool_sizes),
+        pPoolSizes = raw_data(pool_sizes[:]),
+        maxSets = 1,
+    }
+    
+    pool: vk.DescriptorPool
+    if vk.CreateDescriptorPool(device, &pool_info, nil, &pool) != vk.Result.SUCCESS {
+        return {}, false
+    }
+    
+    alloc_info := vk.DescriptorSetAllocateInfo{
+        sType = vk.StructureType.DESCRIPTOR_SET_ALLOCATE_INFO,
+        descriptorPool = pool,
+        descriptorSetCount = 1,
+        pSetLayouts = &layout,
+    }
+    
+    set: vk.DescriptorSet
+    if vk.AllocateDescriptorSets(device, &alloc_info, &set) != vk.Result.SUCCESS {
+        vk.DestroyDescriptorPool(device, pool, nil)
+        return {}, false
+    }
+    
+    // Write descriptors based on resource types
+    writes := make([dynamic]vk.WriteDescriptorSet)
+    defer delete(writes)
+    
+    buffer_infos := make([dynamic]vk.DescriptorBufferInfo)
+    defer delete(buffer_infos)
+    
+    image_infos := make([dynamic]vk.DescriptorImageInfo)  
+    defer delete(image_infos)
+    
+    for resource, i in resources {
+        write := vk.WriteDescriptorSet{
+            sType = vk.StructureType.WRITE_DESCRIPTOR_SET,
+            dstSet = set,
+            dstBinding = u32(i),
+            dstArrayElement = 0,
+            descriptorCount = 1,
+        }
+        
+        switch r in resource {
+        case vk.Buffer:
+            write.descriptorType = .STORAGE_BUFFER
+            buffer_info := vk.DescriptorBufferInfo{
+                buffer = r,
+                offset = 0,
+                range = vk.DeviceSize(vk.WHOLE_SIZE),
+            }
+            append(&buffer_infos, buffer_info)
+            write.pBufferInfo = &buffer_infos[len(buffer_infos)-1]
+            
+        case struct { image_view: vk.ImageView, sampler: vk.Sampler }:
+            // Handle both image and sampler
+            // Binding i = image, binding i+1 = sampler
+            image_info := vk.DescriptorImageInfo{
+                imageView = r.image_view,
+                imageLayout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
+            }
+            append(&image_infos, image_info)
+            
+            write.descriptorType = .SAMPLED_IMAGE
+            write.pImageInfo = &image_infos[len(image_infos)-1]
+            append(&writes, write)
+            
+            // Add sampler write
+            sampler_write := write
+            sampler_write.dstBinding = u32(i) + 1
+            sampler_write.descriptorType = .SAMPLER
+            sampler_info := vk.DescriptorImageInfo{
+                sampler = r.sampler,
+            }
+            append(&image_infos, sampler_info)
+            sampler_write.pImageInfo = &image_infos[len(image_infos)-1]
+            append(&writes, sampler_write)
+            continue
+        }
+        
+        append(&writes, write)
+    }
+    
+    if len(writes) > 0 {
+        vk.UpdateDescriptorSets(device, u32(len(writes)), raw_data(writes), 0, nil)
+    }
+    
+    return set, true
+}
+
+// Backward compatibility wrapper
+create_pipeline_descriptor :: proc(pipeline_name: string, buffer: vk.Buffer) -> (vk.DescriptorSet, bool) {
+    return create_pipeline_descriptor_generic(pipeline_name, {buffer})
+}
+
+pipeline_cache: map[string]PipelineEntry
+
+PushConstantInfo :: struct {
+    data: rawptr,
+    size: u32,
+    stage_flags: vk.ShaderStageFlags,
+}
+
+ComputePassInfo :: struct {
+    shader: string,
+    workgroup_count: [3]u32,
+    resources: []DescriptorResource,
+    push_constants: Maybe(PushConstantInfo),
+}
+
+GraphicsPassInfo :: struct {
+    vertex_shader: string,
+    fragment_shader: string,
+    render_pass: vk.RenderPass,
+    framebuffer: vk.Framebuffer,
+    vertices: u32,
+    instances: u32,
+    resources: []DescriptorResource,
+    push_constants: Maybe(PushConstantInfo),
+    clear_values: []vk.ClearValue,
+}
+
+Pass :: struct {
+    type: PassType,
+    compute: ComputePassInfo,
+    graphics: GraphicsPassInfo,
+}
+
+// Helper functions to create passes
+compute_pass :: proc(shader: string, workgroups: [3]u32, resources: []DescriptorResource, 
+                    push_data: rawptr = nil, push_size: u32 = 0) -> Pass {
+    pass := Pass{type = .COMPUTE}
+    pass.compute.shader = shader
+    pass.compute.workgroup_count = workgroups
+    pass.compute.resources = resources
+    
+    if push_data != nil {
+        pass.compute.push_constants = PushConstantInfo{
+            data = push_data,
+            size = push_size,
+            stage_flags = {.COMPUTE},
+        }
+    }
+    
+    return pass
+}
+
+graphics_pass :: proc(vertex_shader: string, fragment_shader: string, 
+                     render_pass: vk.RenderPass, framebuffer: vk.Framebuffer,
+                     vertices: u32, instances: u32 = 1,
+                     resources: []DescriptorResource = nil,
+                     vertex_push_data: rawptr = nil, vertex_push_size: u32 = 0,
+                     fragment_push_data: rawptr = nil, fragment_push_size: u32 = 0,
+                     clear_values: []vk.ClearValue = nil) -> Pass {
+    pass := Pass{type = .GRAPHICS}
+    pass.graphics.vertex_shader = vertex_shader
+    pass.graphics.fragment_shader = fragment_shader
+    pass.graphics.render_pass = render_pass
+    pass.graphics.framebuffer = framebuffer
+    pass.graphics.vertices = vertices
+    pass.graphics.instances = instances
+    pass.graphics.resources = resources
+    pass.graphics.clear_values = clear_values
+    
+    // Handle push constants - prioritize vertex, then fragment
+    if vertex_push_data != nil {
+        pass.graphics.push_constants = PushConstantInfo{
+            data = vertex_push_data,
+            size = vertex_push_size,
+            stage_flags = {.VERTEX},
+        }
+    } else if fragment_push_data != nil {
+        pass.graphics.push_constants = PushConstantInfo{
+            data = fragment_push_data,
+            size = fragment_push_size,
+            stage_flags = {.FRAGMENT},
+        }
+    }
+    
+    return pass
+}
+
+// Execute a sequence of passes
+execute_passes :: proc(encoder: ^CommandEncoder, passes: []Pass) {
+    for i in 0..<len(passes) {
+        pass := &passes[i]
+        
+        switch pass.type {
+        case .COMPUTE:
+            execute_compute_pass(encoder, &pass.compute)
+        case .GRAPHICS:
+            execute_graphics_pass(encoder, &pass.graphics)
+        }
+        
+        // Insert barriers between passes if needed
+        if i < len(passes) - 1 {
+            insert_pass_barrier(encoder, pass.type, passes[i+1].type)
+        }
+    }
+}
+
+execute_compute_pass :: proc(encoder: ^CommandEncoder, pass: ^ComputePassInfo) {
+    pipeline, layout := get_compute_pipeline(pass.shader, pass.push_constants)
+    if pipeline == {} do return
+    
+    vk.CmdBindPipeline(encoder.command_buffer, .COMPUTE, pipeline)
+    
+    // Auto-create descriptor set from resources
+    if len(pass.resources) > 0 {
+        if descriptor_set, ok := create_pipeline_descriptor_generic(pass.shader, pass.resources); ok {
+            vk.CmdBindDescriptorSets(encoder.command_buffer, .COMPUTE, layout,
+                                    0, 1, &descriptor_set, 0, nil)
+        }
+    }
+    
+    if push_info, has_push := pass.push_constants.?; has_push {
+        vk.CmdPushConstants(encoder.command_buffer, layout, 
+                           push_info.stage_flags, 0, push_info.size, push_info.data)
+    }
+    
+    vk.CmdDispatch(encoder.command_buffer, pass.workgroup_count.x, 
+                   pass.workgroup_count.y, pass.workgroup_count.z)
+}
+
+execute_graphics_pass :: proc(encoder: ^CommandEncoder, pass: ^GraphicsPassInfo) {
+    pipeline, layout := get_graphics_pipeline(pass.vertex_shader, pass.fragment_shader, 
+                                             pass.render_pass, pass.push_constants)
+    if pipeline == {} do return
+    
+    render_area := vk.Rect2D{extent = {width, height}}
+    
+    begin_info := vk.RenderPassBeginInfo{
+        sType = vk.StructureType.RENDER_PASS_BEGIN_INFO,
+        renderPass = pass.render_pass,
+        framebuffer = pass.framebuffer,
+        renderArea = render_area,
+    }
+    
+    if len(pass.clear_values) > 0 {
+        begin_info.clearValueCount = u32(len(pass.clear_values))
+        begin_info.pClearValues = raw_data(pass.clear_values)
+    }
+    
+    vk.CmdBeginRenderPass(encoder.command_buffer, &begin_info, .INLINE)
+    vk.CmdBindPipeline(encoder.command_buffer, .GRAPHICS, pipeline)
+    
+    // Auto-create descriptor set from resources
+    if len(pass.resources) > 0 {
+        graphics_key := fmt.aprintf("%s+%s", pass.vertex_shader, pass.fragment_shader)
+        defer delete(graphics_key)
+        if descriptor_set, ok := create_pipeline_descriptor_generic(graphics_key, pass.resources); ok {
+            vk.CmdBindDescriptorSets(encoder.command_buffer, .GRAPHICS, layout,
+                                    0, 1, &descriptor_set, 0, nil)
+        }
+    }
+    
+    if push_info, has_push := pass.push_constants.?; has_push {
+        vk.CmdPushConstants(encoder.command_buffer, layout,
+                           push_info.stage_flags, 0, push_info.size, push_info.data)
+    }
+    
+    vk.CmdDraw(encoder.command_buffer, pass.vertices, pass.instances, 0, 0)
+    vk.CmdEndRenderPass(encoder.command_buffer)
+}
+
+insert_pass_barrier :: proc(encoder: ^CommandEncoder, from_type: PassType, to_type: PassType) {
+    src_stage: vk.PipelineStageFlags
+    dst_stage: vk.PipelineStageFlags
+    src_access: vk.AccessFlags
+    dst_access: vk.AccessFlags
+    
+    switch from_type {
+    case .COMPUTE:
+        src_stage = {.COMPUTE_SHADER}
+        src_access = {.SHADER_WRITE}
+    case .GRAPHICS:
+        src_stage = {.COLOR_ATTACHMENT_OUTPUT}
+        src_access = {.COLOR_ATTACHMENT_WRITE}
+    }
+    
+    switch to_type {
+    case .COMPUTE:
+        dst_stage = {.COMPUTE_SHADER}
+        dst_access = {.SHADER_READ}
+    case .GRAPHICS:
+        dst_stage = {.VERTEX_SHADER}
+        dst_access = {.SHADER_READ}
+    }
+    
+    memory_barrier := vk.MemoryBarrier{
+        sType = vk.StructureType.MEMORY_BARRIER,
+        srcAccessMask = src_access,
+        dstAccessMask = dst_access,
+    }
+    
+    vk.CmdPipelineBarrier(encoder.command_buffer, src_stage, dst_stage, {},
+                         1, &memory_barrier, 0, nil, 0, nil)
+}
+
+
+// Helper to detect shader descriptor usage from WGSL
+detect_shader_descriptors :: proc(wgsl_content: string) -> []vk.DescriptorSetLayoutBinding {
+    bindings := make([dynamic]vk.DescriptorSetLayoutBinding)
+    
+    lines := strings.split(wgsl_content, "\n")
+    defer delete(lines)
+    
+    for line in lines {
+        trimmed := strings.trim_space(line)
+        
+        // Look for @group(X) @binding(Y) var<storage, ...> patterns
+        if strings.contains(trimmed, "@group(") && strings.contains(trimmed, "@binding(") {
+            // Extract group and binding numbers
+            group_start := strings.index(trimmed, "@group(")
+            binding_start := strings.index(trimmed, "@binding(")
+            
+            if group_start >= 0 && binding_start >= 0 {
+                // For now, assume group 0 and extract binding number
+                if strings.contains(trimmed, "@group(0)") {
+                    binding_num_start := binding_start + len("@binding(")
+                    binding_end := strings.index(trimmed[binding_num_start:], ")")
+                    if binding_end > 0 {
+                        binding_str := trimmed[binding_num_start:binding_num_start+binding_end]
+                        if binding_num, ok := strconv.parse_int(binding_str); ok {
+                            descriptor_type := vk.DescriptorType.STORAGE_BUFFER
+                            
+                            // Determine descriptor type based on var declaration
+                            if strings.contains(trimmed, "var<storage,") {
+                                descriptor_type = .STORAGE_BUFFER
+                            } else if strings.contains(trimmed, "var<uniform,") {
+                                descriptor_type = .UNIFORM_BUFFER
+                            } else if strings.contains(trimmed, "texture_2d") || strings.contains(trimmed, "texture_3d") {
+                                descriptor_type = .SAMPLED_IMAGE
+                            } else if strings.contains(trimmed, "sampler") {
+                                descriptor_type = .SAMPLER
+                            }
+                            
+                            binding := vk.DescriptorSetLayoutBinding{
+                                binding = u32(binding_num),
+                                descriptorType = descriptor_type,
+                                descriptorCount = 1,
+                                stageFlags = {.COMPUTE, .VERTEX, .FRAGMENT}, // Will be filtered per pipeline
+                            }
+                            append(&bindings, binding)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    return bindings[:]
+}
+
+// Generic pipeline creation
+get_graphics_pipeline :: proc(vertex_shader: string, fragment_shader: string, 
+                             render_pass: vk.RenderPass, 
+                             push_constants: Maybe(PushConstantInfo)) -> (vk.Pipeline, vk.PipelineLayout) {
+    key := fmt.aprintf("%s+%s", vertex_shader, fragment_shader)
+    defer delete(key)
+    
+    if cached, ok := pipeline_cache[key]; ok {
+        return cached.pipeline, cached.layout
+    }
+    
+    if !compile_shader(vertex_shader) || !compile_shader(fragment_shader) {
+        return {}, {}
+    }
+    
+    // Read WGSL files to detect descriptors
+    vert_content, vert_read_ok := os.read_entire_file(vertex_shader)
+    frag_content, frag_read_ok := os.read_entire_file(fragment_shader)
+    if !vert_read_ok || !frag_read_ok {
+        fmt.printf("Failed to read shader files\n")
+        return {}, {}
+    }
+    defer delete(vert_content)
+    defer delete(frag_content)
+    
+    vert_text := string(vert_content)
+    frag_text := string(frag_content)
+    
+    vert_bindings := detect_shader_descriptors(vert_text)
+    frag_bindings := detect_shader_descriptors(frag_text)
+    defer delete(vert_bindings)
+    defer delete(frag_bindings)
+    
+    // Combine and deduplicate bindings
+    combined_bindings := make([dynamic]vk.DescriptorSetLayoutBinding)
+    defer delete(combined_bindings)
+    
+    // Add vertex bindings with broad stage compatibility
+    for binding in vert_bindings {
+        graphics_binding := binding
+        graphics_binding.stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE}
+        append(&combined_bindings, graphics_binding)
+    }
+    
+    // Add fragment bindings (merge if binding already exists)
+    for frag_binding in frag_bindings {
+        found := false
+        for &existing_binding in combined_bindings {
+            if existing_binding.binding == frag_binding.binding {
+                // Already added with broad compatibility
+                found = true
+                break
+            }
+        }
+        if !found {
+            graphics_binding := frag_binding
+            graphics_binding.stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE}
+            append(&combined_bindings, graphics_binding)
+        }
+    }
+    
+    vert_spv, _ := strings.replace(vertex_shader, ".wgsl", ".spv", 1)
+    frag_spv, _ := strings.replace(fragment_shader, ".wgsl", ".spv", 1)
+    defer delete(vert_spv)
+    defer delete(frag_spv)
+    
+    vert_code, vert_ok := load_shader_spirv(vert_spv)
+    frag_code, frag_ok := load_shader_spirv(frag_spv)
+    if !vert_ok || !frag_ok {
+        return {}, {}
+    }
+    defer delete(vert_code)
+    defer delete(frag_code)
+    
+    vert_module, frag_module: vk.ShaderModule
+    
+    vert_create := vk.ShaderModuleCreateInfo{
+        sType = vk.StructureType.SHADER_MODULE_CREATE_INFO,
+        codeSize = len(vert_code) * size_of(u32),
+        pCode = raw_data(vert_code),
+    }
+    frag_create := vk.ShaderModuleCreateInfo{
+        sType = vk.StructureType.SHADER_MODULE_CREATE_INFO,
+        codeSize = len(frag_code) * size_of(u32),
+        pCode = raw_data(frag_code),
+    }
+    
+    if vk.CreateShaderModule(device, &vert_create, nil, &vert_module) != vk.Result.SUCCESS ||
+       vk.CreateShaderModule(device, &frag_create, nil, &frag_module) != vk.Result.SUCCESS {
+        return {}, {}
+    }
+    defer vk.DestroyShaderModule(device, vert_module, nil)
+    defer vk.DestroyShaderModule(device, frag_module, nil)
+    
+    stages := [2]vk.PipelineShaderStageCreateInfo{
+        {sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {vk.ShaderStageFlag.VERTEX}, module = vert_module, pName = "vs_main"},
+        {sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {vk.ShaderStageFlag.FRAGMENT}, module = frag_module, pName = "fs_main"},
+    }
+    
+    vertex_input := vk.PipelineVertexInputStateCreateInfo{sType = vk.StructureType.PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO}
+    input_assembly := vk.PipelineInputAssemblyStateCreateInfo{
+        sType = vk.StructureType.PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        topology = vk.PrimitiveTopology.TRIANGLE_LIST,
+    }
+    
+    viewport := vk.Viewport{width = f32(width), height = f32(height), maxDepth = 1.0}
+    scissor := vk.Rect2D{extent = {width, height}}
+    viewport_state := vk.PipelineViewportStateCreateInfo{
+        sType = vk.StructureType.PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        viewportCount = 1, pViewports = &viewport,
+        scissorCount = 1, pScissors = &scissor,
+    }
+    
+    rasterizer := vk.PipelineRasterizationStateCreateInfo{
+        sType = vk.StructureType.PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        polygonMode = vk.PolygonMode.FILL,
+        lineWidth = 1.0,
+        frontFace = vk.FrontFace.CLOCKWISE,
+    }
+    
+    multisampling := vk.PipelineMultisampleStateCreateInfo{
+        sType = vk.StructureType.PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        rasterizationSamples = {vk.SampleCountFlag._1},
+    }
+    
+    color_attachment := vk.PipelineColorBlendAttachmentState{
+        colorWriteMask = {vk.ColorComponentFlag.R, vk.ColorComponentFlag.G, vk.ColorComponentFlag.B, vk.ColorComponentFlag.A},
+    }
+    color_blending := vk.PipelineColorBlendStateCreateInfo{
+        sType = vk.StructureType.PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        attachmentCount = 1, pAttachments = &color_attachment,
+    }
+    
+    // Create descriptor set layout if bindings exist
+    descriptor_set_layouts := make([dynamic]vk.DescriptorSetLayout)
+    defer delete(descriptor_set_layouts)
+    
+    if len(combined_bindings) > 0 {
+        descriptor_layout_info := vk.DescriptorSetLayoutCreateInfo{
+            sType = vk.StructureType.DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            bindingCount = u32(len(combined_bindings)),
+            pBindings = raw_data(combined_bindings),
+        }
+        
+        descriptor_set_layout: vk.DescriptorSetLayout
+        if vk.CreateDescriptorSetLayout(device, &descriptor_layout_info, nil, &descriptor_set_layout) != vk.Result.SUCCESS {
+            return {}, {}
+        }
+        append(&descriptor_set_layouts, descriptor_set_layout)
+    }
+    
+    // Create pipeline layout with descriptor set layouts and optional push constants
+    layout_info := vk.PipelineLayoutCreateInfo{
+        sType = vk.StructureType.PIPELINE_LAYOUT_CREATE_INFO,
+        setLayoutCount = u32(len(descriptor_set_layouts)),
+        pSetLayouts = len(descriptor_set_layouts) > 0 ? raw_data(descriptor_set_layouts) : nil,
+    }
+    
+    // Add push constants if provided
+    push_range: vk.PushConstantRange
+    if push_info, has_push := push_constants.?; has_push {
+        push_range = vk.PushConstantRange{
+            stageFlags = push_info.stage_flags,
+            offset = 0,
+            size = push_info.size,
+        }
+        layout_info.pushConstantRangeCount = 1
+        layout_info.pPushConstantRanges = &push_range
+    }
+    
+    layout: vk.PipelineLayout
+    if vk.CreatePipelineLayout(device, &layout_info, nil, &layout) != vk.Result.SUCCESS {
+        return {}, {}
+    }
+    
+    pipeline_info := vk.GraphicsPipelineCreateInfo{
+        sType = vk.StructureType.GRAPHICS_PIPELINE_CREATE_INFO,
+        stageCount = 2, pStages = raw_data(stages[:]),
+        pVertexInputState = &vertex_input,
+        pInputAssemblyState = &input_assembly,
+        pViewportState = &viewport_state,
+        pRasterizationState = &rasterizer,
+        pMultisampleState = &multisampling,
+        pColorBlendState = &color_blending,
+        layout = layout,
+        renderPass = render_pass,
+    }
+    
+    pipeline: vk.Pipeline
+    if vk.CreateGraphicsPipelines(device, {}, 1, &pipeline_info, nil, &pipeline) != vk.Result.SUCCESS {
+        vk.DestroyPipelineLayout(device, layout, nil)
+        return {}, {}
+    }
+    
+    // Cache the result
+    cached_layouts := make([]vk.DescriptorSetLayout, len(descriptor_set_layouts))
+    copy(cached_layouts, descriptor_set_layouts[:])
+    pipeline_cache[strings.clone(key)] = PipelineEntry{
+        pipeline = pipeline, 
+        layout = layout,
+        descriptor_set_layouts = cached_layouts,
+    }
+    
+    return pipeline, layout
+}
+
+get_compute_pipeline :: proc(shader: string, push_constants: Maybe(PushConstantInfo)) -> (vk.Pipeline, vk.PipelineLayout) {
+    if cached, ok := pipeline_cache[shader]; ok {
+        return cached.pipeline, cached.layout
+    }
+    
+    if !compile_shader(shader) {
+        return {}, {}
+    }
+    
+    // Read WGSL file to detect descriptors
+    wgsl_content, read_ok := os.read_entire_file(shader)
+    if !read_ok {
+        fmt.printf("Failed to read shader file: %s\n", shader)
+        return {}, {}
+    }
+    defer delete(wgsl_content)
+    
+    wgsl_text := string(wgsl_content)
+    bindings := detect_shader_descriptors(wgsl_text)
+    defer delete(bindings)
+    
+    // Filter bindings for compute stage
+    compute_bindings := make([dynamic]vk.DescriptorSetLayoutBinding)
+    defer delete(compute_bindings)
+    
+    for binding in bindings {
+        compute_binding := binding
+        // Make it compatible with existing descriptors by using broader stage flags
+        compute_binding.stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE}
+        append(&compute_bindings, compute_binding)
+    }
+    
+    spv_file, _ := strings.replace(shader, ".wgsl", ".spv", 1)
+    defer delete(spv_file)
+    
+    shader_code, ok := load_shader_spirv(spv_file)
+    if !ok {
+        return {}, {}
+    }
+    defer delete(shader_code)
+    
+    shader_module: vk.ShaderModule
+    create_info := vk.ShaderModuleCreateInfo{
+        sType = vk.StructureType.SHADER_MODULE_CREATE_INFO,
+        codeSize = len(shader_code) * size_of(u32),
+        pCode = raw_data(shader_code),
+    }
+    
+    if vk.CreateShaderModule(device, &create_info, nil, &shader_module) != vk.Result.SUCCESS {
+        return {}, {}
+    }
+    defer vk.DestroyShaderModule(device, shader_module, nil)
+    
+    // Create descriptor set layout if bindings exist
+    descriptor_set_layouts := make([dynamic]vk.DescriptorSetLayout)
+    defer delete(descriptor_set_layouts)
+    
+    if len(compute_bindings) > 0 {
+        descriptor_layout_info := vk.DescriptorSetLayoutCreateInfo{
+            sType = vk.StructureType.DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            bindingCount = u32(len(compute_bindings)),
+            pBindings = raw_data(compute_bindings),
+        }
+        
+        descriptor_set_layout: vk.DescriptorSetLayout
+        if vk.CreateDescriptorSetLayout(device, &descriptor_layout_info, nil, &descriptor_set_layout) != vk.Result.SUCCESS {
+            return {}, {}
+        }
+        append(&descriptor_set_layouts, descriptor_set_layout)
+    }
+    
+    // Create pipeline layout with descriptor set layouts and optional push constants
+    layout_info := vk.PipelineLayoutCreateInfo{
+        sType = vk.StructureType.PIPELINE_LAYOUT_CREATE_INFO,
+        setLayoutCount = u32(len(descriptor_set_layouts)),
+        pSetLayouts = len(descriptor_set_layouts) > 0 ? raw_data(descriptor_set_layouts) : nil,
+    }
+    
+    push_range: vk.PushConstantRange
+    if push_info, has_push := push_constants.?; has_push {
+        push_range = vk.PushConstantRange{
+            stageFlags = push_info.stage_flags,
+            offset = 0,
+            size = push_info.size,
+        }
+        layout_info.pushConstantRangeCount = 1
+        layout_info.pPushConstantRanges = &push_range
+    }
+    
+    layout: vk.PipelineLayout
+    if vk.CreatePipelineLayout(device, &layout_info, nil, &layout) != vk.Result.SUCCESS {
+        return {}, {}
+    }
+    
+    stage := vk.PipelineShaderStageCreateInfo{
+        sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
+        stage = {vk.ShaderStageFlag.COMPUTE},
+        module = shader_module,
+        pName = "main",
+    }
+    
+    pipeline_info := vk.ComputePipelineCreateInfo{
+        sType = vk.StructureType.COMPUTE_PIPELINE_CREATE_INFO,
+        stage = stage,
+        layout = layout,
+    }
+    
+    pipeline: vk.Pipeline
+    if vk.CreateComputePipelines(device, {}, 1, &pipeline_info, nil, &pipeline) != vk.Result.SUCCESS {
+        vk.DestroyPipelineLayout(device, layout, nil)
+        return {}, {}
+    }
+    
+    // Cache the result
+    cached_layouts := make([]vk.DescriptorSetLayout, len(descriptor_set_layouts))
+    copy(cached_layouts, descriptor_set_layouts[:])
+    pipeline_cache[strings.clone(shader)] = PipelineEntry{
+        pipeline = pipeline, 
+        layout = layout,
+        descriptor_set_layouts = cached_layouts,
+    }
+    
+    return pipeline, layout
+}
+
+// Shader compilation
+compile_shader :: proc(wgsl_file: string) -> bool {
+    spv_file, _ := strings.replace(wgsl_file, ".wgsl", ".spv", 1)
+    defer delete(spv_file)
+    
+    cmd := fmt.aprintf("./naga %s %s", wgsl_file, spv_file)
+    defer delete(cmd)
+    cmd_cstr := strings.clone_to_cstring(cmd)
+    defer delete(cmd_cstr)
+    
+    if system(cmd_cstr) != 0 {
+        fmt.printf("Failed to compile %s\n", wgsl_file)
+        return false
+    }
+    return true
+}
+
+// load_shader_spirv is already defined in vulkan.odin
+
+// Command encoding helpers
+begin_encoding :: proc(element: ^SwapchainElement) -> CommandEncoder {
+    encoder := CommandEncoder{command_buffer = element.commandBuffer}
+    
+    begin_info := vk.CommandBufferBeginInfo{
+        sType = vk.StructureType.COMMAND_BUFFER_BEGIN_INFO,
+        flags = {vk.CommandBufferUsageFlag.ONE_TIME_SUBMIT},
+    }
+    
+    vk.BeginCommandBuffer(encoder.command_buffer, &begin_info)
+    return encoder
+}
+
+finish_encoding :: proc(encoder: ^CommandEncoder) {
+    vk.EndCommandBuffer(encoder.command_buffer)
+}
+
+// Remove these - no longer needed

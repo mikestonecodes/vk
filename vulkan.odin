@@ -69,6 +69,70 @@ present_frame :: proc() {
 	}
 }
 
+
+render_frame :: proc(start_time: time.Time) {
+	// 1. Get next swapchain image
+	if !acquire_next_image() do return
+
+	// 2. Record draw commands
+	element := &elements[image_index]
+	record_commands(element, start_time)
+	// 3. Submit to GPU and present
+	submit_commands(element)
+	present_frame()
+	// No need to track current_frame with this simple approach
+}
+
+// Update window size from Wayland
+update_window_size :: proc() {
+	width = c.uint32_t(get_window_width())
+	height = c.uint32_t(get_window_height())
+}
+
+// Handle window resize
+handle_resize :: proc() {
+	if wayland_resize_needed() != 0 {
+		update_window_size()
+		vk.DeviceWaitIdle(device)
+		
+		// Destroy offscreen framebuffer
+		if offscreen_framebuffer != {} {
+			vk.DestroyFramebuffer(device, offscreen_framebuffer, nil)
+		}
+		
+		// Destroy old offscreen image resource (handled by render cleanup)
+		
+		destroy_swapchain()
+		create_swapchain()
+		
+		// Recreate offscreen resources with new dimensions (handled by render init)
+		init_render_resources()
+		if !create_offscreen_framebuffer() {
+			fmt.println("Failed to recreate offscreen framebuffer")
+		}
+		
+		// Pipeline needs to be recreated with new viewport
+	}
+}
+
+vulkan_init :: proc() -> (ok: bool) {
+	// Get initial window size
+	fmt.println("DEBUG: Getting window size")
+	update_window_size()
+
+	fmt.println("DEBUG: Initializing Vulkan")
+	if !init_vulkan() do return false
+	fmt.println("DEBUG: Creating swapchain")
+	create_swapchain()
+	fmt.println("DEBUG: Initializing resources")
+	if !init_vulkan_resources() do return false
+	fmt.println("DEBUG: Vulkan init complete")
+	return true
+}
+// Hot reload pipeline when shaders change
+recreate_pipeline :: proc() {
+}
+
 acquire_next_image :: proc() -> bool {
 	result := vk.AcquireNextImageKHR(
 		device,
@@ -122,7 +186,7 @@ discover_shaders :: proc() {
 	for file in files {
 		if strings.has_suffix(file.name, ".wgsl") {
 			spv_name, _ := strings.replace(file.name, ".wgsl", ".spv", 1)
-			
+
 			shader_registry[strings.clone(file.name)] = ShaderInfo{
 				wgsl_path = strings.clone(file.name),
 				spv_path = spv_name,
@@ -167,7 +231,7 @@ check_shader_reload :: proc() -> bool {
 			fmt.printf("%s ", shader)
 		}
 		fmt.println()
-		
+
 		if compile_changed_shaders(changed_shaders[:]) {
 			clear_pipeline_cache()
 			return true
@@ -190,10 +254,10 @@ compile_changed_shaders :: proc(changed_shaders: []string) -> bool {
 
 		cmd := fmt.aprintf("./naga %s %s", info.wgsl_path, info.spv_path)
 		defer delete(cmd)
-		
+
 		cmd_cstr := strings.clone_to_cstring(cmd)
 		defer delete(cmd_cstr)
-		
+
 		fmt.printf("Compiling %s -> %s\n", info.wgsl_path, info.spv_path)
 		if system(cmd_cstr) != 0 {
 			fmt.printf("Failed to compile %s\n", info.wgsl_path)
@@ -206,15 +270,15 @@ compile_changed_shaders :: proc(changed_shaders: []string) -> bool {
 
 clear_pipeline_cache :: proc() {
 	fmt.printf("Clearing pipeline cache (%d entries)\n", len(pipeline_cache))
-	
+
 	for key, cached in pipeline_cache {
 		vk.DestroyPipeline(device, cached.pipeline, nil)
 		vk.DestroyPipelineLayout(device, cached.layout, nil)
 		delete(key)
 	}
-	
+
 	delete(pipeline_cache)
-	pipeline_cache = make(map[string]struct{ pipeline: vk.Pipeline, layout: vk.PipelineLayout })
+	pipeline_cache = make(map[string]PipelineEntry)
 }
 
 
@@ -247,8 +311,6 @@ queue: vk.Queue
 command_pool: vk.CommandPool
 swapchain: vk.SwapchainKHR
 render_pass: vk.RenderPass
-pipeline_layout: vk.PipelineLayout
-graphics_pipeline: vk.Pipeline
 elements: [^]SwapchainElement
 format: vk.Format = vk.Format.UNDEFINED
 width: c.uint32_t = 800
@@ -488,23 +550,23 @@ destroy_swapchain :: proc() {
 
 init_vulkan :: proc() -> bool {
 	result: vk.Result
-	
+
 	fmt.println("DEBUG: Loading Vulkan library")
 	vulkan_lib, lib_ok := dynlib.load_library("libvulkan.so.1")
 	if !lib_ok {
 		fmt.println("Failed to load Vulkan library")
 		return false
 	}
-	
+
 	vk_get_instance_proc_addr, proc_ok := dynlib.symbol_address(vulkan_lib, "vkGetInstanceProcAddr")
 	if !proc_ok {
 		fmt.println("Failed to get vkGetInstanceProcAddr")
 		return false
 	}
-	
+
 	fmt.println("DEBUG: Loading global Vulkan procedures")
 	vk.load_proc_addresses_global(vk_get_instance_proc_addr)
-	
+
 	fmt.println("DEBUG: Creating application info")
 
 	// Create Vulkan instance - try minimal setup first
@@ -539,7 +601,7 @@ init_vulkan :: proc() -> bool {
 		return false
 	}
 	fmt.println("DEBUG: Instance created successfully")
-	
+
 	// Load instance-specific procedure addresses
 	fmt.println("DEBUG: Loading instance procedures")
 	vk.load_proc_addresses_instance(instance)
@@ -571,7 +633,7 @@ init_vulkan :: proc() -> bool {
 	if !create_logical_device() {
 		return false
 	}
-	
+
 	// Load device-specific procedure addresses
 	fmt.println("DEBUG: Loading device procedures")
 	vk.load_proc_addresses_device(device)
@@ -744,25 +806,11 @@ create_logical_device :: proc() -> bool {
 }
 
 
-// Global variables for compute pipeline
-particle_buffer: vk.Buffer
-particle_buffer_memory: vk.DeviceMemory
-descriptor_set_layout: vk.DescriptorSetLayout
-descriptor_pool: vk.DescriptorPool
-descriptor_set: vk.DescriptorSet
-compute_pipeline: vk.Pipeline
-compute_pipeline_layout: vk.PipelineLayout
+// Global variables for compute pipeline (now managed by render.odin)
 
-// Post-processing variables
-offscreen_image: vk.Image
-offscreen_image_memory: vk.DeviceMemory
-offscreen_image_view: vk.ImageView
+// Post-processing variables (images now managed by render.odin)
 offscreen_framebuffer: vk.Framebuffer
 offscreen_render_pass: vk.RenderPass
-post_process_pipeline: vk.Pipeline
-post_process_pipeline_layout: vk.PipelineLayout
-post_process_descriptor_set_layout: vk.DescriptorSetLayout
-post_process_descriptor_set: vk.DescriptorSet
 texture_sampler: vk.Sampler
 
 PostProcessPushConstants :: struct {
@@ -776,149 +824,22 @@ ComputePushConstants :: struct {
 	particle_count: u32,
 }
 
-create_graphics_pipeline :: proc() -> bool {
-	// Create storage buffer for particles first
-	if !create_particle_buffer() {
-		return false
-	}
+VertexPushConstants :: struct {
+	screen_width: f32,
+	screen_height: f32,
+}
 
-	// Create descriptor set layout
-	if !create_descriptor_set_layout() {
-		return false
-	}
-
-	// Create descriptor pool and sets
-	if !create_descriptor_sets() {
-		return false
-	}
-
-	// Create compute pipeline
-	if !create_compute_pipeline() {
-		return false
-	}
-
-	// Create post-processing resources
+init_vulkan_resources :: proc() -> bool {
+	// Create post-processing resources first (includes texture sampler and render pass)
 	if !create_post_process_resources() {
 		return false
 	}
-
-	// Load compiled shaders
-	vertex_shader_code, vert_ok := load_shader_spirv("vertex.spv")
-	if !vert_ok {
-		fmt.println("Failed to load vertex shader")
-		return false
-	}
-	defer delete(vertex_shader_code)
-
-	fragment_shader_code, frag_ok := load_shader_spirv("fragment.spv")
-	if !frag_ok {
-		fmt.println("Failed to load fragment shader")
-		return false
-	}
-	defer delete(fragment_shader_code)
-
-	// Create shader modules
-	vert_shader_create_info := vk.ShaderModuleCreateInfo{
-		sType = vk.StructureType.SHADER_MODULE_CREATE_INFO,
-		codeSize = len(vertex_shader_code) * size_of(c.uint32_t),
-		pCode = raw_data(vertex_shader_code),
-	}
-	vert_shader_module: vk.ShaderModule
-	if vk.CreateShaderModule(device, &vert_shader_create_info, nil, &vert_shader_module) != vk.Result.SUCCESS {
-		fmt.println("Failed to create vertex shader module")
-		return false
-	}
-	defer vk.DestroyShaderModule(device, vert_shader_module, nil)
-
-	frag_shader_create_info := vk.ShaderModuleCreateInfo{
-		sType = vk.StructureType.SHADER_MODULE_CREATE_INFO,
-		codeSize = len(fragment_shader_code) * size_of(c.uint32_t),
-		pCode = raw_data(fragment_shader_code),
-	}
-	frag_shader_module: vk.ShaderModule
-	if vk.CreateShaderModule(device, &frag_shader_create_info, nil, &frag_shader_module) != vk.Result.SUCCESS {
-		fmt.println("Failed to create fragment shader module")
-		return false
-	}
-	defer vk.DestroyShaderModule(device, frag_shader_module, nil)
-
-	// Pipeline stages - vertex and fragment shaders
-	shader_stages := [2]vk.PipelineShaderStageCreateInfo{
-		{sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {vk.ShaderStageFlag.VERTEX}, module = vert_shader_module, pName = "vs_main"},
-		{sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {vk.ShaderStageFlag.FRAGMENT}, module = frag_shader_module, pName = "fs_main"},
-	}
-
-	// Vertex input - no vertex buffers, using hardcoded quad vertices in shader
-	vertex_input_info := vk.PipelineVertexInputStateCreateInfo{sType = vk.StructureType.PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO}
-
-	// Input assembly - drawing triangles
-	input_assembly := vk.PipelineInputAssemblyStateCreateInfo{
-		sType = vk.StructureType.PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-		topology = vk.PrimitiveTopology.TRIANGLE_LIST,
-		primitiveRestartEnable = false,
-	}
-
-	// Viewport and scissor
-	viewport := vk.Viewport{x = 0.0, y = 0.0, width = f32(width), height = f32(height), minDepth = 0.0, maxDepth = 1.0}
-	scissor := vk.Rect2D{offset = {0, 0}, extent = {width, height}}
-	viewport_state := vk.PipelineViewportStateCreateInfo{
-		sType = vk.StructureType.PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-		viewportCount = 1, pViewports = &viewport,
-		scissorCount = 1, pScissors = &scissor,
-	}
-
-	// Rasterizer - fill triangles
-	rasterizer := vk.PipelineRasterizationStateCreateInfo{
-		sType = vk.StructureType.PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-		depthClampEnable = false, rasterizerDiscardEnable = false,
-		polygonMode = vk.PolygonMode.FILL, lineWidth = 1.0,
-		cullMode = {}, frontFace = vk.FrontFace.CLOCKWISE, depthBiasEnable = false,
-	}
-
-	// Multisampling - disabled
-	multisampling := vk.PipelineMultisampleStateCreateInfo{
-		sType = vk.StructureType.PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-		sampleShadingEnable = false, rasterizationSamples = {vk.SampleCountFlag._1},
-	}
-
-	// Color blending - no blending, just write colors
-	color_blend_attachment := vk.PipelineColorBlendAttachmentState{
-		blendEnable = false,
-		colorWriteMask = {vk.ColorComponentFlag.R, vk.ColorComponentFlag.G, vk.ColorComponentFlag.B, vk.ColorComponentFlag.A},
-	}
-	color_blending := vk.PipelineColorBlendStateCreateInfo{
-		sType = vk.StructureType.PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-		logicOpEnable = false, attachmentCount = 1, pAttachments = &color_blend_attachment,
-	}
-
-	// Pipeline layout - no push constants for graphics pipeline, just descriptor sets
-	pipeline_layout_info := vk.PipelineLayoutCreateInfo{
-		sType = vk.StructureType.PIPELINE_LAYOUT_CREATE_INFO,
-		setLayoutCount = 1, pSetLayouts = &descriptor_set_layout,
-	}
-	if vk.CreatePipelineLayout(device, &pipeline_layout_info, nil, &pipeline_layout) != vk.Result.SUCCESS {
-		fmt.println("Failed to create pipeline layout")
-		return false
-	}
-
-	// Create the graphics pipeline
-	pipeline_info := vk.GraphicsPipelineCreateInfo{
-		sType = vk.StructureType.GRAPHICS_PIPELINE_CREATE_INFO,
-		stageCount = 2, pStages = raw_data(shader_stages[:]),
-		pVertexInputState = &vertex_input_info,
-		pInputAssemblyState = &input_assembly,
-		pViewportState = &viewport_state,
-		pRasterizationState = &rasterizer,
-		pMultisampleState = &multisampling,
-		pColorBlendState = &color_blending,
-		layout = pipeline_layout,
-		renderPass = render_pass,
-		subpass = 0,
-		basePipelineHandle = {}, basePipelineIndex = -1,
-	}
-
-	if vk.CreateGraphicsPipelines(device, {}, 1, &pipeline_info, nil, &graphics_pipeline) != vk.Result.SUCCESS {
-		fmt.println("Failed to create graphics pipeline")
+	
+	// Then initialize render resources (needs texture sampler)
+	init_render_resources()
+	
+	// Finally create the framebuffer (needs the offscreen image)
+	if !create_post_process_framebuffer() {
 		return false
 	}
 
@@ -928,7 +849,7 @@ create_graphics_pipeline :: proc() -> bool {
 find_memory_type :: proc(type_filter: u32, properties: vk.MemoryPropertyFlags) -> u32 {
 	mem_properties: vk.PhysicalDeviceMemoryProperties
 	vk.GetPhysicalDeviceMemoryProperties(phys_device, &mem_properties)
-	
+
 	for i in 0..<mem_properties.memoryTypeCount {
 		if (type_filter & (1 << i)) != 0 && (mem_properties.memoryTypes[i].propertyFlags & properties) == properties {
 			return i
@@ -937,178 +858,13 @@ find_memory_type :: proc(type_filter: u32, properties: vk.MemoryPropertyFlags) -
 	return 0
 }
 
-create_particle_buffer :: proc() -> bool {
-	Particle :: struct {
-		position: [2]f32,
-		color: [3]f32,
-		_padding: f32,
-	}
-	
-	buffer_size := vk.DeviceSize(PARTICLE_COUNT * size_of(Particle))
-	
-	buffer_info := vk.BufferCreateInfo{
-		sType = vk.StructureType.BUFFER_CREATE_INFO,
-		size = buffer_size,
-		usage = {vk.BufferUsageFlag.STORAGE_BUFFER},
-		sharingMode = vk.SharingMode.EXCLUSIVE,
-	}
-	
-	if vk.CreateBuffer(device, &buffer_info, nil, &particle_buffer) != vk.Result.SUCCESS {
-		fmt.println("Failed to create particle buffer")
-		return false
-	}
-	
-	mem_requirements: vk.MemoryRequirements
-	vk.GetBufferMemoryRequirements(device, particle_buffer, &mem_requirements)
-	
-	alloc_info := vk.MemoryAllocateInfo{
-		sType = vk.StructureType.MEMORY_ALLOCATE_INFO,
-		allocationSize = mem_requirements.size,
-		memoryTypeIndex = find_memory_type(mem_requirements.memoryTypeBits, {vk.MemoryPropertyFlag.DEVICE_LOCAL}),
-	}
-	
-	if vk.AllocateMemory(device, &alloc_info, nil, &particle_buffer_memory) != vk.Result.SUCCESS {
-		fmt.println("Failed to allocate particle buffer memory")
-		return false
-	}
-	
-	vk.BindBufferMemory(device, particle_buffer, particle_buffer_memory, 0)
-	return true
-}
 
-create_descriptor_set_layout :: proc() -> bool {
-	binding := vk.DescriptorSetLayoutBinding{
-		binding = 0,
-		descriptorType = vk.DescriptorType.STORAGE_BUFFER,
-		descriptorCount = 1,
-		stageFlags = {vk.ShaderStageFlag.VERTEX, vk.ShaderStageFlag.COMPUTE},
-	}
-	
-	layout_info := vk.DescriptorSetLayoutCreateInfo{
-		sType = vk.StructureType.DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		bindingCount = 1,
-		pBindings = &binding,
-	}
-	
-	if vk.CreateDescriptorSetLayout(device, &layout_info, nil, &descriptor_set_layout) != vk.Result.SUCCESS {
-		fmt.println("Failed to create descriptor set layout")
-		return false
-	}
-	
-	return true
-}
 
-create_descriptor_sets :: proc() -> bool {
-	pool_size := vk.DescriptorPoolSize{
-		type = vk.DescriptorType.STORAGE_BUFFER,
-		descriptorCount = 1,
-	}
-	
-	pool_info := vk.DescriptorPoolCreateInfo{
-		sType = vk.StructureType.DESCRIPTOR_POOL_CREATE_INFO,
-		poolSizeCount = 1,
-		pPoolSizes = &pool_size,
-		maxSets = 1,
-	}
-	
-	if vk.CreateDescriptorPool(device, &pool_info, nil, &descriptor_pool) != vk.Result.SUCCESS {
-		fmt.println("Failed to create descriptor pool")
-		return false
-	}
-	
-	alloc_info := vk.DescriptorSetAllocateInfo{
-		sType = vk.StructureType.DESCRIPTOR_SET_ALLOCATE_INFO,
-		descriptorPool = descriptor_pool,
-		descriptorSetCount = 1,
-		pSetLayouts = &descriptor_set_layout,
-	}
-	
-	if vk.AllocateDescriptorSets(device, &alloc_info, &descriptor_set) != vk.Result.SUCCESS {
-		fmt.println("Failed to allocate descriptor sets")
-		return false
-	}
-	
-	buffer_info := vk.DescriptorBufferInfo{
-		buffer = particle_buffer,
-		offset = 0,
-		range = vk.DeviceSize(vk.WHOLE_SIZE),
-	}
-	
-	descriptor_write := vk.WriteDescriptorSet{
-		sType = vk.StructureType.WRITE_DESCRIPTOR_SET,
-		dstSet = descriptor_set,
-		dstBinding = 0,
-		dstArrayElement = 0,
-		descriptorType = vk.DescriptorType.STORAGE_BUFFER,
-		descriptorCount = 1,
-		pBufferInfo = &buffer_info,
-	}
-	
-	vk.UpdateDescriptorSets(device, 1, &descriptor_write, 0, nil)
-	return true
-}
 
-create_compute_pipeline :: proc() -> bool {
-	compute_shader_code, compute_ok := load_shader_spirv("compute.spv")
-	if !compute_ok {
-		fmt.println("Failed to load compute shader")
-		return false
-	}
-	defer delete(compute_shader_code)
-	
-	compute_shader_create_info := vk.ShaderModuleCreateInfo{
-		sType = vk.StructureType.SHADER_MODULE_CREATE_INFO,
-		codeSize = len(compute_shader_code) * size_of(c.uint32_t),
-		pCode = raw_data(compute_shader_code),
-	}
-	compute_shader_module: vk.ShaderModule
-	if vk.CreateShaderModule(device, &compute_shader_create_info, nil, &compute_shader_module) != vk.Result.SUCCESS {
-		fmt.println("Failed to create compute shader module")
-		return false
-	}
-	defer vk.DestroyShaderModule(device, compute_shader_module, nil)
-	
-	push_constant_range := vk.PushConstantRange{
-		stageFlags = {vk.ShaderStageFlag.COMPUTE},
-		offset = 0,
-		size = size_of(ComputePushConstants),
-	}
-	
-	compute_pipeline_layout_info := vk.PipelineLayoutCreateInfo{
-		sType = vk.StructureType.PIPELINE_LAYOUT_CREATE_INFO,
-		setLayoutCount = 1,
-		pSetLayouts = &descriptor_set_layout,
-		pushConstantRangeCount = 1,
-		pPushConstantRanges = &push_constant_range,
-	}
-	
-	if vk.CreatePipelineLayout(device, &compute_pipeline_layout_info, nil, &compute_pipeline_layout) != vk.Result.SUCCESS {
-		fmt.println("Failed to create compute pipeline layout")
-		return false
-	}
-	
-	compute_pipeline_info := vk.ComputePipelineCreateInfo{
-		sType = vk.StructureType.COMPUTE_PIPELINE_CREATE_INFO,
-		stage = {
-			sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
-			stage = {vk.ShaderStageFlag.COMPUTE},
-			module = compute_shader_module,
-			pName = "main",
-		},
-		layout = compute_pipeline_layout,
-	}
-	
-	if vk.CreateComputePipelines(device, {}, 1, &compute_pipeline_info, nil, &compute_pipeline) != vk.Result.SUCCESS {
-		fmt.println("Failed to create compute pipeline")
-		return false
-	}
-	
-	return true
-}
 
 create_post_process_resources :: proc() -> bool {
-	// Create offscreen image
-	if !create_offscreen_image() {
+	// Create texture sampler first
+	if !create_texture_sampler() {
 		return false
 	}
 	
@@ -1116,93 +872,18 @@ create_post_process_resources :: proc() -> bool {
 	if !create_offscreen_render_pass() {
 		return false
 	}
-	
-	// Create offscreen framebuffer
-	if !create_offscreen_framebuffer() {
-		return false
-	}
-	
-	// Create texture sampler
-	if !create_texture_sampler() {
-		return false
-	}
-	
-	// Create post-process descriptor set layout
-	if !create_post_process_descriptor_set_layout() {
-		return false
-	}
-	
-	// Update descriptor pool to include post-processing descriptors
-	if !create_post_process_descriptor_sets() {
-		return false
-	}
-	
-	// Create post-processing pipeline
-	if !create_post_process_pipeline() {
-		return false
-	}
-	
+
 	return true
 }
 
-create_offscreen_image :: proc() -> bool {
-	image_info := vk.ImageCreateInfo{
-		sType = vk.StructureType.IMAGE_CREATE_INFO,
-		imageType = vk.ImageType.D2,
-		extent = {width = width, height = height, depth = 1},
-		mipLevels = 1,
-		arrayLayers = 1,
-		format = format,
-		tiling = vk.ImageTiling.OPTIMAL,
-		initialLayout = vk.ImageLayout.UNDEFINED,
-		usage = {vk.ImageUsageFlag.COLOR_ATTACHMENT, vk.ImageUsageFlag.SAMPLED},
-		samples = {vk.SampleCountFlag._1},
-		sharingMode = vk.SharingMode.EXCLUSIVE,
-	}
-	
-	if vk.CreateImage(device, &image_info, nil, &offscreen_image) != vk.Result.SUCCESS {
-		fmt.println("Failed to create offscreen image")
+create_post_process_framebuffer :: proc() -> bool {
+	// Create offscreen framebuffer (using image from render.odin)
+	if !create_offscreen_framebuffer() {
 		return false
 	}
-	
-	mem_requirements: vk.MemoryRequirements
-	vk.GetImageMemoryRequirements(device, offscreen_image, &mem_requirements)
-	
-	alloc_info := vk.MemoryAllocateInfo{
-		sType = vk.StructureType.MEMORY_ALLOCATE_INFO,
-		allocationSize = mem_requirements.size,
-		memoryTypeIndex = find_memory_type(mem_requirements.memoryTypeBits, {vk.MemoryPropertyFlag.DEVICE_LOCAL}),
-	}
-	
-	if vk.AllocateMemory(device, &alloc_info, nil, &offscreen_image_memory) != vk.Result.SUCCESS {
-		fmt.println("Failed to allocate offscreen image memory")
-		return false
-	}
-	
-	vk.BindImageMemory(device, offscreen_image, offscreen_image_memory, 0)
-	
-	// Create image view
-	view_info := vk.ImageViewCreateInfo{
-		sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
-		image = offscreen_image,
-		viewType = vk.ImageViewType.D2,
-		format = format,
-		subresourceRange = {
-			aspectMask = {vk.ImageAspectFlag.COLOR},
-			baseMipLevel = 0,
-			levelCount = 1,
-			baseArrayLayer = 0,
-			layerCount = 1,
-		},
-	}
-	
-	if vk.CreateImageView(device, &view_info, nil, &offscreen_image_view) != vk.Result.SUCCESS {
-		fmt.println("Failed to create offscreen image view")
-		return false
-	}
-	
 	return true
 }
+
 
 create_offscreen_render_pass :: proc() -> bool {
 	attachment := vk.AttachmentDescription{
@@ -1213,20 +894,20 @@ create_offscreen_render_pass :: proc() -> bool {
 		stencilLoadOp = vk.AttachmentLoadOp.DONT_CARE,
 		stencilStoreOp = vk.AttachmentStoreOp.DONT_CARE,
 		initialLayout = vk.ImageLayout.UNDEFINED,
-		finalLayout = vk.ImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+		finalLayout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
 	}
-	
+
 	attachment_ref := vk.AttachmentReference{
 		attachment = 0,
 		layout = vk.ImageLayout.COLOR_ATTACHMENT_OPTIMAL,
 	}
-	
+
 	subpass := vk.SubpassDescription{
 		pipelineBindPoint = vk.PipelineBindPoint.GRAPHICS,
 		colorAttachmentCount = 1,
 		pColorAttachments = &attachment_ref,
 	}
-	
+
 	render_pass_info := vk.RenderPassCreateInfo{
 		sType = vk.StructureType.RENDER_PASS_CREATE_INFO,
 		attachmentCount = 1,
@@ -1234,31 +915,37 @@ create_offscreen_render_pass :: proc() -> bool {
 		subpassCount = 1,
 		pSubpasses = &subpass,
 	}
-	
+
 	if vk.CreateRenderPass(device, &render_pass_info, nil, &offscreen_render_pass) != vk.Result.SUCCESS {
 		fmt.println("Failed to create offscreen render pass")
 		return false
 	}
-	
+
 	return true
 }
 
 create_offscreen_framebuffer :: proc() -> bool {
+	imageView := getOffscreenImageView()
+	if imageView == {} {
+		fmt.println("Failed to get offscreen image view from render.odin")
+		return false
+	}
+	
 	fb_info := vk.FramebufferCreateInfo{
 		sType = vk.StructureType.FRAMEBUFFER_CREATE_INFO,
 		renderPass = offscreen_render_pass,
 		attachmentCount = 1,
-		pAttachments = &offscreen_image_view,
+		pAttachments = &imageView,
 		width = width,
 		height = height,
 		layers = 1,
 	}
-	
+
 	if vk.CreateFramebuffer(device, &fb_info, nil, &offscreen_framebuffer) != vk.Result.SUCCESS {
 		fmt.println("Failed to create offscreen framebuffer")
 		return false
 	}
-	
+
 	return true
 }
 
@@ -1281,257 +968,43 @@ create_texture_sampler :: proc() -> bool {
 		minLod = 0.0,
 		maxLod = 0.0,
 	}
-	
+
 	if vk.CreateSampler(device, &sampler_info, nil, &texture_sampler) != vk.Result.SUCCESS {
 		fmt.println("Failed to create texture sampler")
 		return false
 	}
-	
+
 	return true
 }
 
-create_post_process_descriptor_set_layout :: proc() -> bool {
-	bindings := [2]vk.DescriptorSetLayoutBinding{
-		{
-			binding = 0,
-			descriptorType = vk.DescriptorType.SAMPLED_IMAGE,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.FRAGMENT},
-		},
-		{
-			binding = 1,
-			descriptorType = vk.DescriptorType.SAMPLER,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.FRAGMENT},
-		},
-	}
-	
-	layout_info := vk.DescriptorSetLayoutCreateInfo{
-		sType = vk.StructureType.DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		bindingCount = len(bindings),
-		pBindings = raw_data(bindings[:]),
-	}
-	
-	if vk.CreateDescriptorSetLayout(device, &layout_info, nil, &post_process_descriptor_set_layout) != vk.Result.SUCCESS {
-		fmt.println("Failed to create post-process descriptor set layout")
-		return false
-	}
-	
-	return true
-}
 
-create_post_process_descriptor_sets :: proc() -> bool {
-	// We need to recreate the descriptor pool to include post-processing descriptors
-	vk.DestroyDescriptorPool(device, descriptor_pool, nil)
-	
-	pool_sizes := [3]vk.DescriptorPoolSize{
-		{type = vk.DescriptorType.STORAGE_BUFFER, descriptorCount = 1},
-		{type = vk.DescriptorType.SAMPLED_IMAGE, descriptorCount = 1},
-		{type = vk.DescriptorType.SAMPLER, descriptorCount = 1},
-	}
-	
-	pool_info := vk.DescriptorPoolCreateInfo{
-		sType = vk.StructureType.DESCRIPTOR_POOL_CREATE_INFO,
-		poolSizeCount = len(pool_sizes),
-		pPoolSizes = raw_data(pool_sizes[:]),
-		maxSets = 2,
-	}
-	
-	if vk.CreateDescriptorPool(device, &pool_info, nil, &descriptor_pool) != vk.Result.SUCCESS {
-		fmt.println("Failed to recreate descriptor pool")
-		return false
-	}
-	
-	// Reallocate the original descriptor set
-	layouts := [2]vk.DescriptorSetLayout{descriptor_set_layout, post_process_descriptor_set_layout}
-	alloc_info := vk.DescriptorSetAllocateInfo{
-		sType = vk.StructureType.DESCRIPTOR_SET_ALLOCATE_INFO,
-		descriptorPool = descriptor_pool,
-		descriptorSetCount = 2,
-		pSetLayouts = raw_data(layouts[:]),
-	}
-	
-	descriptor_sets := [2]vk.DescriptorSet{}
-	if vk.AllocateDescriptorSets(device, &alloc_info, raw_data(descriptor_sets[:])) != vk.Result.SUCCESS {
-		fmt.println("Failed to allocate descriptor sets")
-		return false
-	}
-	
-	descriptor_set = descriptor_sets[0]
-	post_process_descriptor_set = descriptor_sets[1]
-	
-	// Update particle buffer descriptor
-	buffer_info := vk.DescriptorBufferInfo{
-		buffer = particle_buffer,
-		offset = 0,
-		range = vk.DeviceSize(vk.WHOLE_SIZE),
-	}
-	
-	particle_descriptor_write := vk.WriteDescriptorSet{
-		sType = vk.StructureType.WRITE_DESCRIPTOR_SET,
-		dstSet = descriptor_set,
-		dstBinding = 0,
-		dstArrayElement = 0,
-		descriptorType = vk.DescriptorType.STORAGE_BUFFER,
-		descriptorCount = 1,
-		pBufferInfo = &buffer_info,
-	}
-	
-	// Update post-processing descriptors
-	image_info := vk.DescriptorImageInfo{
-		imageLayout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
-		imageView = offscreen_image_view,
-	}
-	
-	sampler_info := vk.DescriptorImageInfo{
-		sampler = texture_sampler,
-	}
-	
-	post_process_writes := [3]vk.WriteDescriptorSet{
-		particle_descriptor_write,
-		{
-			sType = vk.StructureType.WRITE_DESCRIPTOR_SET,
-			dstSet = post_process_descriptor_set,
-			dstBinding = 0,
-			dstArrayElement = 0,
-			descriptorType = vk.DescriptorType.SAMPLED_IMAGE,
-			descriptorCount = 1,
-			pImageInfo = &image_info,
-		},
-		{
-			sType = vk.StructureType.WRITE_DESCRIPTOR_SET,
-			dstSet = post_process_descriptor_set,
-			dstBinding = 1,
-			dstArrayElement = 0,
-			descriptorType = vk.DescriptorType.SAMPLER,
-			descriptorCount = 1,
-			pImageInfo = &sampler_info,
-		},
-	}
-	
-	vk.UpdateDescriptorSets(device, len(post_process_writes), raw_data(post_process_writes[:]), 0, nil)
-	return true
-}
 
-create_post_process_pipeline :: proc() -> bool {
-	post_shader_code, post_ok := load_shader_spirv("post_process.spv")
-	if !post_ok {
-		fmt.println("Failed to load post-process shader")
-		return false
-	}
-	defer delete(post_shader_code)
+
+vulkan_cleanup :: proc() {
+	vk.DeviceWaitIdle(device)
+	destroy_swapchain()
 	
-	// Create shader modules (both vertex and fragment use same WGSL file)
-	post_vert_shader_create_info := vk.ShaderModuleCreateInfo{
-		sType = vk.StructureType.SHADER_MODULE_CREATE_INFO,
-		codeSize = len(post_shader_code) * size_of(c.uint32_t),
-		pCode = raw_data(post_shader_code),
-	}
-	post_vert_shader_module: vk.ShaderModule
-	if vk.CreateShaderModule(device, &post_vert_shader_create_info, nil, &post_vert_shader_module) != vk.Result.SUCCESS {
-		fmt.println("Failed to create post-process vertex shader module")
-		return false
-	}
-	defer vk.DestroyShaderModule(device, post_vert_shader_module, nil)
+	// Cleanup render resources (buffers, images, descriptors)
+	cleanup_render_resources()
 	
-	post_frag_shader_module: vk.ShaderModule
-	if vk.CreateShaderModule(device, &post_vert_shader_create_info, nil, &post_frag_shader_module) != vk.Result.SUCCESS {
-		fmt.println("Failed to create post-process fragment shader module")
-		return false
+	// Cleanup remaining vulkan resources
+	vk.DestroyFramebuffer(device, offscreen_framebuffer, nil)
+	vk.DestroyRenderPass(device, offscreen_render_pass, nil)
+	vk.DestroySampler(device, texture_sampler, nil)
+	vk.DestroySemaphore(device, timeline_semaphore, nil)
+	vk.DestroySemaphore(device, image_available_semaphore, nil)
+	vk.DestroyCommandPool(device, command_pool, nil)
+	vk.DestroyDevice(device, nil)
+	vk.DestroySurfaceKHR(instance, vulkan_surface, nil)
+	if ENABLE_VALIDATION {
+		vkDestroyDebugUtilsMessengerEXT := cast(proc "c" (
+			_: vk.Instance,
+			_: vk.DebugUtilsMessengerEXT,
+			_: rawptr,
+		))vk.GetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT")
+		if vkDestroyDebugUtilsMessengerEXT != nil do vkDestroyDebugUtilsMessengerEXT(instance, debug_messenger, nil)
 	}
-	defer vk.DestroyShaderModule(device, post_frag_shader_module, nil)
-	
-	// Pipeline stages
-	post_shader_stages := [2]vk.PipelineShaderStageCreateInfo{
-		{sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {vk.ShaderStageFlag.VERTEX}, module = post_vert_shader_module, pName = "vs_main"},
-		{sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {vk.ShaderStageFlag.FRAGMENT}, module = post_frag_shader_module, pName = "fs_main"},
-	}
-	
-	// Vertex input - no vertex buffers
-	vertex_input_info := vk.PipelineVertexInputStateCreateInfo{sType = vk.StructureType.PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO}
-	
-	// Input assembly
-	input_assembly := vk.PipelineInputAssemblyStateCreateInfo{
-		sType = vk.StructureType.PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-		topology = vk.PrimitiveTopology.TRIANGLE_LIST,
-		primitiveRestartEnable = false,
-	}
-	
-	// Viewport and scissor
-	viewport := vk.Viewport{x = 0.0, y = 0.0, width = f32(width), height = f32(height), minDepth = 0.0, maxDepth = 1.0}
-	scissor := vk.Rect2D{offset = {0, 0}, extent = {width, height}}
-	viewport_state := vk.PipelineViewportStateCreateInfo{
-		sType = vk.StructureType.PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-		viewportCount = 1, pViewports = &viewport,
-		scissorCount = 1, pScissors = &scissor,
-	}
-	
-	// Rasterizer
-	rasterizer := vk.PipelineRasterizationStateCreateInfo{
-		sType = vk.StructureType.PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-		depthClampEnable = false, rasterizerDiscardEnable = false,
-		polygonMode = vk.PolygonMode.FILL, lineWidth = 1.0,
-		cullMode = {}, frontFace = vk.FrontFace.CLOCKWISE, depthBiasEnable = false,
-	}
-	
-	// Multisampling
-	multisampling := vk.PipelineMultisampleStateCreateInfo{
-		sType = vk.StructureType.PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-		sampleShadingEnable = false, rasterizationSamples = {vk.SampleCountFlag._1},
-	}
-	
-	// Color blending
-	color_blend_attachment := vk.PipelineColorBlendAttachmentState{
-		blendEnable = false,
-		colorWriteMask = {vk.ColorComponentFlag.R, vk.ColorComponentFlag.G, vk.ColorComponentFlag.B, vk.ColorComponentFlag.A},
-	}
-	color_blending := vk.PipelineColorBlendStateCreateInfo{
-		sType = vk.StructureType.PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-		logicOpEnable = false, attachmentCount = 1, pAttachments = &color_blend_attachment,
-	}
-	
-	// Pipeline layout with push constants
-	push_constant_range := vk.PushConstantRange{
-		stageFlags = {vk.ShaderStageFlag.FRAGMENT},
-		offset = 0,
-		size = size_of(PostProcessPushConstants),
-	}
-	
-	post_pipeline_layout_info := vk.PipelineLayoutCreateInfo{
-		sType = vk.StructureType.PIPELINE_LAYOUT_CREATE_INFO,
-		setLayoutCount = 1,
-		pSetLayouts = &post_process_descriptor_set_layout,
-		pushConstantRangeCount = 1,
-		pPushConstantRanges = &push_constant_range,
-	}
-	
-	if vk.CreatePipelineLayout(device, &post_pipeline_layout_info, nil, &post_process_pipeline_layout) != vk.Result.SUCCESS {
-		fmt.println("Failed to create post-process pipeline layout")
-		return false
-	}
-	
-	// Create the post-processing pipeline
-	post_pipeline_info := vk.GraphicsPipelineCreateInfo{
-		sType = vk.StructureType.GRAPHICS_PIPELINE_CREATE_INFO,
-		stageCount = 2, pStages = raw_data(post_shader_stages[:]),
-		pVertexInputState = &vertex_input_info,
-		pInputAssemblyState = &input_assembly,
-		pViewportState = &viewport_state,
-		pRasterizationState = &rasterizer,
-		pMultisampleState = &multisampling,
-		pColorBlendState = &color_blending,
-		layout = post_process_pipeline_layout,
-		renderPass = render_pass,
-		subpass = 0,
-		basePipelineHandle = {}, basePipelineIndex = -1,
-	}
-	
-	if vk.CreateGraphicsPipelines(device, {}, 1, &post_pipeline_info, nil, &post_process_pipeline) != vk.Result.SUCCESS {
-		fmt.println("Failed to create post-process pipeline")
-		return false
-	}
-	
-	return true
+	vk.DestroyInstance(instance, nil)
 }
 
 foreign import libc "system:c"

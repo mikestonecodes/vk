@@ -38,7 +38,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let angle = push_constants.time * speed + hash_x * 6.28318; // 2*PI
     let radius = 0.3 + hash_y * 0.4;
     
-    let position = vec2<f32>(
+    // Explicitly center the circle at screen center
+    let circle_center = vec2<f32>(0.0, 0.0);  // Screen center in NDC
+    let position = circle_center + vec2<f32>(
         cos(angle) * radius,
         sin(angle) * radius
     );

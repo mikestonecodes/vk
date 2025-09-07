@@ -1,3 +1,10 @@
+struct PushConstants {
+    screen_width: f32,
+    screen_height: f32,
+}
+
+var<push_constant> push_constants: PushConstants;
+
 struct Particle {
     position: vec2<f32>,
     color: vec3<f32>,
@@ -37,8 +44,15 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32, @builtin(instance_index) in
 
     // Final position = particle center + scaled vertex offset
     let final_pos = particle.position + scaled_vertex;
+    
+    // Apply aspect ratio correction - always scale to maintain circular particles
+    let aspect_ratio = push_constants.screen_width / push_constants.screen_height;
+    let corrected_pos = vec2<f32>(
+        final_pos.x / aspect_ratio,  // Always scale X by inverse aspect ratio
+        final_pos.y                  // Keep Y unchanged
+    );
 
-    out.clip_position = vec4<f32>(final_pos, 0.0, 1.0);
+    out.clip_position = vec4<f32>(corrected_pos, 0.0, 1.0);
     out.color = particle.color;
     return out;
 }
