@@ -315,6 +315,7 @@ timeline_value: c.uint64_t = 0
 image_available_semaphore: vk.Semaphore
 
 
+
 // =============================================================================
 // BORING INITIALIZATION CODE - Surface, Device, Swapchain setup
 // =============================================================================
@@ -1012,7 +1013,7 @@ loadTextureFromData :: proc(data: []u8, w: u32, h: u32) -> (vk.Image, vk.DeviceM
 createTestTexture :: proc() -> (vk.Image, vk.DeviceMemory, vk.ImageView, bool) {
 	width: u32 = 4
 	height: u32 = 4
-	
+
 	// Create a simple checkerboard pattern (RGBA format)
 	data := make([]u8, width * height * 4)
 	defer delete(data)
