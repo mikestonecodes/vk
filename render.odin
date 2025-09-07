@@ -24,17 +24,7 @@ textureImageView: vk.ImageView
 offscreen_pass: vk.RenderPass
 offscreen_fb: vk.Framebuffer
 
-passes: []Pass
 render_passes: [3]Pass // Pre-allocated pass array
-
-clear_value := vk.ClearValue {
-	color = {float32 = {0.0, 0.0, 0.0, 1.0}},
-}
-
-
-init :: proc() {
-	// Nothing to do here
-}
 
 init_render_resources :: proc() {
 	Particle :: struct {
@@ -74,22 +64,17 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 	)
 
 	render_passes[1] = graphics_pass(
-		"vertex.wgsl",
-		"fragment.wgsl",
+		"graphics.wgsl",
 		offscreen_pass,
 		offscreen_fb,
 		6,
 		PARTICLE_COUNT,
 		{particleBuffer, texture_sampler, textureImageView},
-		&VertexPushConstants{screen_width = f32(width), screen_height = f32(height)},
+		&VertexPushConstants{screen_width = i32(width), screen_height = i32(height)},
 		size_of(VertexPushConstants),
-		nil,
-		0,
-		{clear_value},
 	)
 
 	render_passes[2] = graphics_pass(
-		"post_process.wgsl",
 		"post_process.wgsl",
 		render_pass,
 		element.framebuffer,
@@ -100,7 +85,6 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 		0,
 		&PostProcessPushConstants{time = elapsed_time, intensity = 1.0},
 		size_of(PostProcessPushConstants),
-		{clear_value},
 	)
 
 	execute_passes(&encoder, render_passes[:])
@@ -108,20 +92,15 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 }
 
 cleanup_render_resources :: proc() {
-	if particleBuffer != {} {
-		vk.DestroyBuffer(device, particleBuffer, nil)
-		vk.FreeMemory(device, particleBufferMemory, nil)
-	}
+	vk.DestroyBuffer(device, particleBuffer, nil)
+	vk.FreeMemory(device, particleBufferMemory, nil)
 
-	if offscreenImage != {} {
-		vk.DestroyImageView(device, offscreenImageView, nil)
-		vk.DestroyImage(device, offscreenImage, nil)
-		vk.FreeMemory(device, offscreenImageMemory, nil)
-	}
+	vk.DestroyImageView(device, offscreenImageView, nil)
+	vk.DestroyImage(device, offscreenImage, nil)
+	vk.FreeMemory(device, offscreenImageMemory, nil)
 
-	if textureImage != {} {
-		vk.DestroyImageView(device, textureImageView, nil)
-		vk.DestroyImage(device, textureImage, nil)
-		vk.FreeMemory(device, textureImageMemory, nil)
-	}
+	vk.DestroyImageView(device, textureImageView, nil)
+	vk.DestroyImage(device, textureImage, nil)
+	vk.FreeMemory(device, textureImageMemory, nil)
+
 }

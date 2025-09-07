@@ -92,7 +92,7 @@ update_window_size :: proc() {
 handle_resize :: proc() {
 	if wayland_resize_needed() != 0 {
 		update_window_size()
-		
+
 		// Wait only for queue idle instead of full device
 		vk.QueueWaitIdle(queue)
 
@@ -826,8 +826,8 @@ ComputePushConstants :: struct {
 }
 
 VertexPushConstants :: struct {
-	screen_width: f32,
-	screen_height: f32,
+	screen_width: i32,
+	screen_height: i32,
 }
 
 init_vulkan_resources :: proc() -> bool {
@@ -1034,7 +1034,7 @@ loadTextureFromFile :: proc(filepath: string) -> (vk.Image, vk.DeviceMemory, vk.
 		return {}, {}, {}, false
 	}
 	defer delete(file_data)
-	
+
 	// Try to load as PNG first
 	img, err := png.load_from_bytes(file_data)
 	if err != nil {
@@ -1042,15 +1042,15 @@ loadTextureFromFile :: proc(filepath: string) -> (vk.Image, vk.DeviceMemory, vk.
 		return {}, {}, {}, false
 	}
 	defer image.destroy(img)
-	
+
 	width := u32(img.width)
 	height := u32(img.height)
 	channels := img.channels
-	
+
 	// Convert to RGBA if necessary
 	rgba_data: []u8
 	defer if len(rgba_data) > 0 do delete(rgba_data)
-	
+
 	if channels == 4 {
 		// Already RGBA, use directly
 		rgba_data = img.pixels.buf[:]
@@ -1067,7 +1067,7 @@ loadTextureFromFile :: proc(filepath: string) -> (vk.Image, vk.DeviceMemory, vk.
 		fmt.println("Unsupported image format with", channels, "channels")
 		return {}, {}, {}, false
 	}
-	
+
 	return loadTextureFromData(rgba_data[:], width, height)
 }
 
@@ -1079,12 +1079,12 @@ loadTextureFromRawFile :: proc(filepath: string, width: u32, height: u32) -> (vk
 		return {}, {}, {}, false
 	}
 	defer delete(data)
-	
+
 	if len(data) != int(width * height * 4) {
 		fmt.println("Invalid texture data size for", filepath, "expected", width * height * 4, "got", len(data))
 		return {}, {}, {}, false
 	}
-	
+
 	return loadTextureFromData(data[:], width, height)
 }
 
@@ -1260,14 +1260,14 @@ create_texture_sampler :: proc() -> bool {
 
 vulkan_cleanup :: proc() {
 	vk.DeviceWaitIdle(device)
-	
+
 	// Free command buffers properly before destroying command pool
 	for i in 0 ..< image_count {
 		if elements[i].commandBuffer != {} {
 			vk.FreeCommandBuffers(device, command_pool, 1, &elements[i].commandBuffer)
 		}
 	}
-	
+
 	destroy_swapchain()
 
 	cleanup_pipelines()

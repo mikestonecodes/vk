@@ -19,9 +19,6 @@ main :: proc() {
 	if !init_platform() do return
 	defer wayland_cleanup()
 
-	// Initialize render system (creates resource maps only)
-	init()
-
 	// Initialize Vulkan system (this will create the actual resources)
 	if !vulkan_init() do return
 	defer vulkan_cleanup()

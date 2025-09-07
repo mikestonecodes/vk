@@ -44,7 +44,7 @@ DescriptorResource :: union {
 // Cached descriptor set with resource tracking
 CachedDescriptorSet :: struct {
 	descriptor_set: vk.DescriptorSet,
-	resource_hash: u64,
+	resource_hash:  u64,
 }
 
 // Global descriptor set cache with resource tracking
@@ -70,7 +70,8 @@ init_descriptor_pool :: proc() -> bool {
 		maxSets       = 1000,
 	}
 
-	if vk.CreateDescriptorPool(device, &pool_info, nil, &global_descriptor_pool) != vk.Result.SUCCESS {
+	if vk.CreateDescriptorPool(device, &pool_info, nil, &global_descriptor_pool) !=
+	   vk.Result.SUCCESS {
 		return false
 	}
 	return true
@@ -104,12 +105,13 @@ create_pipeline_descriptor_generic :: proc(
 ) {
 	// Use cache_key if provided, otherwise use pipeline_name
 	key := cache_key if cache_key != "" else pipeline_name
-	
+
 	// Hash the resources to detect changes
 	resource_hash := hash_resources(resources)
-	
+
 	// Check if we already have a cached descriptor set with matching resources
-	if cached, exists := descriptor_set_cache[key]; exists && cached.resource_hash == resource_hash {
+	if cached, exists := descriptor_set_cache[key];
+	   exists && cached.resource_hash == resource_hash {
 		return cached.descriptor_set, true
 	}
 
@@ -144,7 +146,7 @@ create_pipeline_descriptor_generic :: proc(
 
 	// Only write descriptors for the resources we have
 	for resource, i in resources {
-		if i < len(resources) { // Bound check
+		if i < len(resources) { 	// Bound check
 			write := vk.WriteDescriptorSet {
 				sType           = vk.StructureType.WRITE_DESCRIPTOR_SET,
 				dstSet          = set,
@@ -155,7 +157,7 @@ create_pipeline_descriptor_generic :: proc(
 
 			switch r in resource {
 			case vk.Buffer:
-				if r != {} { // Only write if valid buffer
+				if r != {} { 	// Only write if valid buffer
 					write.descriptorType = .STORAGE_BUFFER
 					buffer_info := vk.DescriptorBufferInfo {
 						buffer = r,
@@ -168,7 +170,7 @@ create_pipeline_descriptor_generic :: proc(
 				}
 
 			case vk.ImageView:
-				if r != {} { // Only write if valid image view
+				if r != {} { 	// Only write if valid image view
 					write.descriptorType = .SAMPLED_IMAGE
 					image_info := vk.DescriptorImageInfo {
 						imageView   = r,
@@ -180,7 +182,7 @@ create_pipeline_descriptor_generic :: proc(
 				}
 
 			case vk.Sampler:
-				if r != {} { // Only write if valid sampler
+				if r != {} { 	// Only write if valid sampler
 					write.descriptorType = .SAMPLER
 					sampler_info := vk.DescriptorImageInfo {
 						sampler = r,
@@ -198,9 +200,9 @@ create_pipeline_descriptor_generic :: proc(
 	}
 
 	// Cache the descriptor set for reuse
-	descriptor_set_cache[key] = CachedDescriptorSet{
+	descriptor_set_cache[key] = CachedDescriptorSet {
 		descriptor_set = set,
-		resource_hash = resource_hash,
+		resource_hash  = resource_hash,
 	}
 
 	return set, true
@@ -279,8 +281,7 @@ compute_pass :: proc(
 }
 
 graphics_pass :: proc(
-	vertex_shader: string,
-	fragment_shader: string,
+	shader: string,
 	render_pass: vk.RenderPass,
 	framebuffer: vk.Framebuffer,
 	vertices: u32,
@@ -290,19 +291,24 @@ graphics_pass :: proc(
 	vertex_push_size: u32 = 0,
 	fragment_push_data: rawptr = nil,
 	fragment_push_size: u32 = 0,
-	clear_values: []vk.ClearValue = nil,
+	clear_values: [4]f32 = {0.0, 0.0, 0.0, 1.0},
 ) -> Pass {
 	pass := Pass {
 		type = .GRAPHICS,
 	}
-	pass.graphics.vertex_shader = vertex_shader
-	pass.graphics.fragment_shader = fragment_shader
+	pass.graphics.vertex_shader = shader
+	pass.graphics.fragment_shader = shader
 	pass.graphics.render_pass = render_pass
 	pass.graphics.framebuffer = framebuffer
 	pass.graphics.vertices = vertices
 	pass.graphics.instances = instances
 	pass.graphics.resources = resources
-	pass.graphics.clear_values = clear_values
+
+	// Convert the f32 slice to a proper clear value slice
+	pass.graphics.clear_values = []vk.ClearValue {
+		{color = vk.ClearColorValue{float32 = clear_values}},
+	}
+
 
 	// Handle push constants - prioritize vertex, then fragment
 	if vertex_push_data != nil {
@@ -348,7 +354,8 @@ execute_compute_pass :: proc(encoder: ^CommandEncoder, pass: ^ComputePassInfo) {
 	vk.CmdBindPipeline(encoder.command_buffer, .COMPUTE, pipeline)
 
 	// Always create and bind descriptor set if pipeline expects descriptors
-	if descriptor_layout, has_descriptors := get_pipeline_descriptor_layout(pass.shader); has_descriptors {
+	if descriptor_layout, has_descriptors := get_pipeline_descriptor_layout(pass.shader);
+	   has_descriptors {
 		if descriptor_set, ok := create_pipeline_descriptor_generic(pass.shader, pass.resources);
 		   ok {
 			vk.CmdBindDescriptorSets(
@@ -362,7 +369,10 @@ execute_compute_pass :: proc(encoder: ^CommandEncoder, pass: ^ComputePassInfo) {
 				nil,
 			)
 		} else {
-			fmt.printf("Warning: Failed to create descriptor set for compute shader: %s\n", pass.shader)
+			fmt.printf(
+				"Warning: Failed to create descriptor set for compute shader: %s\n",
+				pass.shader,
+			)
 		}
 	}
 
@@ -422,14 +432,19 @@ execute_graphics_pass :: proc(encoder: ^CommandEncoder, pass: ^GraphicsPassInfo)
 		height,
 	)
 	defer delete(graphics_key)
-	
+
 	// Use shader names only for descriptor set caching (dimensions don't affect descriptor layout)
 	descriptor_key := fmt.aprintf("%s+%s", pass.vertex_shader, pass.fragment_shader)
 	defer delete(descriptor_key)
-	
-	if descriptor_layout, has_descriptors := get_pipeline_descriptor_layout(graphics_key); has_descriptors {
-		if descriptor_set, ok := create_pipeline_descriptor_generic(graphics_key, pass.resources, {}, descriptor_key);
-		   ok {
+
+	if descriptor_layout, has_descriptors := get_pipeline_descriptor_layout(graphics_key);
+	   has_descriptors {
+		if descriptor_set, ok := create_pipeline_descriptor_generic(
+			graphics_key,
+			pass.resources,
+			{},
+			descriptor_key,
+		); ok {
 			vk.CmdBindDescriptorSets(
 				encoder.command_buffer,
 				.GRAPHICS,
@@ -441,8 +456,11 @@ execute_graphics_pass :: proc(encoder: ^CommandEncoder, pass: ^GraphicsPassInfo)
 				nil,
 			)
 		} else {
-			fmt.printf("Warning: Failed to create descriptor set for graphics pipeline: %s + %s\n", 
-				pass.vertex_shader, pass.fragment_shader)
+			fmt.printf(
+				"Warning: Failed to create descriptor set for graphics pipeline: %s + %s\n",
+				pass.vertex_shader,
+				pass.fragment_shader,
+			)
 		}
 	}
 
@@ -571,7 +589,7 @@ cleanup_pipelines :: proc() {
 		delete(key)
 	}
 	delete(pipeline_cache)
-	
+
 	// Cleanup global descriptor pool
 	if global_descriptor_pool != {} {
 		vk.DestroyDescriptorPool(device, global_descriptor_pool, nil)
