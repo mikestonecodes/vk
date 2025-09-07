@@ -19,20 +19,13 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 	clear_value := vk.ClearValue{color = {float32 = {0.0, 0.0, 0.0, 1.0}}}
 
 	encode_passes(&encoder,
-		make_compute_pass(compute_pipeline, compute_pipeline_layout, {u32((PARTICLE_COUNT + 63) / 64), 1, 1},
+		compute_pass("compute.wgsl", {u32((PARTICLE_COUNT + 63) / 64), 1, 1}, 
 			{descriptor_set}, &compute_push, size_of(ComputePushConstants)),
 
-		make_memory_sync({vk.AccessFlag.SHADER_WRITE}, {vk.AccessFlag.VERTEX_ATTRIBUTE_READ},
-			{vk.PipelineStageFlag.COMPUTE_SHADER}, {vk.PipelineStageFlag.VERTEX_INPUT}),
-
-		make_render_pass(graphics_pipeline, pipeline_layout, offscreen_render_pass, offscreen_framebuffer,
+		graphics_pass("vertex.wgsl", "fragment.wgsl", offscreen_render_pass, offscreen_framebuffer,
 			6, PARTICLE_COUNT, {descriptor_set}, clear_values = {clear_value}),
 
-		make_memory_sync({vk.AccessFlag.COLOR_ATTACHMENT_WRITE}, {vk.AccessFlag.SHADER_READ},
-			{vk.PipelineStageFlag.COLOR_ATTACHMENT_OUTPUT}, {vk.PipelineStageFlag.FRAGMENT_SHADER},
-			offscreen_image, .COLOR_ATTACHMENT_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL),
-
-		make_render_pass(post_process_pipeline, post_process_pipeline_layout, render_pass, element.framebuffer,
+		graphics_pass("post_process.wgsl", "post_process.wgsl", render_pass, element.framebuffer,
 			3, 1, {post_process_descriptor_set}, &post_push, size_of(PostProcessPushConstants),
 			{vk.ShaderStageFlag.FRAGMENT}, {clear_value}),
 	)

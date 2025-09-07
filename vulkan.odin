@@ -90,70 +90,131 @@ acquire_next_image :: proc() -> bool {
 }
 
 
-last_vertex_time: time.Time
-last_fragment_time: time.Time
-last_compute_time: time.Time
-last_post_process_time: time.Time
+ShaderInfo :: struct {
+	wgsl_path: string,
+	spv_path: string,
+	last_modified: time.Time,
+}
+
+shader_registry: map[string]ShaderInfo
+shader_watch_initialized: bool
 
 init_shader_times :: proc() {
-	if info, err := os.stat("vertex.wgsl"); err == nil do last_vertex_time = info.modification_time
-	if info, err := os.stat("fragment.wgsl"); err == nil do last_fragment_time = info.modification_time
-	if info, err := os.stat("compute.wgsl"); err == nil do last_compute_time = info.modification_time
-	if info, err := os.stat("post_process.wgsl"); err == nil do last_post_process_time = info.modification_time
+	discover_shaders()
+	shader_watch_initialized = true
+}
+
+discover_shaders :: proc() {
+	handle, err := os.open(".")
+	if err != nil {
+		fmt.println("Failed to open current directory for shader discovery")
+		return
+	}
+	defer os.close(handle)
+
+	files, read_err := os.read_dir(handle, -1)
+	if read_err != nil {
+		fmt.println("Failed to read directory for shader discovery")
+		return
+	}
+	defer delete(files)
+
+	for file in files {
+		if strings.has_suffix(file.name, ".wgsl") {
+			spv_name, _ := strings.replace(file.name, ".wgsl", ".spv", 1)
+			
+			shader_registry[strings.clone(file.name)] = ShaderInfo{
+				wgsl_path = strings.clone(file.name),
+				spv_path = spv_name,
+				last_modified = file.modification_time,
+			}
+		}
+	}
+
+	fmt.printf("Discovered %d shaders: ", len(shader_registry))
+	for name in shader_registry {
+		fmt.printf("%s ", name)
+	}
+	fmt.println()
 }
 
 check_shader_reload :: proc() -> bool {
-	vertex_info, vertex_err := os.stat("vertex.wgsl")
-	fragment_info, fragment_err := os.stat("fragment.wgsl")
-	compute_info, compute_err := os.stat("compute.wgsl")
-	post_process_info, post_process_err := os.stat("post_process.wgsl")
-	if vertex_err != nil || fragment_err != nil || compute_err != nil || post_process_err != nil do return false
+	if !shader_watch_initialized {
+		init_shader_times()
+		return false
+	}
 
-	vertex_changed := vertex_info.modification_time != last_vertex_time
-	fragment_changed := fragment_info.modification_time != last_fragment_time
-	compute_changed := compute_info.modification_time != last_compute_time
-	post_process_changed := post_process_info.modification_time != last_post_process_time
+	any_changed := false
+	changed_shaders: [dynamic]string
+	defer delete(changed_shaders)
 
-	if vertex_changed || fragment_changed || compute_changed || post_process_changed {
-		last_vertex_time = vertex_info.modification_time
-		last_fragment_time = fragment_info.modification_time
-		last_compute_time = compute_info.modification_time
-		last_post_process_time = post_process_info.modification_time
-		return compile_shaders(vertex_changed, fragment_changed, compute_changed, post_process_changed)
+	for name, &info in shader_registry {
+		file_info, err := os.stat(info.wgsl_path)
+		if err != nil {
+			continue
+		}
+
+		if file_info.modification_time != info.last_modified {
+			info.last_modified = file_info.modification_time
+			append(&changed_shaders, name)
+			any_changed = true
+		}
+	}
+
+	if any_changed {
+		fmt.printf("Detected changes in shaders: ")
+		for shader in changed_shaders {
+			fmt.printf("%s ", shader)
+		}
+		fmt.println()
+		
+		if compile_changed_shaders(changed_shaders[:]) {
+			clear_pipeline_cache()
+			return true
+		}
 	}
 
 	return false
 }
 
-compile_shaders :: proc(vertex_changed, fragment_changed, compute_changed, post_process_changed: bool) -> bool {
-	fmt.println("Recompiling shaders...")
+compile_changed_shaders :: proc(changed_shaders: []string) -> bool {
+	fmt.printf("Recompiling %d shaders...\n", len(changed_shaders))
 	success := true
 
-	if vertex_changed {
-		vertex_cmd := strings.clone_to_cstring("./naga vertex.wgsl vertex.spv")
-		defer delete(vertex_cmd)
-		if system(vertex_cmd) != 0 do success = false
-	}
+	for shader_name in changed_shaders {
+		info, ok := shader_registry[shader_name]
+		if !ok {
+			fmt.printf("Warning: shader %s not found in registry\n", shader_name)
+			continue
+		}
 
-	if fragment_changed {
-		fragment_cmd := strings.clone_to_cstring("./naga fragment.wgsl fragment.spv")
-		defer delete(fragment_cmd)
-		if system(fragment_cmd) != 0 do success = false
-	}
-
-	if compute_changed {
-		compute_cmd := strings.clone_to_cstring("./naga compute.wgsl compute.spv")
-		defer delete(compute_cmd)
-		if system(compute_cmd) != 0 do success = false
-	}
-
-	if post_process_changed {
-		post_process_cmd := strings.clone_to_cstring("./naga post_process.wgsl post_process.spv")
-		defer delete(post_process_cmd)
-		if system(post_process_cmd) != 0 do success = false
+		cmd := fmt.aprintf("./naga %s %s", info.wgsl_path, info.spv_path)
+		defer delete(cmd)
+		
+		cmd_cstr := strings.clone_to_cstring(cmd)
+		defer delete(cmd_cstr)
+		
+		fmt.printf("Compiling %s -> %s\n", info.wgsl_path, info.spv_path)
+		if system(cmd_cstr) != 0 {
+			fmt.printf("Failed to compile %s\n", info.wgsl_path)
+			success = false
+		}
 	}
 
 	return success
+}
+
+clear_pipeline_cache :: proc() {
+	fmt.printf("Clearing pipeline cache (%d entries)\n", len(pipeline_cache))
+	
+	for key, cached in pipeline_cache {
+		vk.DestroyPipeline(device, cached.pipeline, nil)
+		vk.DestroyPipelineLayout(device, cached.layout, nil)
+		delete(key)
+	}
+	
+	delete(pipeline_cache)
+	pipeline_cache = make(map[string]struct{ pipeline: vk.Pipeline, layout: vk.PipelineLayout })
 }
 
 
