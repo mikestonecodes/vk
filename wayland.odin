@@ -21,20 +21,25 @@ foreign wayland_wrapper {
     get_window_width :: proc() -> c.int32_t ---
     get_window_height :: proc() -> c.int32_t ---
     wayland_resize_needed :: proc() -> c.int ---
+    wayland_window_visible :: proc() -> c.int ---
 }
 
 init_platform :: proc() -> bool {
+    fmt.println("DEBUG: Initializing Wayland platform")
     if wayland_init() == 0 {
         fmt.println("Failed to initialize Wayland")
         return false
     }
+    fmt.println("DEBUG: Wayland initialized successfully")
 
     display = get_wayland_display()
     surface = get_wayland_surface()
+    fmt.printf("DEBUG: Got Wayland display: %p, surface: %p\n", display, surface)
     if display == nil || surface == nil {
         fmt.println("Failed to get Wayland display/surface")
         return false
     }
 
+    fmt.println("DEBUG: Wayland platform setup complete")
     return true
 }

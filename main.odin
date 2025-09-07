@@ -36,7 +36,12 @@ main :: proc() {
 		// Hot reload shaders if changed
 		if check_shader_reload() do recreate_pipeline()
 
-		// Render frame
-		render_frame(start_time)
+		// Only render when window is visible
+		if wayland_window_visible() != 0 {
+			render_frame(start_time)
+		} else {
+			// Sleep when window is hidden to avoid busy waiting
+			time.sleep(16 * time.Millisecond) // ~60 FPS equivalent
+		}
 	}
 }

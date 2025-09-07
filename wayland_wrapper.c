@@ -16,6 +16,7 @@ static int quit = 0;
 static int32_t window_width = 800;  // Default size
 static int32_t window_height = 600;
 static int resize_needed = 0;
+static int window_visible = 1;  // Assume visible initially
 
 // XDG Shell listeners
 static void shell_ping(void *data, struct xdg_wm_base *shell, uint32_t serial) {
@@ -36,6 +37,16 @@ static const struct xdg_surface_listener shell_surface_listener = {
 
 static void toplevel_configure(void *data, struct xdg_toplevel *toplevel,
                               int32_t width, int32_t height, struct wl_array *states) {
+    // Check if window is minimized/hidden
+    window_visible = 1; // Assume visible
+    uint32_t *state;
+    wl_array_for_each(state, states) {
+        if (*state == XDG_TOPLEVEL_STATE_SUSPENDED) {
+            window_visible = 0;
+            break;
+        }
+    }
+    
     if (width > 0 && height > 0) {
         if (window_width != width || window_height != height) {
             window_width = width;
@@ -202,4 +213,8 @@ int wayland_resize_needed(void) {
     int needed = resize_needed;
     resize_needed = 0;  // Reset flag
     return needed;
+}
+
+int wayland_window_visible(void) {
+    return window_visible;
 }
