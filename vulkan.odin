@@ -61,7 +61,22 @@ vulkan_cleanup :: proc() {
 	vk.DeviceWaitIdle(device)
 	destroy_swapchain()
 	vk.DestroyPipeline(device, graphics_pipeline, nil)
+	vk.DestroyPipeline(device, compute_pipeline, nil)
+	vk.DestroyPipeline(device, post_process_pipeline, nil)
 	vk.DestroyPipelineLayout(device, pipeline_layout, nil)
+	vk.DestroyPipelineLayout(device, compute_pipeline_layout, nil)
+	vk.DestroyPipelineLayout(device, post_process_pipeline_layout, nil)
+	vk.DestroyDescriptorPool(device, descriptor_pool, nil)
+	vk.DestroyDescriptorSetLayout(device, descriptor_set_layout, nil)
+	vk.DestroyDescriptorSetLayout(device, post_process_descriptor_set_layout, nil)
+	vk.DestroyBuffer(device, particle_buffer, nil)
+	vk.FreeMemory(device, particle_buffer_memory, nil)
+	vk.DestroyFramebuffer(device, offscreen_framebuffer, nil)
+	vk.DestroyImageView(device, offscreen_image_view, nil)
+	vk.DestroyImage(device, offscreen_image, nil)
+	vk.FreeMemory(device, offscreen_image_memory, nil)
+	vk.DestroyRenderPass(device, offscreen_render_pass, nil)
+	vk.DestroySampler(device, texture_sampler, nil)
 	vk.DestroySemaphore(device, timeline_semaphore, nil)
 	vk.DestroySemaphore(device, image_available_semaphore, nil)
 	// Image available semaphore destroyed in destroy_swapchain()
@@ -175,30 +190,40 @@ acquire_next_image :: proc() -> bool {
 
 last_vertex_time: time.Time
 last_fragment_time: time.Time
+last_compute_time: time.Time
+last_post_process_time: time.Time
 
 init_shader_times :: proc() {
 	if info, err := os.stat("vertex.wgsl"); err == nil do last_vertex_time = info.modification_time
 	if info, err := os.stat("fragment.wgsl"); err == nil do last_fragment_time = info.modification_time
+	if info, err := os.stat("compute.wgsl"); err == nil do last_compute_time = info.modification_time
+	if info, err := os.stat("post_process.wgsl"); err == nil do last_post_process_time = info.modification_time
 }
 
 check_shader_reload :: proc() -> bool {
 	vertex_info, vertex_err := os.stat("vertex.wgsl")
 	fragment_info, fragment_err := os.stat("fragment.wgsl")
-	if vertex_err != nil || fragment_err != nil do return false
+	compute_info, compute_err := os.stat("compute.wgsl")
+	post_process_info, post_process_err := os.stat("post_process.wgsl")
+	if vertex_err != nil || fragment_err != nil || compute_err != nil || post_process_err != nil do return false
 
 	vertex_changed := vertex_info.modification_time != last_vertex_time
 	fragment_changed := fragment_info.modification_time != last_fragment_time
+	compute_changed := compute_info.modification_time != last_compute_time
+	post_process_changed := post_process_info.modification_time != last_post_process_time
 
-	if vertex_changed || fragment_changed {
+	if vertex_changed || fragment_changed || compute_changed || post_process_changed {
 		last_vertex_time = vertex_info.modification_time
 		last_fragment_time = fragment_info.modification_time
-		return compile_shaders(vertex_changed, fragment_changed)
+		last_compute_time = compute_info.modification_time
+		last_post_process_time = post_process_info.modification_time
+		return compile_shaders(vertex_changed, fragment_changed, compute_changed, post_process_changed)
 	}
 
 	return false
 }
 
-compile_shaders :: proc(vertex_changed, fragment_changed: bool) -> bool {
+compile_shaders :: proc(vertex_changed, fragment_changed, compute_changed, post_process_changed: bool) -> bool {
 	fmt.println("Recompiling shaders...")
 	success := true
 
@@ -212,6 +237,18 @@ compile_shaders :: proc(vertex_changed, fragment_changed: bool) -> bool {
 		fragment_cmd := strings.clone_to_cstring("./naga fragment.wgsl fragment.spv")
 		defer delete(fragment_cmd)
 		if system(fragment_cmd) != 0 do success = false
+	}
+
+	if compute_changed {
+		compute_cmd := strings.clone_to_cstring("./naga compute.wgsl compute.spv")
+		defer delete(compute_cmd)
+		if system(compute_cmd) != 0 do success = false
+	}
+
+	if post_process_changed {
+		post_process_cmd := strings.clone_to_cstring("./naga post_process.wgsl post_process.spv")
+		defer delete(post_process_cmd)
+		if system(post_process_cmd) != 0 do success = false
 	}
 
 	return success
