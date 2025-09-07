@@ -53,8 +53,9 @@ init_render_resources :: proc() {
 		{vk.ImageUsageFlag.COLOR_ATTACHMENT, vk.ImageUsageFlag.SAMPLED},
 	)
 
-	// Create test texture
-	textureImage, textureImageMemory, textureImageView, _ = createTestTexture()
+	// Create test texture (or load from file)
+	// To load from file instead: textureImage, textureImageMemory, textureImageView, _ = loadTextureFromFile("path/to/texture.png")
+	textureImage, textureImageMemory, textureImageView, _ = loadTextureFromFile("test.png")
 	offscreen_pass = create_render_pass(format)
 	offscreen_fb = create_framebuffer(offscreen_pass, offscreenImageView, width, height)
 }

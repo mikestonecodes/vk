@@ -4,6 +4,8 @@ import "base:runtime"
 import "core:c"
 import "core:dynlib"
 import "core:fmt"
+import "core:image"
+import "core:image/png"
 import "core:os"
 import "core:strings"
 import "core:time"
@@ -1022,6 +1024,68 @@ loadTextureFromData :: proc(data: []u8, w: u32, h: u32) -> (vk.Image, vk.DeviceM
 	transitionImageLayout(image, vk.Format.R8G8B8A8_SRGB, vk.ImageLayout.TRANSFER_DST_OPTIMAL, vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL)
 
 	return image, image_memory, image_view, true
+}
+
+// Load texture from file (supports PNG and other formats)
+loadTextureFromFile :: proc(filepath: string) -> (vk.Image, vk.DeviceMemory, vk.ImageView, bool) {
+	file_data, ok := os.read_entire_file(filepath)
+	if !ok {
+		fmt.println("Failed to read texture file:", filepath)
+		return {}, {}, {}, false
+	}
+	defer delete(file_data)
+	
+	// Try to load as PNG first
+	img, err := png.load_from_bytes(file_data)
+	if err != nil {
+		fmt.println("Failed to decode PNG:", filepath, err)
+		return {}, {}, {}, false
+	}
+	defer image.destroy(img)
+	
+	width := u32(img.width)
+	height := u32(img.height)
+	channels := img.channels
+	
+	// Convert to RGBA if necessary
+	rgba_data: []u8
+	defer if len(rgba_data) > 0 do delete(rgba_data)
+	
+	if channels == 4 {
+		// Already RGBA, use directly
+		rgba_data = img.pixels.buf[:]
+	} else if channels == 3 {
+		// Convert RGB to RGBA
+		rgba_data = make([]u8, width * height * 4)
+		for i in 0..<int(width * height) {
+			rgba_data[i*4 + 0] = img.pixels.buf[i*3 + 0] // R
+			rgba_data[i*4 + 1] = img.pixels.buf[i*3 + 1] // G
+			rgba_data[i*4 + 2] = img.pixels.buf[i*3 + 2] // B
+			rgba_data[i*4 + 3] = 255                      // A
+		}
+	} else {
+		fmt.println("Unsupported image format with", channels, "channels")
+		return {}, {}, {}, false
+	}
+	
+	return loadTextureFromData(rgba_data[:], width, height)
+}
+
+// Load texture from raw RGBA file data
+loadTextureFromRawFile :: proc(filepath: string, width: u32, height: u32) -> (vk.Image, vk.DeviceMemory, vk.ImageView, bool) {
+	data, ok := os.read_entire_file(filepath)
+	if !ok {
+		fmt.println("Failed to read texture file:", filepath)
+		return {}, {}, {}, false
+	}
+	defer delete(data)
+	
+	if len(data) != int(width * height * 4) {
+		fmt.println("Invalid texture data size for", filepath, "expected", width * height * 4, "got", len(data))
+		return {}, {}, {}, false
+	}
+	
+	return loadTextureFromData(data[:], width, height)
 }
 
 // Create a simple 4x4 test texture pattern
