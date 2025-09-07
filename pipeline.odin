@@ -14,7 +14,6 @@ PassType :: enum {
 }
 
 
-// Remove these - no longer needed
 
 CommandEncoder :: struct {
     command_buffer: vk.CommandBuffer,
@@ -150,10 +149,6 @@ create_pipeline_descriptor_generic :: proc(pipeline_name: string, resources: []D
     return set, true
 }
 
-// Backward compatibility wrapper
-create_pipeline_descriptor :: proc(pipeline_name: string, buffer: vk.Buffer) -> (vk.DescriptorSet, bool) {
-    return create_pipeline_descriptor_generic(pipeline_name, {buffer})
-}
 
 pipeline_cache: map[string]PipelineEntry
 
@@ -308,7 +303,7 @@ execute_graphics_pass :: proc(encoder: ^CommandEncoder, pass: ^GraphicsPassInfo)
     
     // Auto-create descriptor set from resources
     if len(pass.resources) > 0 {
-        graphics_key := fmt.aprintf("%s+%s", pass.vertex_shader, pass.fragment_shader)
+        graphics_key := fmt.aprintf("%s+%s+%dx%d", pass.vertex_shader, pass.fragment_shader, width, height)
         defer delete(graphics_key)
         if descriptor_set, ok := create_pipeline_descriptor_generic(graphics_key, pass.resources); ok {
             vk.CmdBindDescriptorSets(encoder.command_buffer, .GRAPHICS, layout,
@@ -418,7 +413,7 @@ detect_shader_descriptors :: proc(wgsl_content: string) -> []vk.DescriptorSetLay
 get_graphics_pipeline :: proc(vertex_shader: string, fragment_shader: string, 
                              render_pass: vk.RenderPass, 
                              push_constants: Maybe(PushConstantInfo)) -> (vk.Pipeline, vk.PipelineLayout) {
-    key := fmt.aprintf("%s+%s", vertex_shader, fragment_shader)
+    key := fmt.aprintf("%s+%s+%dx%d", vertex_shader, fragment_shader, width, height)
     defer delete(key)
     
     if cached, ok := pipeline_cache[key]; ok {
@@ -764,6 +759,70 @@ compile_shader :: proc(wgsl_file: string) -> bool {
 
 // load_shader_spirv is already defined in vulkan.odin
 
+// Generic render pass creation
+create_render_pass :: proc(format: vk.Format, final_layout: vk.ImageLayout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL) -> vk.RenderPass {
+    attachment := vk.AttachmentDescription{
+        format = format,
+        samples = {vk.SampleCountFlag._1},
+        loadOp = vk.AttachmentLoadOp.CLEAR,
+        storeOp = vk.AttachmentStoreOp.STORE,
+        stencilLoadOp = vk.AttachmentLoadOp.DONT_CARE,
+        stencilStoreOp = vk.AttachmentStoreOp.DONT_CARE,
+        initialLayout = vk.ImageLayout.UNDEFINED,
+        finalLayout = final_layout,
+    }
+
+    attachment_ref := vk.AttachmentReference{
+        attachment = 0,
+        layout = vk.ImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+    }
+
+    subpass := vk.SubpassDescription{
+        pipelineBindPoint = vk.PipelineBindPoint.GRAPHICS,
+        colorAttachmentCount = 1,
+        pColorAttachments = &attachment_ref,
+    }
+
+    render_pass_info := vk.RenderPassCreateInfo{
+        sType = vk.StructureType.RENDER_PASS_CREATE_INFO,
+        attachmentCount = 1,
+        pAttachments = &attachment,
+        subpassCount = 1,
+        pSubpasses = &subpass,
+    }
+
+    render_pass: vk.RenderPass
+    if vk.CreateRenderPass(device, &render_pass_info, nil, &render_pass) != vk.Result.SUCCESS {
+        fmt.println("Failed to create render pass")
+        return {}
+    }
+
+    return render_pass
+}
+
+// Generic framebuffer creation
+create_framebuffer :: proc(render_pass: vk.RenderPass, image_view: vk.ImageView, width, height: u32) -> vk.Framebuffer {
+    attachments := [1]vk.ImageView{image_view}
+    
+    fb_info := vk.FramebufferCreateInfo{
+        sType = vk.StructureType.FRAMEBUFFER_CREATE_INFO,
+        renderPass = render_pass,
+        attachmentCount = 1,
+        pAttachments = raw_data(attachments[:]),
+        width = width,
+        height = height,
+        layers = 1,
+    }
+
+    framebuffer: vk.Framebuffer
+    if vk.CreateFramebuffer(device, &fb_info, nil, &framebuffer) != vk.Result.SUCCESS {
+        fmt.println("Failed to create framebuffer")
+        return {}
+    }
+
+    return framebuffer
+}
+
 // Command encoding helpers
 begin_encoding :: proc(element: ^SwapchainElement) -> CommandEncoder {
     encoder := CommandEncoder{command_buffer = element.commandBuffer}
@@ -781,4 +840,3 @@ finish_encoding :: proc(encoder: ^CommandEncoder) {
     vk.EndCommandBuffer(encoder.command_buffer)
 }
 
-// Remove these - no longer needed

@@ -37,7 +37,7 @@ main :: proc() {
 		handle_resize()
 
 		// Hot reload shaders if changed
-		if check_shader_reload() do recreate_pipeline()
+		check_shader_reload()
 
 		// Only render when window is visible
 		if wayland_window_visible() != 0 {

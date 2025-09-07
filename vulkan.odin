@@ -94,24 +94,18 @@ handle_resize :: proc() {
 	if wayland_resize_needed() != 0 {
 		update_window_size()
 		vk.DeviceWaitIdle(device)
-		
-		// Destroy offscreen framebuffer
-		if offscreen_framebuffer != {} {
-			vk.DestroyFramebuffer(device, offscreen_framebuffer, nil)
-		}
-		
+
+		// Clear pipeline cache so pipelines are recreated with new viewport
+		clear_pipeline_cache()
+
 		// Destroy old offscreen image resource (handled by render cleanup)
-		
+		cleanup_render_resources()
+
 		destroy_swapchain()
 		create_swapchain()
-		
+
 		// Recreate offscreen resources with new dimensions (handled by render init)
 		init_render_resources()
-		if !create_offscreen_framebuffer() {
-			fmt.println("Failed to recreate offscreen framebuffer")
-		}
-		
-		// Pipeline needs to be recreated with new viewport
 	}
 }
 
@@ -128,9 +122,6 @@ vulkan_init :: proc() -> (ok: bool) {
 	if !init_vulkan_resources() do return false
 	fmt.println("DEBUG: Vulkan init complete")
 	return true
-}
-// Hot reload pipeline when shaders change
-recreate_pipeline :: proc() {
 }
 
 acquire_next_image :: proc() -> bool {
@@ -315,7 +306,6 @@ elements: [^]SwapchainElement
 format: vk.Format = vk.Format.UNDEFINED
 width: c.uint32_t = 800
 height: c.uint32_t = 600
-current_frame: c.uint32_t = 0
 image_index: c.uint32_t = 0
 image_count: c.uint32_t = 0
 // Timeline semaphore for proper synchronization
@@ -809,8 +799,6 @@ create_logical_device :: proc() -> bool {
 // Global variables for compute pipeline (now managed by render.odin)
 
 // Post-processing variables (images now managed by render.odin)
-offscreen_framebuffer: vk.Framebuffer
-offscreen_render_pass: vk.RenderPass
 texture_sampler: vk.Sampler
 
 PostProcessPushConstants :: struct {
@@ -834,10 +822,10 @@ init_vulkan_resources :: proc() -> bool {
 	if !create_post_process_resources() {
 		return false
 	}
-	
+
 	// Then initialize render resources (needs texture sampler)
 	init_render_resources()
-	
+
 	// Finally create the framebuffer (needs the offscreen image)
 	if !create_post_process_framebuffer() {
 		return false
@@ -867,87 +855,125 @@ create_post_process_resources :: proc() -> bool {
 	if !create_texture_sampler() {
 		return false
 	}
-	
-	// Create offscreen render pass
-	if !create_offscreen_render_pass() {
-		return false
-	}
+
 
 	return true
 }
 
 create_post_process_framebuffer :: proc() -> bool {
-	// Create offscreen framebuffer (using image from render.odin)
-	if !create_offscreen_framebuffer() {
-		return false
-	}
 	return true
 }
 
 
-create_offscreen_render_pass :: proc() -> bool {
-	attachment := vk.AttachmentDescription{
-		format = format,
-		samples = {vk.SampleCountFlag._1},
-		loadOp = vk.AttachmentLoadOp.CLEAR,
-		storeOp = vk.AttachmentStoreOp.STORE,
-		stencilLoadOp = vk.AttachmentLoadOp.DONT_CARE,
-		stencilStoreOp = vk.AttachmentStoreOp.DONT_CARE,
+
+
+// Generic buffer creation
+createBuffer :: proc(size_bytes: int, usage: vk.BufferUsageFlags) -> (vk.Buffer, vk.DeviceMemory) {
+	buffer_info := vk.BufferCreateInfo{
+		sType = vk.StructureType.BUFFER_CREATE_INFO,
+		size = vk.DeviceSize(size_bytes),
+		usage = usage,
+		sharingMode = vk.SharingMode.EXCLUSIVE,
+	}
+
+	buffer: vk.Buffer
+	if vk.CreateBuffer(device, &buffer_info, nil, &buffer) != vk.Result.SUCCESS {
+		fmt.println("Failed to create buffer")
+		return {}, {}
+	}
+
+	mem_requirements: vk.MemoryRequirements
+	vk.GetBufferMemoryRequirements(device, buffer, &mem_requirements)
+
+	alloc_info := vk.MemoryAllocateInfo{
+		sType = vk.StructureType.MEMORY_ALLOCATE_INFO,
+		allocationSize = mem_requirements.size,
+		memoryTypeIndex = find_memory_type(mem_requirements.memoryTypeBits, {vk.MemoryPropertyFlag.DEVICE_LOCAL}),
+	}
+
+	buffer_memory: vk.DeviceMemory
+	if vk.AllocateMemory(device, &alloc_info, nil, &buffer_memory) != vk.Result.SUCCESS {
+		fmt.println("Failed to allocate buffer memory")
+		vk.DestroyBuffer(device, buffer, nil)
+		return {}, {}
+	}
+
+	vk.BindBufferMemory(device, buffer, buffer_memory, 0)
+	return buffer, buffer_memory
+}
+
+// Generic image creation
+createImage :: proc(w: u32, h: u32, img_format: vk.Format, usage: vk.ImageUsageFlags) -> (vk.Image, vk.DeviceMemory, vk.ImageView) {
+	image_info := vk.ImageCreateInfo{
+		sType = vk.StructureType.IMAGE_CREATE_INFO,
+		imageType = vk.ImageType.D2,
+		extent = {width = w, height = h, depth = 1},
+		mipLevels = 1,
+		arrayLayers = 1,
+		format = img_format,
+		tiling = vk.ImageTiling.OPTIMAL,
 		initialLayout = vk.ImageLayout.UNDEFINED,
-		finalLayout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
+		usage = usage,
+		samples = {vk.SampleCountFlag._1},
+		sharingMode = vk.SharingMode.EXCLUSIVE,
 	}
 
-	attachment_ref := vk.AttachmentReference{
-		attachment = 0,
-		layout = vk.ImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+	image: vk.Image
+	if vk.CreateImage(device, &image_info, nil, &image) != vk.Result.SUCCESS {
+		fmt.println("Failed to create image")
+		return {}, {}, {}
 	}
 
-	subpass := vk.SubpassDescription{
-		pipelineBindPoint = vk.PipelineBindPoint.GRAPHICS,
-		colorAttachmentCount = 1,
-		pColorAttachments = &attachment_ref,
+	mem_requirements: vk.MemoryRequirements
+	vk.GetImageMemoryRequirements(device, image, &mem_requirements)
+
+	alloc_info := vk.MemoryAllocateInfo{
+		sType = vk.StructureType.MEMORY_ALLOCATE_INFO,
+		allocationSize = mem_requirements.size,
+		memoryTypeIndex = find_memory_type(mem_requirements.memoryTypeBits, {vk.MemoryPropertyFlag.DEVICE_LOCAL}),
 	}
 
-	render_pass_info := vk.RenderPassCreateInfo{
-		sType = vk.StructureType.RENDER_PASS_CREATE_INFO,
-		attachmentCount = 1,
-		pAttachments = &attachment,
-		subpassCount = 1,
-		pSubpasses = &subpass,
+	image_memory: vk.DeviceMemory
+	if vk.AllocateMemory(device, &alloc_info, nil, &image_memory) != vk.Result.SUCCESS {
+		fmt.println("Failed to allocate image memory")
+		vk.DestroyImage(device, image, nil)
+		return {}, {}, {}
 	}
 
-	if vk.CreateRenderPass(device, &render_pass_info, nil, &offscreen_render_pass) != vk.Result.SUCCESS {
-		fmt.println("Failed to create offscreen render pass")
-		return false
+	vk.BindImageMemory(device, image, image_memory, 0)
+
+	// Create image view
+	view_info := vk.ImageViewCreateInfo{
+		sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
+		image = image,
+		viewType = vk.ImageViewType.D2,
+		format = img_format,
+		subresourceRange = {
+			aspectMask = {vk.ImageAspectFlag.COLOR},
+			baseMipLevel = 0,
+			levelCount = 1,
+			baseArrayLayer = 0,
+			layerCount = 1,
+		},
 	}
 
-	return true
+	image_view: vk.ImageView
+	if vk.CreateImageView(device, &view_info, nil, &image_view) != vk.Result.SUCCESS {
+		fmt.println("Failed to create image view")
+		vk.DestroyImage(device, image, nil)
+		vk.FreeMemory(device, image_memory, nil)
+		return {}, {}, {}
+	}
+
+	return image, image_memory, image_view
 }
 
-create_offscreen_framebuffer :: proc() -> bool {
-	imageView := getOffscreenImageView()
-	if imageView == {} {
-		fmt.println("Failed to get offscreen image view from render.odin")
-		return false
-	}
-	
-	fb_info := vk.FramebufferCreateInfo{
-		sType = vk.StructureType.FRAMEBUFFER_CREATE_INFO,
-		renderPass = offscreen_render_pass,
-		attachmentCount = 1,
-		pAttachments = &imageView,
-		width = width,
-		height = height,
-		layers = 1,
-	}
 
-	if vk.CreateFramebuffer(device, &fb_info, nil, &offscreen_framebuffer) != vk.Result.SUCCESS {
-		fmt.println("Failed to create offscreen framebuffer")
-		return false
-	}
 
-	return true
+getOffscreenImageView :: proc() -> vk.ImageView {
+	return offscreenImageView
 }
+
 
 create_texture_sampler :: proc() -> bool {
 	sampler_info := vk.SamplerCreateInfo{
@@ -983,13 +1009,11 @@ create_texture_sampler :: proc() -> bool {
 vulkan_cleanup :: proc() {
 	vk.DeviceWaitIdle(device)
 	destroy_swapchain()
-	
+
 	// Cleanup render resources (buffers, images, descriptors)
 	cleanup_render_resources()
-	
+
 	// Cleanup remaining vulkan resources
-	vk.DestroyFramebuffer(device, offscreen_framebuffer, nil)
-	vk.DestroyRenderPass(device, offscreen_render_pass, nil)
 	vk.DestroySampler(device, texture_sampler, nil)
 	vk.DestroySemaphore(device, timeline_semaphore, nil)
 	vk.DestroySemaphore(device, image_available_semaphore, nil)
