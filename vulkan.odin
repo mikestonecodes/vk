@@ -828,6 +828,23 @@ PostProcessPushConstants :: struct {
 ComputePushConstants :: struct {
 	time: f32,
 	quad_count: u32,
+	delta_time: f32,
+	// Input state
+	mouse_x: f32,
+	mouse_y: f32,
+	mouse_left: u32,
+	mouse_right: u32,
+	// Keyboard state (vim keys + common keys)
+	key_h: u32,
+	key_j: u32, 
+	key_k: u32,
+	key_l: u32,
+	key_w: u32,
+	key_a: u32,
+	key_s: u32,
+	key_d: u32,
+	key_q: u32,
+	key_e: u32,
 }
 
 VertexPushConstants :: struct {

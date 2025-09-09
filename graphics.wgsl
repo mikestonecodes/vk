@@ -56,8 +56,10 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32, @builtin(instance_index) in
     // Final position = quad center + scaled vertex offset
     let final_pos = quad.position + scaled_vertex;
 
-    // No aspect ratio correction for now - just use the position directly
-    out.clip_position = vec4<f32>(final_pos.x, final_pos.y, 0.0, 1.0);
+    // Apply aspect ratio correction to keep quads square
+    let aspect_ratio = f32(push_constants.screen_width) / f32(push_constants.screen_height);
+    let corrected_pos = vec2<f32>(final_pos.x / aspect_ratio, final_pos.y);
+    out.clip_position = vec4<f32>(corrected_pos.x, corrected_pos.y, 0.0, 1.0);
     out.color = quad.color;
     out.tex_coord = tex_coords[vertex_index];
     return out;

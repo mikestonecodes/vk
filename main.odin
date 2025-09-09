@@ -34,8 +34,6 @@ main :: proc() {
 		// Hot reload shaders if changed
 		check_shader_reload()
 
-		// Handle input
-		handle_input()
 
 		// Only render when window is visible
 		if glfw_window_visible() != 0 {
@@ -49,29 +47,3 @@ main :: proc() {
 	}
 }
 
-// Handle keyboard and mouse input
-handle_input :: proc() {
-	// Example input handling - modify as needed
-	if is_key_pressed(glfw.KEY_W) {
-		fmt.println("W key is pressed")
-	}
-	if is_key_pressed(glfw.KEY_A) {
-		fmt.println("A key is pressed")
-	}
-	if is_key_pressed(glfw.KEY_S) {
-		fmt.println("S key is pressed")  
-	}
-	if is_key_pressed(glfw.KEY_D) {
-		fmt.println("D key is pressed")
-	}
-	
-	if is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT) {
-		mouse_x, mouse_y := get_mouse_position()
-		fmt.printf("Left mouse button pressed at (%.2f, %.2f)\n", mouse_x, mouse_y)
-	}
-	
-	scroll_x, scroll_y := get_scroll_delta()
-	if scroll_x != 0 || scroll_y != 0 {
-		fmt.printf("Scroll delta: (%.2f, %.2f)\n", scroll_x, scroll_y)
-	}
-}
