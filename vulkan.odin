@@ -822,7 +822,7 @@ PostProcessPushConstants :: struct {
 
 ComputePushConstants :: struct {
 	time: f32,
-	particle_count: u32,
+	quad_count: u32,
 }
 
 VertexPushConstants :: struct {
