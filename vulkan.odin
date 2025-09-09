@@ -1011,51 +1011,65 @@ createImage :: proc(w: u32, h: u32, img_format: vk.Format, usage: vk.ImageUsageF
 // Load texture from raw RGBA data
 loadTextureFromData :: proc(data: []u8, w: u32, h: u32) -> (vk.Image, vk.DeviceMemory, vk.ImageView, bool) {
 	image_size := vk.DeviceSize(len(data))
+	fmt.println("DEBUG: Loading texture data, size:", len(data), "bytes, dimensions:", w, "x", h)
 
 	// Create staging buffer
+	fmt.println("DEBUG: Creating staging buffer...")
 	staging_buffer, staging_buffer_memory := createBuffer(
 		int(image_size),
 		{vk.BufferUsageFlag.TRANSFER_SRC},
 		{vk.MemoryPropertyFlag.HOST_VISIBLE, vk.MemoryPropertyFlag.HOST_COHERENT},
 	)
+	fmt.println("DEBUG: Staging buffer created")
 	defer {
 		vk.DestroyBuffer(device, staging_buffer, nil)
 		vk.FreeMemory(device, staging_buffer_memory, nil)
 	}
 
 	// Copy data to staging buffer
+	fmt.println("DEBUG: Mapping staging buffer memory...")
 	staging_data: rawptr
 	vk.MapMemory(device, staging_buffer_memory, 0, image_size, {}, &staging_data)
+	fmt.println("DEBUG: Copying data to staging buffer...")
 	copy_slice(([^]u8)(staging_data)[:len(data)], data[:])
+	fmt.println("DEBUG: Unmapping staging buffer...")
 	vk.UnmapMemory(device, staging_buffer_memory)
 
 	// Create texture image
+	fmt.println("DEBUG: Creating texture image...")
 	image, image_memory, image_view := createImage(
 		w, h,
 		vk.Format.R8G8B8A8_SRGB,
 		{vk.ImageUsageFlag.TRANSFER_DST, vk.ImageUsageFlag.SAMPLED},
 	)
+	fmt.println("DEBUG: Texture image created")
 
 	if image == {} {
 		return {}, {}, {}, false
 	}
 
 	// Transition image layout and copy data
+	fmt.println("DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...")
 	transitionImageLayout(image, vk.Format.R8G8B8A8_SRGB, vk.ImageLayout.UNDEFINED, vk.ImageLayout.TRANSFER_DST_OPTIMAL)
+	fmt.println("DEBUG: Copying buffer to image...")
 	copyBufferToImage(staging_buffer, image, w, h)
+	fmt.println("DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...")
 	transitionImageLayout(image, vk.Format.R8G8B8A8_SRGB, vk.ImageLayout.TRANSFER_DST_OPTIMAL, vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL)
 
+	fmt.println("DEBUG: Texture loading complete")
 	return image, image_memory, image_view, true
 }
 
 // Load texture from file (supports PNG and other formats)
 loadTextureFromFile :: proc(filepath: string) -> (vk.Image, vk.DeviceMemory, vk.ImageView, bool) {
+	fmt.println("DEBUG: Loading texture from file:", filepath)
 	file_data, ok := os.read_entire_file(filepath)
 	if !ok {
 		fmt.println("Failed to read texture file:", filepath)
 		return {}, {}, {}, false
 	}
 	defer delete(file_data)
+	fmt.println("DEBUG: File size:", len(file_data), "bytes")
 
 	// Try to load as PNG first
 	img, err := png.load_from_bytes(file_data)
@@ -1068,14 +1082,16 @@ loadTextureFromFile :: proc(filepath: string) -> (vk.Image, vk.DeviceMemory, vk.
 	width := u32(img.width)
 	height := u32(img.height)
 	channels := img.channels
+	fmt.println("DEBUG: Image dimensions:", width, "x", height, "channels:", channels)
 
 	// Convert to RGBA if necessary
 	rgba_data: []u8
 	defer if len(rgba_data) > 0 do delete(rgba_data)
 
 	if channels == 4 {
-		// Already RGBA, use directly
-		rgba_data = img.pixels.buf[:]
+		// Already RGBA, but we need to copy it to avoid double-free
+		rgba_data = make([]u8, width * height * 4)
+		copy(rgba_data, img.pixels.buf[:])
 	} else if channels == 3 {
 		// Convert RGB to RGBA
 		rgba_data = make([]u8, width * height * 4)

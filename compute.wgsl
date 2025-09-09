@@ -57,14 +57,14 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         if push_constants.key_w != 0u { camera.y += move_speed * dt; }
         if push_constants.key_s != 0u { camera.y -= move_speed * dt; }
         
-        // Zoom with q/e - faster but controllable  
-        if push_constants.key_e != 0u { 
-            camera.zoom += zoom_speed * dt * 5.0;  // Faster linear zoom in
+        // Zoom with q/e - multiplicative zoom for smooth "through" feeling
+        if push_constants.key_e != 0u {
+            camera.zoom *= 1.0 + zoom_speed * dt * 5.0; // zoom in multiplicatively
         }
-        if push_constants.key_q != 0u { 
-            camera.zoom -= zoom_speed * dt * 5.0;  // Faster linear zoom out
+        if push_constants.key_q != 0u {
+            camera.zoom /= 1.0 + zoom_speed * dt * 5.0; // zoom out multiplicatively
         }
-        camera.zoom = max(0.1, camera.zoom);
+        camera.zoom = max(0.01, camera.zoom);
     }
     
     // Ensure camera updates are visible to all threads
@@ -77,6 +77,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     var pos = vec2<f32>(0.0, 0.0);
     var scale = 1.4;
+    let base_size: f32 = 0.12;
 
     loop {
 
@@ -94,19 +95,35 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let childIndex = id % factor;
         id = id / factor;
 
-        // transform rules
-        if nodeType == 0u { // A spawns Bs in a circle
-            let angle = f32(childIndex) * 3.14159 / 4.0 ;
-            pos += vec2<f32>(cos(angle), sin(angle)) * 0.5 * scale;
-            scale *= 0.7;
-        } else if nodeType == 1u { // B spawns Cs around
-            let angle = f32(childIndex) * 2.0 * 3.14159 / 3.0 ;
-            pos += vec2<f32>(cos(angle), sin(angle)) * 0.3 * scale;
-            scale *= 0.6;
-        } else { // C spawns As
-            pos += vec2<f32>(0.0, 0.5) * scale;
-            scale *= 0.5;
+        // compute child scale (more aggressive shrink for tree-like structure)
+        var shrink: f32;
+        if nodeType == 0u {
+            shrink = 0.7; // A→B (trunk to branches)
+        } else if nodeType == 1u {
+            shrink = 0.65; // B→C (branches to twigs)
+        } else {
+            shrink = 0.8;  // C→A (twigs back to trunk)
         }
+        let child_scale = scale * shrink;
+
+        // transform rules with touching spiral/finger patterns
+        if nodeType == 0u { // A spawns Bs opposite each other
+            let angle = f32(childIndex) * 3.14159;
+            let dir = vec2<f32>(cos(angle), sin(angle));
+            let offset = (base_size * (scale + child_scale)) * 0.5;
+            pos += dir * offset;
+        } else if nodeType == 1u { // B spawns Cs around
+            let angle = f32(childIndex) * 2.0 * 3.14159 / 3.0;
+            let dir = vec2<f32>(cos(angle), sin(angle));
+            let offset = (base_size * (scale + child_scale)) * 0.5;
+            pos += dir * offset;
+        } else { // C spawns As (upwards)
+            let dir = vec2<f32>(0.0, 1.0);
+            let offset = (base_size * (scale + child_scale)) * 0.5;
+            pos += dir * offset;
+        }
+
+        scale = child_scale;
 
         // advance type
         switch nodeType {
@@ -120,9 +137,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         depth += 1u;
     }
 
-    // assign quad with camera offset - original approach
-    quads[quad_id].position = pos + vec2<f32>(camera.x, camera.y);
-    quads[quad_id].size = vec2<f32>(0.1 * scale);
+    // apply camera zoom: scale positions and sizes so we "zoom through" the hierarchy
+    let world_pos = pos * camera.zoom;
+    quads[quad_id].position = world_pos + vec2<f32>(camera.x, camera.y);
+    quads[quad_id].size = vec2<f32>(base_size * scale * camera.zoom);
 
     // color depends on type & depth
     let hue = f32(nodeType) * 2.0 + f32(depth) * 0.3 + push_constants.time * 0.5;

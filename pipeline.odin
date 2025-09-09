@@ -761,6 +761,13 @@ get_graphics_pipeline :: proc(
 			vk.ColorComponentFlag.B,
 			vk.ColorComponentFlag.A,
 		},
+		blendEnable = true,
+		srcColorBlendFactor = vk.BlendFactor.SRC_ALPHA,
+		dstColorBlendFactor = vk.BlendFactor.ONE_MINUS_SRC_ALPHA,
+		colorBlendOp = vk.BlendOp.ADD,
+		srcAlphaBlendFactor = vk.BlendFactor.ONE,
+		dstAlphaBlendFactor = vk.BlendFactor.ZERO,
+		alphaBlendOp = vk.BlendOp.ADD,
 	}
 	color_blending := vk.PipelineColorBlendStateCreateInfo {
 		sType           = vk.StructureType.PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,

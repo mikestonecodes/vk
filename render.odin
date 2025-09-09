@@ -42,7 +42,7 @@ init_render_resources :: proc() {
 		QUAD_COUNT * size_of(Quad),
 		{vk.BufferUsageFlag.STORAGE_BUFFER},
 	)
-	
+
 	// Camera state
 	CameraState :: struct {
 		x: f32,
@@ -55,7 +55,7 @@ init_render_resources :: proc() {
 		{vk.BufferUsageFlag.STORAGE_BUFFER},
 		{vk.MemoryPropertyFlag.HOST_VISIBLE, vk.MemoryPropertyFlag.HOST_COHERENT},
 	)
-	
+
 	// Initialize camera state
 	camera_data := CameraState{x = 0.0, y = 0.0, zoom = 1.4, _padding = 0.0}
 	mapped_memory: rawptr
@@ -71,9 +71,12 @@ init_render_resources :: proc() {
 
 	// Create test texture (or load from file)
 	// To load from file instead: textureImage, textureImageMemory, textureImageView, _ = loadTextureFromFile("path/to/texture.png")
-	textureImage, textureImageMemory, textureImageView, _ = loadTextureFromFile("test.png")
+	textureImage, textureImageMemory, textureImageView, _ = loadTextureFromFile("test3.png")
+	fmt.println("DEBUG: Creating render pass...")
 	offscreen_pass = create_render_pass(format)
+	fmt.println("DEBUG: Creating framebuffer...")
 	offscreen_fb = create_framebuffer(offscreen_pass, offscreenImageView, width, height)
+	fmt.println("DEBUG: Initialization complete")
 }
 
 record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
@@ -82,14 +85,14 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 
 	// Gather input state
 	mouse_x, mouse_y := get_mouse_position()
-	
+
 	// Update pre-allocated passes with current frame data
 	render_passes[0] = compute_pass(
 		"compute.wgsl",
 		{u32((QUAD_COUNT + 63) / 64), 1, 1},
 		{quadBuffer, cameraBuffer},
 		&ComputePushConstants{
-			time = elapsed_time, 
+			time = elapsed_time,
 			quad_count = QUAD_COUNT,
 			delta_time = 0.016, // Approximate 60fps
 			mouse_x = f32(mouse_x),
@@ -141,7 +144,7 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 cleanup_render_resources :: proc() {
 	vk.DestroyBuffer(device, quadBuffer, nil)
 	vk.FreeMemory(device, quadBufferMemory, nil)
-	
+
 	vk.DestroyBuffer(device, cameraBuffer, nil)
 	vk.FreeMemory(device, cameraBufferMemory, nil)
 
