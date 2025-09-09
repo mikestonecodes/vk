@@ -113,6 +113,8 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 			time = elapsed_time,
 			quad_count = QUAD_COUNT,
 			delta_time = 0.016, // Approximate 60fps
+			spawn_delay = 0.8, // Each level appears 0.8 seconds after the previous
+			max_visible_level = elapsed_time / 0.8, // Growing level limit
 			mouse_x = f32(mouse_x),
 			mouse_y = f32(mouse_y),
 			mouse_left = is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT) ? 1 : 0,

@@ -829,6 +829,9 @@ ComputePushConstants :: struct {
 	time: f32,
 	quad_count: u32,
 	delta_time: f32,
+	// Level spawning control
+	spawn_delay: f32,  // seconds between each level appearing
+	max_visible_level: f32,  // current maximum visible level (grows over time)
 	// Input state
 	mouse_x: f32,
 	mouse_y: f32,

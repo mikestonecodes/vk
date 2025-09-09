@@ -2,6 +2,9 @@ struct PushConstants {
     time: f32,
     quad_count: u32,
     delta_time: f32,
+    // Level spawning control
+    spawn_delay: f32,  // seconds between each level appearing
+    max_visible_level: f32,  // current maximum visible level (grows over time)
     // Input state
     mouse_x: f32,
     mouse_y: f32,
@@ -162,12 +165,30 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         depth += 1u;
     }
 
+    // Level-based visibility and growth animation
+    let level_spawn_time = f32(depth) * push_constants.spawn_delay;
+    let time_since_spawn = push_constants.time - level_spawn_time;
+    
+    // Hide quads that haven't spawned yet
+    var growth_factor = 0.0;
+    var alpha = 0.0;
+    
+    if time_since_spawn >= 0.0 {
+        // Smooth growth animation over 0.5 seconds
+        let grow_duration = 0.5;
+        let grow_progress = clamp(time_since_spawn / grow_duration, 0.0, 1.0);
+        
+        // Smooth ease-out growth curve
+        growth_factor = 1.0 - pow(1.0 - grow_progress, 3.0);
+        alpha = growth_factor;
+    }
+
     // apply camera zoom: scale positions and sizes so we "zoom through" the hierarchy
     // add breathing effect - fractal pulses gently
     let breathing = 1.0 + sin(push_constants.time * 0.6) * 0.03;
     let world_pos = pos * camera.zoom * breathing;
     quads[quad_id].position = world_pos + vec2<f32>(camera.x, camera.y);
-    quads[quad_id].size = vec2<f32>(base_size * scale * camera.zoom * breathing);
+    quads[quad_id].size = vec2<f32>(base_size * scale * camera.zoom * breathing * growth_factor);
 
     // rotation based on fractal structure: position, scale, and type influence rotation
     let position_influence = length(pos) * 0.3; // rotation influenced by distance from origin
@@ -177,13 +198,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     quads[quad_id].rotation = position_influence + scale_influence + type_cycle + depth_factor;
 
-    // color depends on type & depth
+    // color depends on type & depth, with fade-in alpha
     let hue = f32(nodeType) * 2.0 + f32(depth) * 0.3 + push_constants.time * 0.5;
     quads[quad_id].color = vec4<f32>(
         0.5 + 0.5 * cos(hue),
         0.5 + 0.5 * cos(hue + 2.094),
         0.5 + 0.5 * cos(hue + 4.188),
-        1.0
+        alpha
     );
 
 }
