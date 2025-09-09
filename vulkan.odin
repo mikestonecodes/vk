@@ -10,6 +10,7 @@ import "core:os"
 import "core:strings"
 import "core:time"
 import vk "vendor:vulkan"
+import "vendor:glfw"
 
 submit_commands :: proc(element: ^SwapchainElement) {
 	// Increment timeline value for this frame
@@ -90,7 +91,7 @@ update_window_size :: proc() {
 
 // Handle window resize
 handle_resize :: proc() {
-	if wayland_resize_needed() != 0 {
+	if glfw_resize_needed() != 0 {
 		update_window_size()
 
 		// Wait only for queue idle instead of full device
@@ -283,10 +284,15 @@ SwapchainElement :: struct {
 }
 
 // Extension and layer names
-instance_extension_names := [?]cstring {
-	"VK_KHR_surface",
-	"VK_KHR_wayland_surface",
-	"VK_EXT_debug_utils",
+get_instance_extensions :: proc() -> []cstring {
+	// Get required extensions from GLFW
+	glfw_extensions := glfw.GetRequiredInstanceExtensions()
+	extensions := make([]cstring, len(glfw_extensions) + 1)
+	for i in 0..<len(glfw_extensions) {
+		extensions[i] = glfw_extensions[i]
+	}
+	extensions[len(glfw_extensions)] = "VK_EXT_debug_utils"
+	return extensions
 }
 layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
 device_extension_names := [?]cstring{"VK_KHR_swapchain"}
@@ -583,18 +589,21 @@ init_vulkan :: proc() -> bool {
 	}
 	fmt.println("DEBUG: Application info created")
 
+	instance_extensions := get_instance_extensions()
+	defer delete(instance_extensions)
+	
 	create_info := vk.InstanceCreateInfo {
 		sType                   = vk.StructureType.INSTANCE_CREATE_INFO,
 		pApplicationInfo        = &app_info,
 		enabledLayerCount       = ENABLE_VALIDATION ? len(layer_names) : 0,
 		ppEnabledLayerNames     = ENABLE_VALIDATION ? raw_data(layer_names[:]) : nil,
-		enabledExtensionCount   = len(instance_extension_names),
-		ppEnabledExtensionNames = raw_data(instance_extension_names[:]),
+		enabledExtensionCount   = u32(len(instance_extensions)),
+		ppEnabledExtensionNames = raw_data(instance_extensions[:]),
 	}
 
 	fmt.println("DEBUG: About to create Vulkan instance")
 	fmt.printf("DEBUG: Validation layers enabled: %v\n", ENABLE_VALIDATION)
-	fmt.printf("DEBUG: Extension count: %d\n", len(instance_extension_names))
+	fmt.printf("DEBUG: Extension count: %d\n", len(instance_extensions))
 	fmt.printf("DEBUG: Layer count: %d\n", ENABLE_VALIDATION ? len(layer_names) : 0)
 	// Try with cast to make sure types are correct
 	result = vk.CreateInstance(&create_info, nil, &instance)
@@ -614,16 +623,12 @@ init_vulkan :: proc() -> bool {
 		return false
 	}
 
-	// Create Wayland surface
+	// Create surface using GLFW
 	fmt.println("DEBUG: Creating Vulkan surface")
-	surface_create_info := vk.WaylandSurfaceCreateInfoKHR{
-		sType = vk.StructureType.WAYLAND_SURFACE_CREATE_INFO_KHR,
-		display = cast(^vk.wl_display)display,
-		surface = cast(^vk.wl_surface)surface,
-	}
-	result = vk.CreateWaylandSurfaceKHR(instance, &surface_create_info, nil, &vulkan_surface)
+	window := get_glfw_window()
+	result = cast(vk.Result)glfw.CreateWindowSurface(instance, window, nil, &vulkan_surface)
 	if result != vk.Result.SUCCESS {
-		fmt.printf("Failed to create Wayland surface: %d\n", result)
+		fmt.printf("Failed to create surface: %d\n", result)
 		return false
 	}
 

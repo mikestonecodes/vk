@@ -2,10 +2,8 @@ package main
 
 import "core:time"
 import "core:os"
-
-// Global state
-display: wl_display
-surface: wl_surface
+import "core:fmt"
+import "vendor:glfw"
 
 main :: proc() {
 	// Handle command line arguments
@@ -15,9 +13,9 @@ main :: proc() {
 
 	start_time := time.now()
 
-	// Initialize platform (wayland)
+	// Initialize platform (GLFW)
 	if !init_platform() do return
-	defer wayland_cleanup()
+	defer glfw_cleanup()
 
 	// Initialize Vulkan system (this will create the actual resources)
 	if !vulkan_init() do return
@@ -27,8 +25,8 @@ main :: proc() {
 	init_shader_times()
 
 	// Main render loop
-	for wayland_should_quit() == 0 {
-		wayland_poll_events()
+	for glfw_should_quit() == 0 {
+		glfw_poll_events()
 
 		// Handle window resize
 		handle_resize()
@@ -36,8 +34,11 @@ main :: proc() {
 		// Hot reload shaders if changed
 		check_shader_reload()
 
+		// Handle input
+		handle_input()
+
 		// Only render when window is visible
-		if wayland_window_visible() != 0 {
+		if glfw_window_visible() != 0 {
 			// Reset descriptor pool each frame to prevent exhaustion
 			reset_descriptor_pool()
 			render_frame(start_time)
@@ -45,5 +46,32 @@ main :: proc() {
 			// Sleep when window is hidden to avoid busy waiting
 			time.sleep(16 * time.Millisecond) // ~60 FPS equivalent
 		}
+	}
+}
+
+// Handle keyboard and mouse input
+handle_input :: proc() {
+	// Example input handling - modify as needed
+	if is_key_pressed(glfw.KEY_W) {
+		fmt.println("W key is pressed")
+	}
+	if is_key_pressed(glfw.KEY_A) {
+		fmt.println("A key is pressed")
+	}
+	if is_key_pressed(glfw.KEY_S) {
+		fmt.println("S key is pressed")  
+	}
+	if is_key_pressed(glfw.KEY_D) {
+		fmt.println("D key is pressed")
+	}
+	
+	if is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT) {
+		mouse_x, mouse_y := get_mouse_position()
+		fmt.printf("Left mouse button pressed at (%.2f, %.2f)\n", mouse_x, mouse_y)
+	}
+	
+	scroll_x, scroll_y := get_scroll_delta()
+	if scroll_x != 0 || scroll_y != 0 {
+		fmt.printf("Scroll delta: (%.2f, %.2f)\n", scroll_x, scroll_y)
 	}
 }
