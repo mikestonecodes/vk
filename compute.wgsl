@@ -114,29 +114,38 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         // compute child scale (less aggressive shrink so fractal stays denser)
         var shrink: f32;
         if nodeType == 0u {
-            shrink = 0.9; // A→B
+            shrink = 0.7; // A→B
         } else if nodeType == 1u {
-            shrink = 0.8; // B→C
+            shrink = 0.7; // B→C
         } else {
-            shrink = 0.56;  // C→A
+            shrink = 0.9;  // C→A
         }
         let child_scale = scale * shrink;
 
-        // transform rules with touching spiral/finger patterns
+        // transform rules with touching spiral/finger patterns + organic swaying
+        let time_factor = push_constants.time * 0.3;
+        let depth_sway = f32(depth) * 0.05; // much more subtle sway
+        let branch_phase = f32(childIndex) * 1.5 + f32(quad_id) * 0.1; // unique phase per branch
+
         if nodeType == 0u { // A spawns Bs opposite each other
-            let angle = f32(childIndex) * 3.14159;
+            let base_angle = f32(childIndex) * 3.14159;
+            let sway = sin(time_factor + branch_phase) * depth_sway;
+            let angle = base_angle + sway;
             let dir = vec2<f32>(cos(angle), sin(angle));
             let offset = (base_size * (scale + child_scale)) * 0.5;
             pos += dir * offset;
         } else if nodeType == 1u { // B spawns Cs around
-            let angle = f32(childIndex) * 2.0 * 3.14159 / 3.0;
+            let base_angle = f32(childIndex) * 2.0 * 3.14159 / 3.0;
+            let sway = sin(time_factor * 1.1 + branch_phase) * depth_sway;
+            let angle = base_angle + sway;
             let dir = vec2<f32>(cos(angle), sin(angle));
             let offset = (base_size * (scale + child_scale)) * 0.5;
             pos += dir * offset;
-        } else { // C spawns As (upwards)
-            let dir = vec2<f32>(0.0, 1.0);
+        } else { // C spawns As (upwards) - minimal sway to preserve connection
+            let sway_x = sin(time_factor * 0.8 + branch_phase) * depth_sway * 0.5;
+            let dir = vec2<f32>(sway_x, 1.0);
             let offset = (base_size * (scale + child_scale)) * 0.5;
-            pos += dir * offset;
+            pos += normalize(dir) * offset;
         }
 
         scale = child_scale;
@@ -154,13 +163,19 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 
     // apply camera zoom: scale positions and sizes so we "zoom through" the hierarchy
-    let world_pos = pos * camera.zoom;
+    // add breathing effect - fractal pulses gently
+    let breathing = 1.0 + sin(push_constants.time * 0.6) * 0.03;
+    let world_pos = pos * camera.zoom * breathing;
     quads[quad_id].position = world_pos + vec2<f32>(camera.x, camera.y);
-    quads[quad_id].size = vec2<f32>(base_size * scale * camera.zoom);
+    quads[quad_id].size = vec2<f32>(base_size * scale * camera.zoom * breathing);
 
-    // rotation based on time, node type, and depth for interesting visual variety
-    let rotation_speed = f32(nodeType + 1u) * 0.5 + f32(depth) * 0.2;
-    quads[quad_id].rotation = push_constants.time * rotation_speed + f32(quad_id) * 0.1;
+    // rotation based on fractal structure: position, scale, and type influence rotation
+    let position_influence = length(pos) * 0.3; // rotation influenced by distance from origin
+    let scale_influence = scale * 2.0; // smaller elements rotate faster
+    let type_cycle = f32(nodeType) * 2.094; // different types have phase offsets
+    let depth_factor = f32(depth) * 0.5;
+
+    quads[quad_id].rotation = position_influence + scale_influence + type_cycle + depth_factor;
 
     // color depends on type & depth
     let hue = f32(nodeType) * 2.0 + f32(depth) * 0.3 + push_constants.time * 0.5;
