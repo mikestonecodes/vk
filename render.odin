@@ -8,12 +8,16 @@ import "core:time"
 import vk "vendor:vulkan"
 import "vendor:glfw"
 
-QUAD_COUNT :: 500000
+QUAD_COUNT :: 1500000
 
 
 // Simple variables
 quadBuffer: vk.Buffer
 quadBufferMemory: vk.DeviceMemory
+
+// Line buffer for connections between quads
+lineBuffer: vk.Buffer
+lineBufferMemory: vk.DeviceMemory
 
 // Camera state buffer
 cameraBuffer: vk.Buffer
@@ -37,9 +41,23 @@ init_render_resources :: proc() {
 		position: [2]f32,
 		size:     [2]f32,
 		color:    [4]f32,
+		rotation: f32,
+		_padding: [3]f32, // Align to 16-byte boundary
+	}
+	
+	Line :: struct {
+		start_pos: [2]f32,
+		end_pos:   [2]f32,
+		color:     [4]f32,
 	}
 	quadBuffer, quadBufferMemory = createBuffer(
 		QUAD_COUNT * size_of(Quad),
+		{vk.BufferUsageFlag.STORAGE_BUFFER},
+	)
+
+	// Create line buffer - each quad can connect to its parent, so same count
+	lineBuffer, lineBufferMemory = createBuffer(
+		QUAD_COUNT * size_of(Line),
 		{vk.BufferUsageFlag.STORAGE_BUFFER},
 	)
 
@@ -144,6 +162,9 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 cleanup_render_resources :: proc() {
 	vk.DestroyBuffer(device, quadBuffer, nil)
 	vk.FreeMemory(device, quadBufferMemory, nil)
+
+	vk.DestroyBuffer(device, lineBuffer, nil)
+	vk.FreeMemory(device, lineBufferMemory, nil)
 
 	vk.DestroyBuffer(device, cameraBuffer, nil)
 	vk.FreeMemory(device, cameraBufferMemory, nil)

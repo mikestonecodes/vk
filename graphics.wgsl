@@ -10,6 +10,8 @@ struct Quad {
     position: vec2<f32>,
     size: vec2<f32>,
     color: vec4<f32>,
+    rotation: f32,
+    _padding: vec3<f32>, // Align to 16-byte boundary
 }
 
 @group(0) @binding(0) var<storage, read> quads: array<Quad>;
@@ -52,9 +54,17 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32, @builtin(instance_index) in
 
     // Scale the vertex by the quad's size
     let scaled_vertex = vertex_pos * quad.size;
+    
+    // Apply rotation around the quad center
+    let cos_rot = cos(quad.rotation);
+    let sin_rot = sin(quad.rotation);
+    let rotated_vertex = vec2<f32>(
+        scaled_vertex.x * cos_rot - scaled_vertex.y * sin_rot,
+        scaled_vertex.x * sin_rot + scaled_vertex.y * cos_rot
+    );
 
-    // Final position = quad center + scaled vertex offset
-    let final_pos = quad.position + scaled_vertex;
+    // Final position = quad center + rotated scaled vertex offset
+    let final_pos = quad.position + rotated_vertex;
 
     // Apply aspect ratio correction to keep quads square
     let aspect_ratio = f32(push_constants.screen_width) / f32(push_constants.screen_height);
