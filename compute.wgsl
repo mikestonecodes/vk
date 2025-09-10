@@ -168,21 +168,22 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // Level-based visibility and growth animation
     let level_spawn_time = f32(depth) * push_constants.spawn_delay;
     let time_since_spawn = push_constants.time - level_spawn_time;
-    
+
     // Hide quads that haven't spawned yet
     var growth_factor = 0.0;
     var alpha = 0.0;
-    
+
     if time_since_spawn >= 0.0 {
         // Smooth growth animation over 0.5 seconds
         let grow_duration = 0.5;
         let grow_progress = clamp(time_since_spawn / grow_duration, 0.0, 1.0);
-        
-        // Smooth ease-out growth curve
-        growth_factor = 1.0 - pow(1.0 - grow_progress, 3.0);
+
+        // Smooth ease-out growth curve with staggered timing based on quad_id
+        let id_delay = f32(quad_id) * 0.01; // Small delay per quad
+        let adjusted_progress = clamp((time_since_spawn - id_delay) / grow_duration, 0.0, 1.0);
+        growth_factor = 1.0 - pow(1.0 - adjusted_progress, 3.0);
         alpha = growth_factor;
     }
-
     // apply camera zoom: scale positions and sizes so we "zoom through" the hierarchy
     // add breathing effect - fractal pulses gently
     let breathing = 1.0 + sin(push_constants.time * 0.6) * 0.03;
@@ -201,10 +202,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // color depends on type & depth, with fade-in alpha
     let hue = f32(nodeType) * 2.0 + f32(depth) * 0.3 + push_constants.time * 0.5;
     quads[quad_id].color = vec4<f32>(
-        0.5 + 0.5 * cos(hue),
-        0.5 + 0.5 * cos(hue + 2.094),
-        0.5 + 0.5 * cos(hue + 4.188),
+        1.0,
+        1.0,
+        1.0,
         alpha
     );
-
 }
