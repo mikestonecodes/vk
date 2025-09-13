@@ -8,12 +8,19 @@ import "core:time"
 import vk "vendor:vulkan"
 import "vendor:glfw"
 
-QUAD_COUNT :: 9500000
+QUAD_COUNT :: 200000
 
 
-// Simple variables
-quadBuffer: vk.Buffer
-quadBufferMemory: vk.DeviceMemory
+// Dual buffer system for efficient culling
+worldBuffer: vk.Buffer      // All quads in world space
+worldBufferMemory: vk.DeviceMemory
+visibleBuffer: vk.Buffer    // Only visible quads
+visibleBufferMemory: vk.DeviceMemory
+visibleCountBuffer: vk.Buffer  // Count of visible quads
+visibleCountBufferMemory: vk.DeviceMemory
+// Indirect draw command buffer
+indirectBuffer: vk.Buffer
+indirectBufferMemory: vk.DeviceMemory
 
 // Line buffer for connections between quads
 lineBuffer: vk.Buffer
@@ -26,6 +33,11 @@ cameraBufferMemory: vk.DeviceMemory
 offscreenImage: vk.Image
 offscreenImageMemory: vk.DeviceMemory
 offscreenImageView: vk.ImageView
+
+// Depth buffer for proper Z-testing
+depthImage: vk.Image
+depthImageMemory: vk.DeviceMemory
+depthImageView: vk.ImageView
 
 // Texture resources
 textureImage: vk.Image
@@ -42,7 +54,8 @@ init_render_resources :: proc() {
 		size:     [2]f32,
 		color:    [4]f32,
 		rotation: f32,
-		_padding: [3]f32, // Align to 16-byte boundary
+		depth:    f32,
+		_padding: [2]f32, // Align to 16-byte boundary
 	}
 
 	Line :: struct {
@@ -50,9 +63,30 @@ init_render_resources :: proc() {
 		end_pos:   [2]f32,
 		color:     [4]f32,
 	}
-	quadBuffer, quadBufferMemory = createBuffer(
+	// Create world buffer for all quads
+	worldBuffer, worldBufferMemory = createBuffer(
 		QUAD_COUNT * size_of(Quad),
 		{vk.BufferUsageFlag.STORAGE_BUFFER},
+	)
+
+	// Create visible buffer (smaller, only for culled quads)
+	visibleBuffer, visibleBufferMemory = createBuffer(
+		QUAD_COUNT * size_of(Quad), // Max size, will be partially filled
+		{vk.BufferUsageFlag.STORAGE_BUFFER},
+	)
+
+	// Buffer to store count of visible quads
+	visibleCountBuffer, visibleCountBufferMemory = createBuffer(
+		size_of(u32),
+		{vk.BufferUsageFlag.STORAGE_BUFFER},
+		{vk.MemoryPropertyFlag.HOST_VISIBLE, vk.MemoryPropertyFlag.HOST_COHERENT},
+	)
+
+	// Buffer for VkDrawIndirectCommand (4 x u32)
+	indirectBuffer, indirectBufferMemory = createBuffer(
+		4 * size_of(u32),
+		{vk.BufferUsageFlag.INDIRECT_BUFFER},
+		{vk.MemoryPropertyFlag.HOST_VISIBLE, vk.MemoryPropertyFlag.HOST_COHERENT},
 	)
 
 	// Create line buffer - each quad can connect to its parent, so same count
@@ -87,13 +121,21 @@ init_render_resources :: proc() {
 		{vk.ImageUsageFlag.COLOR_ATTACHMENT, vk.ImageUsageFlag.SAMPLED},
 	)
 
+	// Create depth buffer with proper aspect mask
+	depthImage, depthImageMemory, depthImageView = createDepthImage(
+		width,
+		height,
+		vk.Format.D32_SFLOAT,
+		{vk.ImageUsageFlag.DEPTH_STENCIL_ATTACHMENT},
+	)
+
 	// Create test texture (or load from file)
 	// To load from file instead: textureImage, textureImageMemory, textureImageView, _ = loadTextureFromFile("path/to/texture.png")
 	textureImage, textureImageMemory, textureImageView, _ = loadTextureFromFile("test3.png")
 	fmt.println("DEBUG: Creating render pass...")
-	offscreen_pass = create_render_pass(format)
+	offscreen_pass = create_render_pass_with_depth(format)
 	fmt.println("DEBUG: Creating framebuffer...")
-	offscreen_fb = create_framebuffer(offscreen_pass, offscreenImageView, width, height)
+	offscreen_fb = create_framebuffer_with_depth(offscreen_pass, offscreenImageView, depthImageView, width, height)
 	fmt.println("DEBUG: Initialization complete")
 }
 
@@ -104,11 +146,27 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 	// Gather input state
 	mouse_x, mouse_y := get_mouse_position()
 
+	// Read visible count from GPU buffer
+	mapped_memory: rawptr
+	vk.MapMemory(device, visibleCountBufferMemory, 0, size_of(u32), {}, &mapped_memory)
+	visible_count := (^u32)(mapped_memory)^
+	vk.UnmapMemory(device, visibleCountBufferMemory)
+
+	// Write indirect draw command: {vertexCount, instanceCount, firstVertex, firstInstance}
+	indirect_mapped: rawptr
+	vk.MapMemory(device, indirectBufferMemory, 0, 4 * size_of(u32), {}, &indirect_mapped)
+	cmd_params := (^[4]u32)(indirect_mapped)
+	cmd_params^[0] = 6            // vertexCount per instance (two triangles)
+	cmd_params^[1] = visible_count // instanceCount from compute result
+	cmd_params^[2] = 0            // firstVertex
+	cmd_params^[3] = 0            // firstInstance
+	vk.UnmapMemory(device, indirectBufferMemory)
+
 	// Update pre-allocated passes with current frame data
 	render_passes[0] = compute_pass(
-		"compute.wgsl",
+		"compute.hlsl",
 		{u32((QUAD_COUNT + 63) / 64), 1, 1},
-		{quadBuffer, cameraBuffer},
+		{worldBuffer, visibleBuffer, visibleCountBuffer, cameraBuffer},
 		&ComputePushConstants{
 			time = elapsed_time,
 			quad_count = QUAD_COUNT,
@@ -149,18 +207,22 @@ graphics_pass :: proc(
 	clear_values: [4]f32 = {0.0, 0.0, 0.0, 1.0},
 	*/
 	render_passes[1] = graphics_pass(
-		shader = "graphics.wgsl",
+		shader = "graphics.hlsl",
 		render_pass = offscreen_pass,
 		framebuffer = offscreen_fb,
 		vertices = 6,
-		instances = QUAD_COUNT,
-		resources = {quadBuffer, texture_sampler, textureImageView},
+		instances = visible_count, // not used when drawing indirect
+		resources = {visibleBuffer, texture_sampler, textureImageView},
 		vertex_push_data = &VertexPushConstants{screen_width = i32(width), screen_height = i32(height)},
 		vertex_push_size = size_of(VertexPushConstants),
+		clear_values = {0.0, 0.0, 0.0, 1.0}, // Clear color + depth = 1.0 for farthest
 	)
+	// Switch to indirect rendering for the main pass
+	render_passes[1].graphics.indirect_buffer = indirectBuffer
+	render_passes[1].graphics.indirect_offset = 0
 
 	render_passes[2] = graphics_pass(
-		"post_process.wgsl",
+		"post_process.hlsl",
 		render_pass,
 		element.framebuffer,
 		3,
@@ -170,6 +232,7 @@ graphics_pass :: proc(
 		0,
 		&PostProcessPushConstants{time = elapsed_time, intensity = 1.0},
 		size_of(PostProcessPushConstants),
+		{0.0, 0.0, 1.0, 1.0}, // Blue clear color
 	)
 
 	execute_passes(&encoder, render_passes[:])
@@ -177,11 +240,24 @@ graphics_pass :: proc(
 }
 
 cleanup_render_resources :: proc() {
-	vk.DestroyBuffer(device, quadBuffer, nil)
-	vk.FreeMemory(device, quadBufferMemory, nil)
+	// Destroy framebuffer first
+	vk.DestroyFramebuffer(device, offscreen_fb, nil)
+
+	// Destroy render pass
+	vk.DestroyRenderPass(device, offscreen_pass, nil)
+
+	vk.DestroyBuffer(device, worldBuffer, nil)
+	vk.FreeMemory(device, worldBufferMemory, nil)
+	vk.DestroyBuffer(device, visibleBuffer, nil)
+	vk.FreeMemory(device, visibleBufferMemory, nil)
+	vk.DestroyBuffer(device, visibleCountBuffer, nil)
+	vk.FreeMemory(device, visibleCountBufferMemory, nil)
 
 	vk.DestroyBuffer(device, lineBuffer, nil)
 	vk.FreeMemory(device, lineBufferMemory, nil)
+
+	vk.DestroyBuffer(device, indirectBuffer, nil)
+	vk.FreeMemory(device, indirectBufferMemory, nil)
 
 	vk.DestroyBuffer(device, cameraBuffer, nil)
 	vk.FreeMemory(device, cameraBufferMemory, nil)
@@ -189,6 +265,10 @@ cleanup_render_resources :: proc() {
 	vk.DestroyImageView(device, offscreenImageView, nil)
 	vk.DestroyImage(device, offscreenImage, nil)
 	vk.FreeMemory(device, offscreenImageMemory, nil)
+
+	vk.DestroyImageView(device, depthImageView, nil)
+	vk.DestroyImage(device, depthImage, nil)
+	vk.FreeMemory(device, depthImageMemory, nil)
 
 	vk.DestroyImageView(device, textureImageView, nil)
 	vk.DestroyImage(device, textureImage, nil)

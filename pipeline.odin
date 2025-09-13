@@ -237,15 +237,18 @@ ComputePassInfo :: struct {
 }
 
 GraphicsPassInfo :: struct {
-	vertex_shader:   string,
-	fragment_shader: string,
-	render_pass:     vk.RenderPass,
-	framebuffer:     vk.Framebuffer,
-	vertices:        u32,
-	instances:       u32,
-	resources:       []DescriptorResource,
-	push_constants:  Maybe(PushConstantInfo),
-	clear_values:    []vk.ClearValue,
+    vertex_shader:   string,
+    fragment_shader: string,
+    render_pass:     vk.RenderPass,
+    framebuffer:     vk.Framebuffer,
+    vertices:        u32,
+    instances:       u32,
+    resources:       []DescriptorResource,
+    push_constants:  Maybe(PushConstantInfo),
+    clear_values:    []vk.ClearValue,
+    // Optional indirect draw configuration
+    indirect_buffer: vk.Buffer,
+    indirect_offset: vk.DeviceSize,
 }
 
 Pass :: struct {
@@ -304,9 +307,10 @@ graphics_pass :: proc(
 	pass.graphics.instances = instances
 	pass.graphics.resources = resources
 
-	// Convert the f32 slice to a proper clear value slice
+	// Convert the f32 slice to a proper clear value slice with depth support
 	pass.graphics.clear_values = []vk.ClearValue {
 		{color = vk.ClearColorValue{float32 = clear_values}},
+		{depthStencil = vk.ClearDepthStencilValue{depth = 1.0, stencil = 0}}, // Far plane = 1.0
 	}
 
 
@@ -396,11 +400,14 @@ execute_compute_pass :: proc(encoder: ^CommandEncoder, pass: ^ComputePassInfo) {
 }
 
 execute_graphics_pass :: proc(encoder: ^CommandEncoder, pass: ^GraphicsPassInfo) {
+	// Enable depth testing for offscreen render pass (which has depth buffer)
+	has_depth := pass.render_pass == offscreen_pass
 	pipeline, layout := get_graphics_pipeline(
 		pass.vertex_shader,
 		pass.fragment_shader,
 		pass.render_pass,
 		pass.push_constants,
+		has_depth,
 	)
 	if pipeline == {} do return
 
@@ -475,7 +482,18 @@ execute_graphics_pass :: proc(encoder: ^CommandEncoder, pass: ^GraphicsPassInfo)
 		)
 	}
 
-	vk.CmdDraw(encoder.command_buffer, pass.vertices, pass.instances, 0, 0)
+	// Use indirect draw if configured; otherwise direct draw
+	if pass.indirect_buffer != {} {
+		vk.CmdDrawIndirect(
+			encoder.command_buffer,
+			pass.indirect_buffer,
+			pass.indirect_offset,
+			1,
+			u32(4 * size_of(u32)), // sizeof(VkDrawIndirectCommand)
+		)
+	} else {
+		vk.CmdDraw(encoder.command_buffer, pass.vertices, pass.instances, 0, 0)
+	}
 	vk.CmdEndRenderPass(encoder.command_buffer)
 }
 
@@ -524,42 +542,46 @@ insert_pass_barrier :: proc(encoder: ^CommandEncoder, from_type: PassType, to_ty
 }
 
 
-// Helper to detect shader descriptor usage from WGSL
-detect_shader_descriptors :: proc(wgsl_content: string) -> []vk.DescriptorSetLayoutBinding {
+// Helper to detect shader descriptor usage from HLSL
+detect_shader_descriptors :: proc(shader_content: string) -> []vk.DescriptorSetLayoutBinding {
 	bindings := make([dynamic]vk.DescriptorSetLayoutBinding)
 
-	lines := strings.split(wgsl_content, "\n")
+	lines := strings.split(shader_content, "\n")
 	defer delete(lines)
 
 	for line in lines {
 		trimmed := strings.trim_space(line)
 
-		// Look for @group(X) @binding(Y) var<storage, ...> patterns
-		if strings.contains(trimmed, "@group(") && strings.contains(trimmed, "@binding(") {
-			// Extract group and binding numbers
-			group_start := strings.index(trimmed, "@group(")
-			binding_start := strings.index(trimmed, "@binding(")
+		// Look for HLSL register syntax: register(t0), register(u0), register(s0)
+		if strings.contains(trimmed, "register(") {
+			register_start := strings.index(trimmed, "register(")
+			if register_start >= 0 {
+				register_content_start := register_start + len("register(")
+				register_end := strings.index(trimmed[register_content_start:], ")")
+				if register_end > 0 {
+					register_str := trimmed[register_content_start:register_content_start + register_end]
 
-			if group_start >= 0 && binding_start >= 0 {
-				// For now, assume group 0 and extract binding number
-				if strings.contains(trimmed, "@group(0)") {
-					binding_num_start := binding_start + len("@binding(")
-					binding_end := strings.index(trimmed[binding_num_start:], ")")
-					if binding_end > 0 {
-						binding_str := trimmed[binding_num_start:binding_num_start + binding_end]
+					if len(register_str) >= 2 {
+						register_type := register_str[0]
+						binding_str := register_str[1:]
+
 						if binding_num, ok := strconv.parse_int(binding_str); ok {
 							descriptor_type := vk.DescriptorType.STORAGE_BUFFER
 
-							// Determine descriptor type based on var declaration
-							if strings.contains(trimmed, "var<storage,") {
+							// Determine descriptor type based on register type and variable type
+							switch register_type {
+							case 't': // Texture or StructuredBuffer (read-only)
+								if strings.contains(trimmed, "StructuredBuffer") {
+									descriptor_type = .STORAGE_BUFFER
+								} else {
+									descriptor_type = .SAMPLED_IMAGE
+								}
+							case 'u': // UAV/RWStructuredBuffer (read-write)
 								descriptor_type = .STORAGE_BUFFER
-							} else if strings.contains(trimmed, "var<uniform,") {
-								descriptor_type = .UNIFORM_BUFFER
-							} else if strings.contains(trimmed, "texture_2d") ||
-							   strings.contains(trimmed, "texture_3d") {
-								descriptor_type = .SAMPLED_IMAGE
-							} else if strings.contains(trimmed, ": sampler") {
+							case 's': // Sampler
 								descriptor_type = .SAMPLER
+							case 'b': // Constant Buffer
+								descriptor_type = .UNIFORM_BUFFER
 							}
 
 							binding := vk.DescriptorSetLayoutBinding {
@@ -579,6 +601,11 @@ detect_shader_descriptors :: proc(wgsl_content: string) -> []vk.DescriptorSetLay
 	return bindings[:]
 }
 cleanup_pipelines :: proc() {
+	// Cleanup global descriptor pool first (before destroying descriptor set layouts)
+	if global_descriptor_pool != {} {
+		vk.DestroyDescriptorPool(device, global_descriptor_pool, nil)
+	}
+
 	for key, entry in pipeline_cache {
 		vk.DestroyPipeline(device, entry.pipeline, nil)
 		vk.DestroyPipelineLayout(device, entry.layout, nil)
@@ -589,11 +616,6 @@ cleanup_pipelines :: proc() {
 		delete(key)
 	}
 	delete(pipeline_cache)
-
-	// Cleanup global descriptor pool
-	if global_descriptor_pool != {} {
-		vk.DestroyDescriptorPool(device, global_descriptor_pool, nil)
-	}
 }
 // Generic pipeline creation
 get_graphics_pipeline :: proc(
@@ -601,6 +623,7 @@ get_graphics_pipeline :: proc(
 	fragment_shader: string,
 	render_pass: vk.RenderPass,
 	push_constants: Maybe(PushConstantInfo),
+	enable_depth: bool = false,
 ) -> (
 	vk.Pipeline,
 	vk.PipelineLayout,
@@ -623,7 +646,7 @@ get_graphics_pipeline :: proc(
 		return {}, {}
 	}
 
-	// Read WGSL files to detect descriptors
+	// Read HLSL files to detect descriptors
 	vert_content, vert_read_ok := os.read_entire_file(vertex_shader)
 	frag_content, frag_read_ok := os.read_entire_file(fragment_shader)
 	if !vert_read_ok || !frag_read_ok {
@@ -670,8 +693,10 @@ get_graphics_pipeline :: proc(
 		}
 	}
 
-	vert_spv, _ := strings.replace(vertex_shader, ".wgsl", ".spv", 1)
-	frag_spv, _ := strings.replace(fragment_shader, ".wgsl", ".spv", 1)
+	base, _ := strings.replace(vertex_shader, ".hlsl", "", 1)
+	vert_spv := fmt.aprintf("%s_vs.spv", base)
+	frag_spv := fmt.aprintf("%s_fs.spv", base)
+	defer delete(base)
 	defer delete(vert_spv)
 	defer delete(frag_spv)
 
@@ -823,6 +848,8 @@ get_graphics_pipeline :: proc(
 		return {}, {}
 	}
 
+	// Optional depth stencil state
+	depth_stencil: vk.PipelineDepthStencilStateCreateInfo
 	pipeline_info := vk.GraphicsPipelineCreateInfo {
 		sType               = vk.StructureType.GRAPHICS_PIPELINE_CREATE_INFO,
 		stageCount          = 2,
@@ -835,6 +862,21 @@ get_graphics_pipeline :: proc(
 		pColorBlendState    = &color_blending,
 		layout              = layout,
 		renderPass          = render_pass,
+	}
+
+	// Configure depth testing if enabled
+	if enable_depth {
+		depth_stencil = vk.PipelineDepthStencilStateCreateInfo {
+			sType                 = vk.StructureType.PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+			depthTestEnable       = false,
+			depthWriteEnable      = false,
+			depthCompareOp        = vk.CompareOp.LESS_OR_EQUAL, // Be more permissive
+			depthBoundsTestEnable = false,
+			minDepthBounds        = 0.0,
+			maxDepthBounds        = 1.0,
+			stencilTestEnable     = false,
+		}
+		pipeline_info.pDepthStencilState = &depth_stencil
 	}
 
 	pipeline: vk.Pipeline
@@ -871,16 +913,16 @@ get_compute_pipeline :: proc(
 		return {}, {}
 	}
 
-	// Read WGSL file to detect descriptors
-	wgsl_content, read_ok := os.read_entire_file(shader)
+	// Read HLSL file to detect descriptors
+	hlsl_content, read_ok := os.read_entire_file(shader)
 	if !read_ok {
 		fmt.printf("Failed to read shader file: %s\n", shader)
 		return {}, {}
 	}
-	defer delete(wgsl_content)
+	defer delete(hlsl_content)
 
-	wgsl_text := string(wgsl_content)
-	bindings := detect_shader_descriptors(wgsl_text)
+	hlsl_text := string(hlsl_content)
+	bindings := detect_shader_descriptors(hlsl_text)
 	defer delete(bindings)
 
 	// Filter bindings for compute stage
@@ -894,7 +936,9 @@ get_compute_pipeline :: proc(
 		append(&compute_bindings, compute_binding)
 	}
 
-	spv_file, _ := strings.replace(shader, ".wgsl", ".spv", 1)
+	base, _ := strings.replace(shader, ".hlsl", "", 1)
+	spv_file := fmt.aprintf("%s.spv", base)
+	defer delete(base)
 	defer delete(spv_file)
 
 	shader_code, ok := load_shader_spirv(spv_file)
@@ -994,21 +1038,23 @@ get_compute_pipeline :: proc(
 	return pipeline, layout
 }
 
-// Shader compilation
-compile_shader :: proc(wgsl_file: string) -> bool {
-	spv_file, _ := strings.replace(wgsl_file, ".wgsl", ".spv", 1)
-	defer delete(spv_file)
-
-	cmd := fmt.aprintf("./naga %s %s", wgsl_file, spv_file)
+compile_hlsl :: proc(shader_file, profile, entry, output: string) -> bool {
+	cmd := fmt.aprintf("dxc -spirv -fvk-use-gl-layout -fspv-target-env=vulkan1.3 -T %s -E %s -Fo %s %s", profile, entry, output, shader_file)
 	defer delete(cmd)
-	cmd_cstr := strings.clone_to_cstring(cmd)
-	defer delete(cmd_cstr)
+	return system(strings.clone_to_cstring(cmd, context.temp_allocator)) == 0
+}
 
-	if system(cmd_cstr) != 0 {
-		fmt.printf("Failed to compile %s\n", wgsl_file)
-		return false
+compile_shader :: proc(shader_file: string) -> bool {
+	base, _ := strings.replace(shader_file, ".hlsl", "", 1)
+	defer delete(base)
+
+	if strings.contains(shader_file, "compute") {
+		return compile_hlsl(shader_file, "cs_6_0", "main", fmt.aprintf("%s.spv", base))
+	} else {
+		vs_ok := compile_hlsl(shader_file, "vs_6_0", "vs_main", fmt.aprintf("%s_vs.spv", base))
+		fs_ok := compile_hlsl(shader_file, "ps_6_0", "fs_main", fmt.aprintf("%s_fs.spv", base))
+		return vs_ok && fs_ok
 	}
-	return true
 }
 
 // load_shader_spirv is already defined in vulkan.odin
@@ -1057,6 +1103,65 @@ create_render_pass :: proc(
 	return render_pass
 }
 
+// Depth-enabled render pass for proper Z-testing
+create_render_pass_with_depth :: proc(format: vk.Format) -> vk.RenderPass {
+	color_attachment := vk.AttachmentDescription {
+		format         = format,
+		samples        = {vk.SampleCountFlag._1},
+		loadOp         = vk.AttachmentLoadOp.CLEAR,
+		storeOp        = vk.AttachmentStoreOp.STORE,
+		stencilLoadOp  = vk.AttachmentLoadOp.DONT_CARE,
+		stencilStoreOp = vk.AttachmentStoreOp.DONT_CARE,
+		initialLayout  = vk.ImageLayout.UNDEFINED,
+		finalLayout    = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
+	}
+
+	depth_attachment := vk.AttachmentDescription {
+		format         = vk.Format.D32_SFLOAT,
+		samples        = {vk.SampleCountFlag._1},
+		loadOp         = vk.AttachmentLoadOp.CLEAR,
+		storeOp        = vk.AttachmentStoreOp.DONT_CARE,
+		stencilLoadOp  = vk.AttachmentLoadOp.DONT_CARE,
+		stencilStoreOp = vk.AttachmentStoreOp.DONT_CARE,
+		initialLayout  = vk.ImageLayout.UNDEFINED,
+		finalLayout    = vk.ImageLayout.DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+	}
+
+	color_attachment_ref := vk.AttachmentReference {
+		attachment = 0,
+		layout     = vk.ImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+	}
+
+	depth_attachment_ref := vk.AttachmentReference {
+		attachment = 1,
+		layout     = vk.ImageLayout.DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+	}
+
+	attachments := []vk.AttachmentDescription{color_attachment, depth_attachment}
+
+	subpass := vk.SubpassDescription {
+		pipelineBindPoint       = vk.PipelineBindPoint.GRAPHICS,
+		colorAttachmentCount    = 1,
+		pColorAttachments       = &color_attachment_ref,
+		pDepthStencilAttachment = &depth_attachment_ref,
+	}
+
+	render_pass_info := vk.RenderPassCreateInfo {
+		sType           = vk.StructureType.RENDER_PASS_CREATE_INFO,
+		attachmentCount = u32(len(attachments)),
+		pAttachments    = raw_data(attachments),
+		subpassCount    = 1,
+		pSubpasses      = &subpass,
+	}
+
+	render_pass: vk.RenderPass
+	if vk.CreateRenderPass(device, &render_pass_info, nil, &render_pass) != vk.Result.SUCCESS {
+		fmt.println("Failed to create depth render pass")
+		return {}
+	}
+	return render_pass
+}
+
 // Generic framebuffer creation
 create_framebuffer :: proc(
 	render_pass: vk.RenderPass,
@@ -1081,6 +1186,33 @@ create_framebuffer :: proc(
 		return {}
 	}
 
+	return framebuffer
+}
+
+// Framebuffer with depth attachment
+create_framebuffer_with_depth :: proc(
+	render_pass: vk.RenderPass,
+	color_view: vk.ImageView,
+	depth_view: vk.ImageView,
+	width, height: u32,
+) -> vk.Framebuffer {
+	attachments := [2]vk.ImageView{color_view, depth_view}
+
+	fb_info := vk.FramebufferCreateInfo {
+		sType           = vk.StructureType.FRAMEBUFFER_CREATE_INFO,
+		renderPass      = render_pass,
+		attachmentCount = 2,
+		pAttachments    = raw_data(attachments[:]),
+		width           = width,
+		height          = height,
+		layers          = 1,
+	}
+
+	framebuffer: vk.Framebuffer
+	if vk.CreateFramebuffer(device, &fb_info, nil, &framebuffer) != vk.Result.SUCCESS {
+		fmt.println("Failed to create depth framebuffer")
+		return {}
+	}
 	return framebuffer
 }
 

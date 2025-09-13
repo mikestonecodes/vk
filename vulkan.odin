@@ -266,6 +266,11 @@ clear_pipeline_cache :: proc() {
 	for key, cached in pipeline_cache {
 		vk.DestroyPipeline(device, cached.pipeline, nil)
 		vk.DestroyPipelineLayout(device, cached.layout, nil)
+		// Destroy descriptor set layouts
+		for layout in cached.descriptor_set_layouts {
+			vk.DestroyDescriptorSetLayout(device, layout, nil)
+		}
+		delete(cached.descriptor_set_layouts)
 		delete(key)
 	}
 
@@ -1011,6 +1016,64 @@ createImage :: proc(w: u32, h: u32, img_format: vk.Format, usage: vk.ImageUsageF
 	return image, image_memory, image_view
 }
 
+// Specialized depth image creation with proper aspect mask
+createDepthImage :: proc(w: u32, h: u32, img_format: vk.Format, usage: vk.ImageUsageFlags) -> (vk.Image, vk.DeviceMemory, vk.ImageView) {
+	image_info := vk.ImageCreateInfo{
+		sType = vk.StructureType.IMAGE_CREATE_INFO,
+		imageType = vk.ImageType.D2,
+		extent = {width = w, height = h, depth = 1},
+		mipLevels = 1,
+		arrayLayers = 1,
+		format = img_format,
+		tiling = vk.ImageTiling.OPTIMAL,
+		initialLayout = vk.ImageLayout.UNDEFINED,
+		usage = usage,
+		samples = {vk.SampleCountFlag._1},
+		sharingMode = vk.SharingMode.EXCLUSIVE,
+	}
+	image: vk.Image
+	if vk.CreateImage(device, &image_info, nil, &image) != vk.Result.SUCCESS {
+		fmt.println("Failed to create depth image")
+		return {}, {}, {}
+	}
+	mem_requirements: vk.MemoryRequirements
+	vk.GetImageMemoryRequirements(device, image, &mem_requirements)
+	alloc_info := vk.MemoryAllocateInfo{
+		sType = vk.StructureType.MEMORY_ALLOCATE_INFO,
+		allocationSize = mem_requirements.size,
+		memoryTypeIndex = find_memory_type(mem_requirements.memoryTypeBits, {vk.MemoryPropertyFlag.DEVICE_LOCAL}),
+	}
+	image_memory: vk.DeviceMemory
+	if vk.AllocateMemory(device, &alloc_info, nil, &image_memory) != vk.Result.SUCCESS {
+		fmt.println("Failed to allocate depth image memory")
+		vk.DestroyImage(device, image, nil)
+		return {}, {}, {}
+	}
+	vk.BindImageMemory(device, image, image_memory, 0)
+	// Create depth image view with correct aspect mask
+	view_info := vk.ImageViewCreateInfo{
+		sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
+		image = image,
+		viewType = vk.ImageViewType.D2,
+		format = img_format,
+		subresourceRange = {
+			aspectMask = {vk.ImageAspectFlag.DEPTH}, // DEPTH aspect for depth images
+			baseMipLevel = 0,
+			levelCount = 1,
+			baseArrayLayer = 0,
+			layerCount = 1,
+		},
+	}
+	image_view: vk.ImageView
+	if vk.CreateImageView(device, &view_info, nil, &image_view) != vk.Result.SUCCESS {
+		fmt.println("Failed to create depth image view")
+		vk.DestroyImage(device, image, nil)
+		vk.FreeMemory(device, image_memory, nil)
+		return {}, {}, {}
+	}
+	return image, image_memory, image_view
+}
+
 // Load texture from raw RGBA data
 loadTextureFromData :: proc(data: []u8, w: u32, h: u32) -> (vk.Image, vk.DeviceMemory, vk.ImageView, bool) {
 	image_size := vk.DeviceSize(len(data))
@@ -1302,12 +1365,8 @@ create_texture_sampler :: proc() -> bool {
 vulkan_cleanup :: proc() {
 	vk.DeviceWaitIdle(device)
 
-	// Free command buffers properly before destroying command pool
-	for i in 0 ..< image_count {
-		if elements[i].commandBuffer != {} {
-			vk.FreeCommandBuffers(device, command_pool, 1, &elements[i].commandBuffer)
-		}
-	}
+	// Command buffers are freed automatically when command pool is destroyed
+	// No need to manually free them since they're allocated from the pool
 
 	destroy_swapchain()
 
