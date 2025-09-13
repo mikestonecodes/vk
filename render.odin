@@ -8,7 +8,7 @@ import "core:time"
 import vk "vendor:vulkan"
 import "vendor:glfw"
 
-QUAD_COUNT :: 1500000
+QUAD_COUNT :: 9500000
 
 
 // Simple variables
@@ -44,7 +44,7 @@ init_render_resources :: proc() {
 		rotation: f32,
 		_padding: [3]f32, // Align to 16-byte boundary
 	}
-	
+
 	Line :: struct {
 		start_pos: [2]f32,
 		end_pos:   [2]f32,
@@ -133,15 +133,30 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 		size_of(ComputePushConstants),
 	)
 
+/*
+
+graphics_pass :: proc(
+	shader: string,
+	render_pass: vk.RenderPass,
+	framebuffer: vk.Framebuffer,
+	vertices: u32,
+	instances: u32 = 1,
+	resources: []DescriptorResource = nil,
+	vertex_push_data: rawptr = nil,
+	vertex_push_size: u32 = 0,
+	fragment_push_data: rawptr = nil,
+	fragment_push_size: u32 = 0,
+	clear_values: [4]f32 = {0.0, 0.0, 0.0, 1.0},
+	*/
 	render_passes[1] = graphics_pass(
-		"graphics.wgsl",
-		offscreen_pass,
-		offscreen_fb,
-		6,
-		QUAD_COUNT,
-		{quadBuffer, texture_sampler, textureImageView},
-		&VertexPushConstants{screen_width = i32(width), screen_height = i32(height)},
-		size_of(VertexPushConstants),
+		shader = "graphics.wgsl",
+		render_pass = offscreen_pass,
+		framebuffer = offscreen_fb,
+		vertices = 6,
+		instances = QUAD_COUNT,
+		resources = {quadBuffer, texture_sampler, textureImageView},
+		vertex_push_data = &VertexPushConstants{screen_width = i32(width), screen_height = i32(height)},
+		vertex_push_size = size_of(VertexPushConstants),
 	)
 
 	render_passes[2] = graphics_pass(

@@ -80,131 +80,64 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     // Ensure camera updates are visible to all threads
     workgroupBarrier();
+    // Create more organic, irregular quad distribution
+    let grid_size = u32(ceil(sqrt(f32(push_constants.quad_count))));
+    let quad_x = quad_id % grid_size;
+    let quad_y = quad_id / grid_size;
 
-    // decode hierarchy
-    var id = quad_id;
-    var nodeType: u32 = 0u; // start at A
-    var depth: u32 = 0u;
+    // Add chaotic movement and irregular sizing
+    let chaos_factor = sin(f32(quad_id) * 0.1 + push_constants.time * 0.01) * cos(f32(quad_id) * 0.7 + push_constants.time * 1.5);
+    let drift_x = sin(f32(quad_id) * 0.123 + push_constants.time * 0.08) * 0.0;
+    let drift_y = cos(f32(quad_id) * 0.456 + push_constants.time * 00.2) * 0.5;
 
-    var pos = vec2<f32>(0.0, 0.0);
-    var parent_pos = vec2<f32>(0.0, 0.0); // track parent position for line connections
-    var scale = 1.4;
-    let base_size: f32 = 0.12;
-    var has_parent = false;
+    // Irregular screen coverage with varying sizes
+    let screen_width = 20.0;
+    let screen_height = 15.0;
+    let size_variation = 1.0 + sin(f32(quad_id) * 0.789 + push_constants.time * 0.6) * 0.8;
+    let base_size = vec2<f32>(screen_width / f32(grid_size), screen_height / f32(grid_size));
+    let quad_size = base_size * size_variation * (2.0 + chaos_factor);
 
-    loop {
+    // Scattered, paint-splatter positioning
+    let scatter_x = sin(f32(quad_id) * 2.345 + push_constants.time * 0.001) * screen_width * 0.3;
+    let scatter_y = cos(f32(quad_id) * 3.678 + push_constants.time * 0.001) * screen_height * 0.3;
 
-        // branching factor per nodeType
-        var factor: u32;
-        switch nodeType {
-            case 0u: { factor = 2u; } // A → 2 Bs
-            case 1u: { factor = 3u; } // B → 3 Cs
-            case 2u: { factor = 1u; } // C → 1 A
-            default: { factor = 0u; }
-        }
+    let start_x = -screen_width * 0.5;
+    let start_y = -screen_height * 0.5;
+    let base_pos = vec2<f32>(
+        start_x + f32(quad_x) * base_size.x * 0.7,
+        start_y + f32(quad_y) * base_size.y * 0.7
+    );
 
-        if factor == 0u { break; }
+    let world_pos = base_pos + vec2<f32>(scatter_x + drift_x, scatter_y + drift_y);
 
-        let childIndex = id % factor;
-        id = id / factor;
-
-        // Store current position as parent before transformation
-        if id != 0u {
-            parent_pos = pos;
-            has_parent = true;
-        }
-
-        // compute child scale (less aggressive shrink so fractal stays denser)
-        var shrink: f32;
-        if nodeType == 0u {
-            shrink = 0.7; // A→B
-        } else if nodeType == 1u {
-            shrink = 0.7; // B→C
-        } else {
-            shrink = 0.9;  // C→A
-        }
-        let child_scale = scale * shrink;
-
-        // transform rules with touching spiral/finger patterns + organic swaying
-        let time_factor = push_constants.time * 0.3;
-        let depth_sway = f32(depth) * 0.05; // much more subtle sway
-        let branch_phase = f32(childIndex) * 1.5 + f32(quad_id) * 0.1; // unique phase per branch
-
-        if nodeType == 0u { // A spawns Bs opposite each other
-            let base_angle = f32(childIndex) * 3.14159;
-            let sway = sin(time_factor + branch_phase) * depth_sway;
-            let angle = base_angle + sway;
-            let dir = vec2<f32>(cos(angle), sin(angle));
-            let offset = (base_size * (scale + child_scale)) * 0.5;
-            pos += dir * offset;
-        } else if nodeType == 1u { // B spawns Cs around
-            let base_angle = f32(childIndex) * 2.0 * 3.14159 / 3.0;
-            let sway = sin(time_factor * 1.1 + branch_phase) * depth_sway;
-            let angle = base_angle + sway;
-            let dir = vec2<f32>(cos(angle), sin(angle));
-            let offset = (base_size * (scale + child_scale)) * 0.5;
-            pos += dir * offset;
-        } else { // C spawns As (upwards) - minimal sway to preserve connection
-            let sway_x = sin(time_factor * 0.8 + branch_phase) * depth_sway * 0.5;
-            let dir = vec2<f32>(sway_x, 1.0);
-            let offset = (base_size * (scale + child_scale)) * 0.5;
-            pos += normalize(dir) * offset;
-        }
-
-        scale = child_scale;
-
-        // advance type
-        switch nodeType {
-            case 0u: { nodeType = 1u; } // A→B
-            case 1u: { nodeType = 2u; } // B→C
-            case 2u: { nodeType = 0u; } // C→A
-            default: { }
-        }
-
-        if id == 0u { break; }
-        depth += 1u;
-    }
-
-    // Level-based visibility and growth animation
-    let level_spawn_time = f32(depth) * push_constants.spawn_delay;
-    let time_since_spawn = push_constants.time - level_spawn_time;
-
-    // Hide quads that haven't spawned yet
-    var growth_factor = 0.0;
-    var alpha = 0.0;
-
-    if time_since_spawn >= 0.0 {
-        // Smooth growth animation over 0.5 seconds
-        let grow_duration = 0.5;
-        let grow_progress = clamp(time_since_spawn / grow_duration, 0.0, 1.0);
-
-        // Smooth ease-out growth curve with staggered timing based on quad_id
-        let id_delay = f32(quad_id) * 0.01; // Small delay per quad
-        let adjusted_progress = clamp((time_since_spawn - id_delay) / grow_duration, 0.0, 1.0);
-        growth_factor = 1.0 - pow(1.0 - adjusted_progress, 3.0);
-        alpha = growth_factor;
-    }
-    // apply camera zoom: scale positions and sizes so we "zoom through" the hierarchy
-    // add breathing effect - fractal pulses gently
-    let breathing = 1.0 + sin(push_constants.time * 0.6) * 0.03;
-    let world_pos = pos * camera.zoom * breathing;
     quads[quad_id].position = world_pos + vec2<f32>(camera.x, camera.y);
-    quads[quad_id].size = vec2<f32>(base_size * scale * camera.zoom * breathing * growth_factor);
+    quads[quad_id].size = quad_size * camera.zoom;
+    quads[quad_id].rotation = sin(f32(quad_id) * 0.234 + push_constants.time * 1.8) * 1.5 + chaos_factor;
 
-    // rotation based on fractal structure: position, scale, and type influence rotation
-    let position_influence = length(pos) * 0.3; // rotation influenced by distance from origin
-    let scale_influence = scale * 2.0; // smaller elements rotate faster
-    let type_cycle = f32(nodeType) * 2.094; // different types have phase offsets
-    let depth_factor = f32(depth) * 0.5;
+    // Trippy paint splatter colors with wild variations
+    let color_shift = sin(f32(quad_id) * 0.167 + push_constants.time * 0.5);
+    let color_pulse = cos(f32(quad_id) * 0.891 + push_constants.time * 0.2);
 
-    quads[quad_id].rotation = position_influence + scale_influence + type_cycle + depth_factor;
+    let base_colors = array<vec3<f32>, 2>(
+        vec3<f32>(0.2, 0.4, 9.9),  // Deep blue
+        vec3<f32>(0.2, 0.4, 9.9),  // Deep blue
+    );
 
-    // color depends on type & depth, with fade-in alpha
-    let hue = f32(nodeType) * 2.0 + f32(depth) * 0.3 + push_constants.time * 0.5;
+    let color_index = u32(abs(color_shift * 2.5)) % 5u;
+    let base_color = select(
+        base_colors[0],
+        base_colors[1],
+        color_index == 1u
+    );
+    let paint_color = base_color + vec3<f32>(color_pulse * 0.3, color_shift * 0.2, chaos_factor * 0.4) ;
+
+    let alpha_variation = 0.3 + abs(sin(f32(quad_id) * 0.678 + push_constants.time * 1.9)) * 0.7;
+
     quads[quad_id].color = vec4<f32>(
-        1.0,
-        1.0,
-        1.0,
-        alpha
+        paint_color.r,
+        paint_color.g,
+        paint_color.b,
+        alpha_variation
     );
 }
+
