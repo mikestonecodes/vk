@@ -8,7 +8,7 @@ import "core:time"
 import vk "vendor:vulkan"
 import "vendor:glfw"
 
-QUAD_COUNT :: 80000
+QUAD_COUNT :: 10000
 
 
 // Dual buffer system for efficient culling

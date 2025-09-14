@@ -41,6 +41,11 @@ scan_once :: proc() -> bool {
 }
 
 main :: proc() {
+
+	// Clear odin-launcher.reload.log
+	system("echo '' > odin-launcher.reload.log")
+
+
 	// Get directory from command line arguments
 	args := os.args
 	if len(args) < 2 {
@@ -70,20 +75,27 @@ main :: proc() {
 		}
 	}
 
+	build_result := system("odin build . ")
+	if build_result == 0 {
+		system("echo '' > odin-launcher.reload.log")
+		// Only run if build succeeded
+		system("nohup ./vk > odin-launcher.reload.log 2>&1 &")
+	}
+
 	for {
 		if scan_once() {
 			fmt.println("Starting new build...")
-			system(
-				strings.clone_to_cstring(
-					fmt.aprintf("killall vk"),
-				),
-			)
-			system("odin build . ")
-			system(
-				strings.clone_to_cstring(
-					fmt.aprintf("./vk &"),
-				),
-			)
+
+			// Kill existing process
+			system("killall vk")
+
+			// Build the project
+			build_result := system("odin build . ")
+
+			if build_result == 0 {
+				// Only run if build succeeded
+				system("nohup ./vk > odin-launcher.reload.log 2>&1 &")
+			}
 		}
 		time.sleep(500 * time.Millisecond)
 	}
