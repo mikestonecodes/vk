@@ -1,5 +1,7 @@
 DEBUG: Initializing GLFW platform
 DEBUG: Initializing GLFW platform
+DEBUG: Initializing GLFW platform
+DEBUG: Initializing GLFW platform
 DEBUG: GLFW platform setup complete
 DEBUG: Getting window size
 DEBUG: Initializing Vulkan
@@ -8,16 +10,26 @@ DEBUG: Loading global Vulkan procedures
 DEBUG: Creating application info
 DEBUG: Application info created
 DEBUG: GLFW platform setup complete
+DEBUG: GLFW platform setup complete
+DEBUG: Getting window size
+DEBUG: Getting window size
+DEBUG: Initializing Vulkan
+DEBUG: Initializing Vulkan
+DEBUG: Loading Vulkan library
+DEBUG: Loading Vulkan library
+DEBUG: Loading global Vulkan procedures
+DEBUG: Loading global Vulkan procedures
+DEBUG: Creating application info
+DEBUG: Creating application info
+DEBUG: Application info created
+DEBUG: Application info created
+DEBUG: GLFW platform setup complete
 DEBUG: Getting window size
 DEBUG: Initializing Vulkan
 DEBUG: Loading Vulkan library
 DEBUG: Loading global Vulkan procedures
 DEBUG: Creating application info
 DEBUG: Application info created
-DEBUG: About to create Vulkan instance
-DEBUG: Validation layers enabled: true
-DEBUG: Extension count: 3
-DEBUG: Layer count: 1
 DEBUG: About to create Vulkan instance
 DEBUG: Validation layers enabled: true
 DEBUG: Extension count: 3
@@ -52,9 +64,6 @@ Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: Removing driver /usr/lib/libvulkan_intel.so due to not having any physical devices
 Validation layer: Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
-DEBUG: CreateInstance returned: SUCCESS
-DEBUG: Instance created successfully
-DEBUG: Loading instance procedures
 Validation layer: Inserted device layer "VK_LAYER_KHRONOS_validation" (libVkLayer_khronos_validation.so)
 Validation layer: Failed to find vkGetDeviceProcAddr in layer "libVkLayer_MESA_device_select.so"
 Validation layer: vkCreateDevice layer callstack setup to:
@@ -70,6 +79,111 @@ Validation layer:            Library:  libVkLayer_khronos_validation.so
 Validation layer:      ||
 Validation layer:    <Device>
 Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "libGLX_nvidia.so.0"
+DEBUG: About to create Vulkan instance
+DEBUG: Validation layers enabled: true
+DEBUG: Extension count: 3
+DEBUG: Layer count: 1
+DEBUG: About to create Vulkan instance
+DEBUG: Validation layers enabled: true
+DEBUG: Extension count: 3
+DEBUG: Layer count: 1
+DEBUG: CreateInstance returned: SUCCESS
+DEBUG: Instance created successfully
+DEBUG: Loading instance procedures
+DEBUG: Creating Vulkan surface
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:      Sorted order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:      Sorted order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+DEBUG: CreateInstance returned: SUCCESS
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+DEBUG: Instance created successfully
+Validation layer:      Sorted order:
+DEBUG: Loading instance procedures
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:      Sorted order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: Removing driver /usr/lib/libvulkan_intel.so due to not having any physical devices
+Validation layer: Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
+DEBUG: Creating Vulkan surface
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:      Sorted order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:      Sorted order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:      Sorted order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:      Sorted order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: Inserted device layer "VK_LAYER_KHRONOS_validation" (libVkLayer_khronos_validation.so)
+Validation layer: Failed to find vkGetDeviceProcAddr in layer "libVkLayer_MESA_device_select.so"
+Validation layer: vkCreateDevice layer callstack setup to:
+Validation layer:    <Application>
+Validation layer:      ||
+Validation layer:    <Loader>
+Validation layer:      ||
+Validation layer:    VK_LAYER_KHRONOS_validation
+Validation layer:            Type: Explicit
+Validation layer:            Enabled By: By the Application
+Validation layer: Removing driver /usr/lib/libvulkan_intel.so due to not having any physical devices
+Validation layer:            Manifest: /usr/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json
+Validation layer: Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
+Validation layer:            Library:  libVkLayer_khronos_validation.so
+Validation layer:      ||
+Validation layer:    <Device>
+Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "libGLX_nvidia.so.0"
+Validation layer: Inserted device layer "VK_LAYER_KHRONOS_validation" (libVkLayer_khronos_validation.so)
+Validation layer: Failed to find vkGetDeviceProcAddr in layer "libVkLayer_MESA_device_select.so"
+Validation layer: vkCreateDevice layer callstack setup to:
+Validation layer:    <Application>
+Validation layer:      ||
+Validation layer:    <Loader>
+Validation layer:      ||
+Validation layer:    VK_LAYER_KHRONOS_validation
+Validation layer:            Type: Explicit
+Validation layer:            Enabled By: By the Application
+Validation layer:            Manifest: /usr/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json
+Validation layer:            Library:  libVkLayer_khronos_validation.so
+Validation layer:      ||
+Validation layer:    <Device>
+Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "libGLX_nvidia.so.0"
+DEBUG: About to create Vulkan instance
+DEBUG: Validation layers enabled: true
+DEBUG: Extension count: 3
+DEBUG: Layer count: 1
+DEBUG: CreateInstance returned: SUCCESS
+DEBUG: Instance created successfully
+DEBUG: Loading instance procedures
 DEBUG: Creating Vulkan surface
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
@@ -114,15 +228,36 @@ Validation layer:    <Device>
 Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "libGLX_nvidia.so.0"
 DEBUG: Loading device procedures
 DEBUG: Creating swapchain
+DEBUG: Loading device procedures
+DEBUG: Creating swapchain
 DEBUG: Initializing resources
 DEBUG: Loading device procedures
 DEBUG: Creating swapchain
+DEBUG: Initializing resources
+DEBUG: Loading texture from file: test3.png
+DEBUG: File size: 513626 bytes
+DEBUG: Loading device procedures
+DEBUG: Creating swapchain
+DEBUG: Initializing resources
 DEBUG: Loading texture from file: test3.png
 DEBUG: File size: 513626 bytes
 DEBUG: Initializing resources
 DEBUG: Loading texture from file: test3.png
 DEBUG: File size: 513626 bytes
+DEBUG: Loading texture from file: test3.png
+DEBUG: File size: 513626 bytes
 DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Staging buffer created
+DEBUG: Mapping staging buffer memory...
+DEBUG: Copying data to staging buffer...
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Unmapping staging buffer...
+DEBUG: Creating texture image...
 DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
 DEBUG: Creating staging buffer...
 DEBUG: Staging buffer created
@@ -130,27 +265,47 @@ DEBUG: Mapping staging buffer memory...
 DEBUG: Copying data to staging buffer...
 DEBUG: Unmapping staging buffer...
 DEBUG: Creating texture image...
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
 DEBUG: Texture image created
 DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
-DEBUG: Image dimensions: 1024 x 1024 channels: 4
-DEBUG: Copying buffer to image...
-DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
-DEBUG: Texture loading complete
-DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
-DEBUG: Creating staging buffer...
 DEBUG: Staging buffer created
 DEBUG: Mapping staging buffer memory...
 DEBUG: Copying data to staging buffer...
+DEBUG: Texture image created
+DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
 DEBUG: Unmapping staging buffer...
 DEBUG: Creating texture image...
+DEBUG: Copying buffer to image...
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
+DEBUG: Texture loading complete
+DEBUG: Copying buffer to image...
+DEBUG: Staging buffer created
+DEBUG: Mapping staging buffer memory...
+DEBUG: Copying data to staging buffer...
+DEBUG: Texture image created
+DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
+DEBUG: Unmapping staging buffer...
+DEBUG: Creating texture image...
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
 DEBUG: Creating render pass...
+DEBUG: Texture loading complete
 DEBUG: Creating framebuffer...
 DEBUG: Initialization complete
 DEBUG: Vulkan init complete
+Discovered 0 shaders: 
 DEBUG: Texture image created
 DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
-Discovered 0 shaders: 
 DEBUG: Copying buffer to image...
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
+DEBUG: Texture loading complete
+DEBUG: Creating render pass...
+DEBUG: Creating framebuffer...
+DEBUG: Copying buffer to image...
+DEBUG: Initialization complete
+DEBUG: Vulkan init complete
+Discovered 0 shaders: 
 DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
 DEBUG: Texture loading complete
 DEBUG: Creating render pass...
@@ -158,46 +313,35 @@ DEBUG: Creating framebuffer...
 DEBUG: Initialization complete
 DEBUG: Vulkan init complete
 Discovered 0 shaders: 
+DEBUG: Creating render pass...
+DEBUG: Creating framebuffer...
+DEBUG: Initialization complete
+DEBUG: Vulkan init complete
+Discovered 0 shaders: 
 REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=800, height=600
 REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=800, height=600
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pDepthStencilState is NULL when rasterization is enabled and subpass 0 uses a depth/stencil attachment.
-The Vulkan spec states: If renderPass is not VK_NULL_HANDLE, the pipeline is being created with fragment shader state, and subpass uses a depth/stencil attachment, and related dynamic state is not set, pDepthStencilState must be a valid pointer to a valid VkPipelineDepthStencilStateCreateInfo structure (https://docs.vulkan.org/spec/latest/chapters/pipelines.html#VUID-VkGraphicsPipelineCreateInfo-renderPass-09028)
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0x2d000000002d that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
+REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=800, height=600
+REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=800, height=600
 REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=800, height=600
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pDepthStencilState is NULL when rasterization is enabled and subpass 0 uses a depth/stencil attachment.
-The Vulkan spec states: If renderPass is not VK_NULL_HANDLE, the pipeline is being created with fragment shader state, and subpass uses a depth/stencil attachment, and related dynamic state is not set, pDepthStencilState must be a valid pointer to a valid VkPipelineDepthStencilStateCreateInfo structure (https://docs.vulkan.org/spec/latest/chapters/pipelines.html#VUID-VkGraphicsPipelineCreateInfo-renderPass-09028)
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0x2d000000002d that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
 REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=800, height=600
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0x2d000000002d that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=800, height=600
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=800, height=600
 Window resized to 1866x2056
 Clearing pipeline cache (3 entries)
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0x2d000000002d that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
 DEBUG: Loading texture from file: test3.png
 DEBUG: File size: 513626 bytes
 Window resized to 1866x1026
 Clearing pipeline cache (3 entries)
+Window resized to 1866x666
+Clearing pipeline cache (3 entries)
+Window resized to 1866x486
+Clearing pipeline cache (3 entries)
 DEBUG: Loading texture from file: test3.png
 DEBUG: File size: 513626 bytes
-DEBUG: Image dimensions: 1024 x 1024 channels: 4
-DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
-DEBUG: Creating staging buffer...
-DEBUG: Staging buffer created
-DEBUG: Mapping staging buffer memory...
-DEBUG: Copying data to staging buffer...
-DEBUG: Unmapping staging buffer...
-DEBUG: Creating texture image...
-DEBUG: Texture image created
-DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
-DEBUG: Copying buffer to image...
-DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
-DEBUG: Texture loading complete
-DEBUG: Creating render pass...
-DEBUG: Creating framebuffer...
-DEBUG: Initialization complete
+DEBUG: Loading texture from file: test3.png
+DEBUG: File size: 513626 bytes
+DEBUG: Loading texture from file: test3.png
+DEBUG: File size: 513626 bytes
 DEBUG: Image dimensions: 1024 x 1024 channels: 4
 DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
 DEBUG: Creating staging buffer...
@@ -215,33 +359,6 @@ DEBUG: Creating render pass...
 DEBUG: Creating framebuffer...
 DEBUG: Initialization complete
 REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=2056
-REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=1026
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pDepthStencilState is NULL when rasterization is enabled and subpass 0 uses a depth/stencil attachment.
-The Vulkan spec states: If renderPass is not VK_NULL_HANDLE, the pipeline is being created with fragment shader state, and subpass uses a depth/stencil attachment, and related dynamic state is not set, pDepthStencilState must be a valid pointer to a valid VkPipelineDepthStencilStateCreateInfo structure (https://docs.vulkan.org/spec/latest/chapters/pipelines.html#VUID-VkGraphicsPipelineCreateInfo-renderPass-09028)
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0x680000000068 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
-REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=2056
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pDepthStencilState is NULL when rasterization is enabled and subpass 0 uses a depth/stencil attachment.
-The Vulkan spec states: If renderPass is not VK_NULL_HANDLE, the pipeline is being created with fragment shader state, and subpass uses a depth/stencil attachment, and related dynamic state is not set, pDepthStencilState must be a valid pointer to a valid VkPipelineDepthStencilStateCreateInfo structure (https://docs.vulkan.org/spec/latest/chapters/pipelines.html#VUID-VkGraphicsPipelineCreateInfo-renderPass-09028)
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0x680000000068 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
-REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0x680000000068 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0x680000000068 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
-Window resized to 1866x1026
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0x680000000068 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
-Clearing pipeline cache (3 entries)
-DEBUG: Loading texture from file: test3.png
-DEBUG: File size: 513626 bytes
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0x680000000068 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0x680000000068 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0x680000000068 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
 DEBUG: Image dimensions: 1024 x 1024 channels: 4
 DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
 DEBUG: Creating staging buffer...
@@ -252,34 +369,232 @@ DEBUG: Unmapping staging buffer...
 DEBUG: Creating texture image...
 DEBUG: Texture image created
 DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0x680000000068 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
+DEBUG: Copying buffer to image...
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
+DEBUG: Texture loading complete
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Creating render pass...
+DEBUG: Creating framebuffer...
+DEBUG: Initialization complete
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Staging buffer created
+DEBUG: Mapping staging buffer memory...
+DEBUG: Copying data to staging buffer...
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
+DEBUG: Unmapping staging buffer...
+DEBUG: Creating texture image...
+DEBUG: Staging buffer created
+DEBUG: Mapping staging buffer memory...
+DEBUG: Copying data to staging buffer...
+DEBUG: Texture image created
+DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
+DEBUG: Copying buffer to image...
+DEBUG: Unmapping staging buffer...
+DEBUG: Creating texture image...
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
+DEBUG: Texture image created
+DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
+DEBUG: Texture loading complete
 DEBUG: Copying buffer to image...
 DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
 DEBUG: Texture loading complete
 DEBUG: Creating render pass...
 DEBUG: Creating framebuffer...
 DEBUG: Initialization complete
+DEBUG: Creating render pass...
+DEBUG: Creating framebuffer...
+DEBUG: Initialization complete
 REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=1026
-Validation layer: (Warning - This VUID has now been reported 10 times, which is the duplicated_message_limit value, this will be the last time reporting it).
-vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0x680000000068 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pDepthStencilState is NULL when rasterization is enabled and subpass 0 uses a depth/stencil attachment.
-The Vulkan spec states: If renderPass is not VK_NULL_HANDLE, the pipeline is being created with fragment shader state, and subpass uses a depth/stencil attachment, and related dynamic state is not set, pDepthStencilState must be a valid pointer to a valid VkPipelineDepthStencilStateCreateInfo structure (https://docs.vulkan.org/spec/latest/chapters/pipelines.html#VUID-VkGraphicsPipelineCreateInfo-renderPass-09028)
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0xa300000000a3 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
+REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=666
+REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=486
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=2056
 REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0xa300000000a3 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0xa300000000a3 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0xa300000000a3 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
-Validation layer: vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0xa300000000a3 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
-Validation layer: (Warning - This VUID has now been reported 10 times, which is the duplicated_message_limit value, this will be the last time reporting it).
-vkCmdBeginRenderPass(): pRenderPassBegin->clearValueCount is 1 but there must be at least 2 entries in pClearValues array to account for the highest index attachment in VkRenderPass 0xa300000000a3 that uses VK_ATTACHMENT_LOAD_OP_CLEAR is 2. Note that the pClearValues array is indexed by attachment number so even if some pClearValues entries between 0 and 1 correspond to attachments that aren't cleared they will be ignored.
-The Vulkan spec states: clearValueCount must be greater than the largest attachment index in renderPass specifying a loadOp (or stencilLoadOp, if the attachment has a depth/stencil format) of VK_ATTACHMENT_LOAD_OP_CLEAR (https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkRenderPassBeginInfo-clearValueCount-00902)
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=486
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=666
+Window resized to 1866x1026
+Window resized to 1866x666
+Window resized to 1866x486
+Clearing pipeline cache (3 entries)
+DEBUG: Loading texture from file: test3.png
+DEBUG: File size: 513626 bytes
+Window resized to 1866x716
+Window resized to 1866x536
+Clearing pipeline cache (3 entries)
+Window resized to 1866x536
+Clearing pipeline cache (3 entries)
+DEBUG: Loading texture from file: test3.png
+DEBUG: File size: 513626 bytes
+DEBUG: Loading texture from file: test3.png
+DEBUG: File size: 513626 bytes
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
+DEBUG: Staging buffer created
+DEBUG: Mapping staging buffer memory...
+DEBUG: Copying data to staging buffer...
+DEBUG: Unmapping staging buffer...
+DEBUG: Creating texture image...
+DEBUG: Texture image created
+DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
+DEBUG: Copying buffer to image...
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
+DEBUG: Texture loading complete
+DEBUG: Creating render pass...
+DEBUG: Creating framebuffer...
+DEBUG: Initialization complete
+REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=486
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
+DEBUG: Staging buffer created
+DEBUG: Mapping staging buffer memory...
+DEBUG: Copying data to staging buffer...
+DEBUG: Staging buffer created
+DEBUG: Mapping staging buffer memory...
+DEBUG: Copying data to staging buffer...
+DEBUG: Unmapping staging buffer...
+DEBUG: Creating texture image...
+DEBUG: Unmapping staging buffer...
+DEBUG: Texture image created
+DEBUG: Creating texture image...
+DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
+DEBUG: Copying buffer to image...
+DEBUG: Texture image created
+DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
+DEBUG: Copying buffer to image...
+DEBUG: Texture loading complete
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
+DEBUG: Texture loading complete
+DEBUG: Creating render pass...
+DEBUG: Creating framebuffer...
+DEBUG: Initialization complete
+DEBUG: Creating render pass...
+DEBUG: Creating framebuffer...
+DEBUG: Initialization complete
+REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=536
+REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=536
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=486
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=536
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=536
+Cleaning up GLFW...
+Window resized to 1866x666
+Window resized to 1866x666
+Window resized to 1866x716
+Clearing pipeline cache (3 entries)
+Clearing pipeline cache (3 entries)
+Clearing pipeline cache (3 entries)
+DEBUG: Loading texture from file: test3.png
+DEBUG: File size: 513626 bytes
+DEBUG: Loading texture from file: test3.png
+DEBUG: File size: 513626 bytes
+DEBUG: Loading texture from file: test3.png
+DEBUG: File size: 513626 bytes
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
+DEBUG: Staging buffer created
+DEBUG: Mapping staging buffer memory...
+DEBUG: Copying data to staging buffer...
+DEBUG: Unmapping staging buffer...
+DEBUG: Creating texture image...
+DEBUG: Staging buffer created
+DEBUG: Staging buffer created
+DEBUG: Mapping staging buffer memory...
+DEBUG: Mapping staging buffer memory...
+DEBUG: Copying data to staging buffer...
+DEBUG: Copying data to staging buffer...
+DEBUG: Unmapping staging buffer...
+DEBUG: Creating texture image...
+DEBUG: Unmapping staging buffer...
+DEBUG: Creating texture image...
+DEBUG: Texture image created
+DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
+DEBUG: Texture image created
+DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
+DEBUG: Texture image created
+DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
+DEBUG: Copying buffer to image...
+DEBUG: Copying buffer to image...
+DEBUG: Copying buffer to image...
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
+DEBUG: Texture loading complete
+DEBUG: Texture loading complete
+DEBUG: Texture loading complete
+DEBUG: Creating render pass...
+DEBUG: Creating framebuffer...
+DEBUG: Initialization complete
+DEBUG: Creating render pass...
+DEBUG: Creating framebuffer...
+DEBUG: Initialization complete
+DEBUG: Creating render pass...
+DEBUG: Creating framebuffer...
+DEBUG: Initialization complete
+Validation layer: vkCreateShaderModule(): pCreateInfo->codeSize must be greater than 0.
+The Vulkan spec states: codeSize must be greater than 0 (https://docs.vulkan.org/spec/latest/chapters/shaders.html#VUID-VkShaderModuleCreateInfo-codeSize-01085)
+/usr/include/c++/15.1.1/bits/shared_ptr_base.h:1344: _Tp* std::__shared_ptr_deref(_Tp*) [with _Tp = spirv::Module]: Assertion '__p != nullptr' failed.
+REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=666
+REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=666
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=666
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=666
+Window resized to 1866x1026
+Window resized to 1866x1026
+Clearing pipeline cache (3 entries)
+Clearing pipeline cache (3 entries)
+DEBUG: Loading texture from file: test3.png
+DEBUG: Loading texture from file: test3.png
+DEBUG: File size: 513626 bytes
+DEBUG: File size: 513626 bytes
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
+DEBUG: Staging buffer created
+DEBUG: Mapping staging buffer memory...
+DEBUG: Copying data to staging buffer...
+DEBUG: Staging buffer created
+DEBUG: Mapping staging buffer memory...
+DEBUG: Copying data to staging buffer...
+DEBUG: Unmapping staging buffer...
+DEBUG: Creating texture image...
+DEBUG: Texture image created
+DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
+DEBUG: Unmapping staging buffer...
+DEBUG: Creating texture image...
+DEBUG: Texture image created
+DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
+DEBUG: Copying buffer to image...
+DEBUG: Copying buffer to image...
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
+DEBUG: Texture loading complete
+DEBUG: Texture loading complete
+DEBUG: Creating render pass...
+DEBUG: Creating framebuffer...
+DEBUG: Initialization complete
+DEBUG: Creating render pass...
+DEBUG: Creating framebuffer...
+DEBUG: Initialization complete
+REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=1026
+REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=1026
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
 Cleaning up GLFW...
 Window resized to 1866x2056
 Clearing pipeline cache (3 entries)
@@ -302,30 +617,4 @@ DEBUG: Creating render pass...
 DEBUG: Creating framebuffer...
 DEBUG: Initialization complete
 REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=2056
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pDepthStencilState is NULL when rasterization is enabled and subpass 0 uses a depth/stencil attachment.
-The Vulkan spec states: If renderPass is not VK_NULL_HANDLE, the pipeline is being created with fragment shader state, and subpass uses a depth/stencil attachment, and related dynamic state is not set, pDepthStencilState must be a valid pointer to a valid VkPipelineDepthStencilStateCreateInfo structure (https://docs.vulkan.org/spec/latest/chapters/pipelines.html#VUID-VkGraphicsPipelineCreateInfo-renderPass-09028)
 REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=2056
-Window resized to 1866x1026
-Clearing pipeline cache (3 entries)
-DEBUG: Loading texture from file: test3.png
-DEBUG: File size: 513626 bytes
-DEBUG: Image dimensions: 1024 x 1024 channels: 4
-DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
-DEBUG: Creating staging buffer...
-DEBUG: Staging buffer created
-DEBUG: Mapping staging buffer memory...
-DEBUG: Copying data to staging buffer...
-DEBUG: Unmapping staging buffer...
-DEBUG: Creating texture image...
-DEBUG: Texture image created
-DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
-DEBUG: Copying buffer to image...
-DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
-DEBUG: Texture loading complete
-DEBUG: Creating render pass...
-DEBUG: Creating framebuffer...
-DEBUG: Initialization complete
-REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=1026
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pDepthStencilState is NULL when rasterization is enabled and subpass 0 uses a depth/stencil attachment.
-The Vulkan spec states: If renderPass is not VK_NULL_HANDLE, the pipeline is being created with fragment shader state, and subpass uses a depth/stencil attachment, and related dynamic state is not set, pDepthStencilState must be a valid pointer to a valid VkPipelineDepthStencilStateCreateInfo structure (https://docs.vulkan.org/spec/latest/chapters/pipelines.html#VUID-VkGraphicsPipelineCreateInfo-renderPass-09028)
-REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026

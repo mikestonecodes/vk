@@ -132,10 +132,11 @@ init_render_resources :: proc() {
 	// Create test texture (or load from file)
 	// To load from file instead: textureImage, textureImageMemory, textureImageView, _ = loadTextureFromFile("path/to/texture.png")
 	textureImage, textureImageMemory, textureImageView, _ = loadTextureFromFile("test3.png")
-	fmt.println("DEBUG: Creating render pass...")
-	offscreen_pass = create_render_pass_with_depth(format)
-	fmt.println("DEBUG: Creating framebuffer...")
-	offscreen_fb = create_framebuffer_with_depth(offscreen_pass, offscreenImageView, depthImageView, width, height)
+    fmt.println("DEBUG: Creating render pass...")
+    // Use color-only offscreen pass to render without depth testing.
+    offscreen_pass = create_render_pass(format)
+    fmt.println("DEBUG: Creating framebuffer...")
+    offscreen_fb = create_framebuffer(offscreen_pass, offscreenImageView, width, height)
 	fmt.println("DEBUG: Initialization complete")
 }
 

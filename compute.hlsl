@@ -83,6 +83,9 @@ void main(uint3 global_id : SV_DispatchThreadID) {
             camera[0].zoom /= 1.0 + zoom_speed * dt * 5.0; // zoom out multiplicatively
         }
         camera[0].zoom = max(0.01, camera[0].zoom);
+        // For next frame, draw all quads and preserve deterministic ordering by ID
+        // Host reads this value one frame later, so set it now after reset
+        visible_count[0] = push_constants.quad_count;
     }
 
     // Ensure camera updates and counter reset are visible to all threads
@@ -188,8 +191,8 @@ void main(uint3 global_id : SV_DispatchThreadID) {
 
     // Only add to visible buffer if not culled
     if (!should_cull) {
-        uint visible_index;
-        InterlockedAdd(visible_count[0], 1, visible_index);
+        // Deterministic painter-style ordering: write by quad ID index
+        // This ensures the draw order is exactly by ID
 
         // Apply depth-based alpha and color modifications for better depth perception
         float depth_alpha_factor = clamp(1.0 - computed_depth * 0.3, 0.3, 1.0);
@@ -202,6 +205,6 @@ void main(uint3 global_id : SV_DispatchThreadID) {
             alpha_variation * depth_alpha_factor
         );
 
-        visible_quads[visible_index] = world_quads[quad_id];
+        visible_quads[quad_id] = world_quads[quad_id];
     }
 }
