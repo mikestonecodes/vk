@@ -284,10 +284,10 @@ compute_pass :: proc(
 }
 
 graphics_pass :: proc(
-	shader: string,
-	render_pass: vk.RenderPass,
-	framebuffer: vk.Framebuffer,
-	vertices: u32,
+    shader: string,
+    render_pass: vk.RenderPass,
+    framebuffer: vk.Framebuffer,
+    vertices: u32,
 	instances: u32 = 1,
 	resources: []DescriptorResource = nil,
 	vertex_push_data: rawptr = nil,
@@ -305,13 +305,20 @@ graphics_pass :: proc(
 	pass.graphics.framebuffer = framebuffer
 	pass.graphics.vertices = vertices
 	pass.graphics.instances = instances
-	pass.graphics.resources = resources
+    pass.graphics.resources = resources
 
-	// Convert the f32 slice to a proper clear value slice with depth support
-	pass.graphics.clear_values = []vk.ClearValue {
-		{color = vk.ClearColorValue{float32 = clear_values}},
-		{depthStencil = vk.ClearDepthStencilValue{depth = 1.0, stencil = 0}}, // Far plane = 1.0
-	}
+    // Build clear values matching the render pass attachments
+    // Always clear color. Add a depth clear only if this pass uses the offscreen render pass (which has depth)
+    if render_pass == offscreen_pass {
+        pass.graphics.clear_values = []vk.ClearValue {
+            {color = vk.ClearColorValue{float32 = clear_values}},
+            {depthStencil = vk.ClearDepthStencilValue{depth = 1.0, stencil = 0}}, // Far plane = 1.0
+        }
+    } else {
+        pass.graphics.clear_values = []vk.ClearValue {
+            {color = vk.ClearColorValue{float32 = clear_values}},
+        }
+    }
 
 
 	// Handle push constants - prioritize vertex, then fragment
@@ -431,12 +438,14 @@ execute_graphics_pass :: proc(encoder: ^CommandEncoder, pass: ^GraphicsPassInfo)
 	vk.CmdBindPipeline(encoder.command_buffer, .GRAPHICS, pipeline)
 
 	// Always create and bind descriptor set if pipeline expects descriptors
+	// NOTE: Must match the exact cache key used in get_graphics_pipeline (includes depth flag)
 	graphics_key := fmt.aprintf(
-		"%s+%s+%dx%d",
+		"%s+%s+%dx%d+d%s",
 		pass.vertex_shader,
 		pass.fragment_shader,
 		width,
 		height,
+		has_depth ? "1" : "0",
 	)
 	defer delete(graphics_key)
 
@@ -527,18 +536,19 @@ insert_pass_barrier :: proc(encoder: ^CommandEncoder, from_type: PassType, to_ty
 		dstAccessMask = dst_access,
 	}
 
-	vk.CmdPipelineBarrier(
-		encoder.command_buffer,
-		src_stage,
-		dst_stage,
-		{},
-		1,
-		&memory_barrier,
-		0,
-		nil,
-		0,
-		nil,
-	)
+    // Global memory visibility between passes
+    vk.CmdPipelineBarrier(
+        encoder.command_buffer,
+        src_stage,
+        dst_stage,
+        {},
+        1,
+        &memory_barrier,
+        0,
+        nil,
+        0,
+        nil,
+    )
 }
 
 
@@ -619,16 +629,17 @@ cleanup_pipelines :: proc() {
 }
 // Generic pipeline creation
 get_graphics_pipeline :: proc(
-	vertex_shader: string,
-	fragment_shader: string,
-	render_pass: vk.RenderPass,
-	push_constants: Maybe(PushConstantInfo),
-	enable_depth: bool = false,
+    vertex_shader: string,
+    fragment_shader: string,
+    render_pass: vk.RenderPass,
+    push_constants: Maybe(PushConstantInfo),
+    enable_depth: bool = false,
 ) -> (
-	vk.Pipeline,
-	vk.PipelineLayout,
+    vk.Pipeline,
+    vk.PipelineLayout,
 ) {
-	key := fmt.aprintf("%s+%s+%dx%d", vertex_shader, fragment_shader, width, height)
+    // Include depth state in cache key to avoid reusing pipelines with mismatched depth settings
+    key := fmt.aprintf("%s+%s+%dx%d+d%s", vertex_shader, fragment_shader, width, height, enable_depth ? "1" : "0")
 	defer delete(key)
 
 	if cached, ok := pipeline_cache[key]; ok {
@@ -751,11 +762,12 @@ get_graphics_pipeline :: proc(
 		topology = vk.PrimitiveTopology.TRIANGLE_LIST,
 	}
 
-	viewport := vk.Viewport {
-		width    = f32(width),
-		height   = f32(height),
-		maxDepth = 1.0,
-	}
+    viewport := vk.Viewport {
+        width    = f32(width),
+        height   = f32(height),
+        minDepth = 0.0,
+        maxDepth = 1.0,
+    }
 	scissor := vk.Rect2D {
 		extent = {width, height},
 	}
@@ -779,21 +791,22 @@ get_graphics_pipeline :: proc(
 		rasterizationSamples = {vk.SampleCountFlag._1},
 	}
 
-	color_attachment := vk.PipelineColorBlendAttachmentState {
-		colorWriteMask = {
-			vk.ColorComponentFlag.R,
-			vk.ColorComponentFlag.G,
-			vk.ColorComponentFlag.B,
-			vk.ColorComponentFlag.A,
-		},
-		blendEnable = true,
-		srcColorBlendFactor = vk.BlendFactor.SRC_ALPHA,
-		dstColorBlendFactor = vk.BlendFactor.ONE_MINUS_SRC_ALPHA,
-		colorBlendOp = vk.BlendOp.ADD,
-		srcAlphaBlendFactor = vk.BlendFactor.ONE,
-		dstAlphaBlendFactor = vk.BlendFactor.ZERO,
-		alphaBlendOp = vk.BlendOp.ADD,
-	}
+    color_attachment := vk.PipelineColorBlendAttachmentState {
+        colorWriteMask = {
+            vk.ColorComponentFlag.R,
+            vk.ColorComponentFlag.G,
+            vk.ColorComponentFlag.B,
+            vk.ColorComponentFlag.A,
+        },
+        // Opaque: disable blending for maximal early-Z efficiency
+        blendEnable = false,
+        srcColorBlendFactor = vk.BlendFactor.ONE,
+        dstColorBlendFactor = vk.BlendFactor.ZERO,
+        colorBlendOp = vk.BlendOp.ADD,
+        srcAlphaBlendFactor = vk.BlendFactor.ONE,
+        dstAlphaBlendFactor = vk.BlendFactor.ZERO,
+        alphaBlendOp = vk.BlendOp.ADD,
+    }
 	color_blending := vk.PipelineColorBlendStateCreateInfo {
 		sType           = vk.StructureType.PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
 		attachmentCount = 1,
@@ -865,19 +878,20 @@ get_graphics_pipeline :: proc(
 	}
 
 	// Configure depth testing if enabled
-	if enable_depth {
-		depth_stencil = vk.PipelineDepthStencilStateCreateInfo {
-			sType                 = vk.StructureType.PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-			depthTestEnable       = false,
-			depthWriteEnable      = false,
-			depthCompareOp        = vk.CompareOp.LESS_OR_EQUAL, // Be more permissive
-			depthBoundsTestEnable = false,
-			minDepthBounds        = 0.0,
-			maxDepthBounds        = 1.0,
-			stencilTestEnable     = false,
-		}
-		pipeline_info.pDepthStencilState = &depth_stencil
-	}
+    if enable_depth {
+        // Enable depth testing and writing for early-Z culling
+        depth_stencil = vk.PipelineDepthStencilStateCreateInfo {
+            sType                 = vk.StructureType.PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            depthTestEnable       = true,
+            depthWriteEnable      = true,
+            depthCompareOp        = vk.CompareOp.LESS_OR_EQUAL,
+            depthBoundsTestEnable = false,
+            minDepthBounds        = 0.0,
+            maxDepthBounds        = 1.0,
+            stencilTestEnable     = false,
+        }
+        pipeline_info.pDepthStencilState = &depth_stencil
+    }
 
 	pipeline: vk.Pipeline
 	if vk.CreateGraphicsPipelines(device, {}, 1, &pipeline_info, nil, &pipeline) !=

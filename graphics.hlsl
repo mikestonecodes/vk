@@ -101,7 +101,6 @@ float4 fs_main(VertexOutput input) : SV_Target {
 
     // Blend texture color with quad color and apply all depth effects
     float3 final_color = tex_color.rgb * input.color.rgb * combined_depth_factor;
-    float final_alpha = tex_color.a * input.color.a;
-
-    return float4(final_color, final_alpha);
+    // Force opaque output to maximize early-Z efficacy
+    return float4(final_color, 1.0);
 }

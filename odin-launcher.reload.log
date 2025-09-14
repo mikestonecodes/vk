@@ -1,0 +1,123 @@
+DEBUG: Initializing GLFW platform
+DEBUG: GLFW platform setup complete
+DEBUG: Getting window size
+DEBUG: Initializing Vulkan
+DEBUG: Loading Vulkan library
+DEBUG: Loading global Vulkan procedures
+DEBUG: Creating application info
+DEBUG: Application info created
+DEBUG: About to create Vulkan instance
+DEBUG: Validation layers enabled: true
+DEBUG: Extension count: 3
+DEBUG: Layer count: 1
+DEBUG: CreateInstance returned: SUCCESS
+DEBUG: Instance created successfully
+DEBUG: Loading instance procedures
+DEBUG: Creating Vulkan surface
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:      Sorted order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:      Sorted order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:      Sorted order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:      Sorted order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: Removing driver /usr/lib/libvulkan_intel.so due to not having any physical devices
+Validation layer: Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
+Validation layer: Inserted device layer "VK_LAYER_KHRONOS_validation" (libVkLayer_khronos_validation.so)
+Validation layer: Failed to find vkGetDeviceProcAddr in layer "libVkLayer_MESA_device_select.so"
+Validation layer: vkCreateDevice layer callstack setup to:
+Validation layer:    <Application>
+Validation layer:      ||
+Validation layer:    <Loader>
+Validation layer:      ||
+Validation layer:    VK_LAYER_KHRONOS_validation
+Validation layer:            Type: Explicit
+Validation layer:            Enabled By: By the Application
+Validation layer:            Manifest: /usr/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json
+Validation layer:            Library:  libVkLayer_khronos_validation.so
+Validation layer:      ||
+Validation layer:    <Device>
+Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "libGLX_nvidia.so.0"
+DEBUG: Loading device procedures
+DEBUG: Creating swapchain
+DEBUG: Initializing resources
+DEBUG: Loading texture from file: test3.png
+DEBUG: File size: 513626 bytes
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
+DEBUG: Staging buffer created
+DEBUG: Mapping staging buffer memory...
+DEBUG: Copying data to staging buffer...
+DEBUG: Unmapping staging buffer...
+DEBUG: Creating texture image...
+DEBUG: Texture image created
+DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
+DEBUG: Copying buffer to image...
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
+DEBUG: Texture loading complete
+DEBUG: Creating render pass...
+DEBUG: Creating framebuffer...
+DEBUG: Initialization complete
+DEBUG: Vulkan init complete
+Discovered 0 shaders: 
+REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=800, height=600
+Window resized to 1866x2056
+Clearing pipeline cache (2 entries)
+DEBUG: Loading texture from file: test3.png
+DEBUG: File size: 513626 bytes
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
+DEBUG: Staging buffer created
+DEBUG: Mapping staging buffer memory...
+DEBUG: Copying data to staging buffer...
+DEBUG: Unmapping staging buffer...
+DEBUG: Creating texture image...
+DEBUG: Texture image created
+DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
+DEBUG: Copying buffer to image...
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
+DEBUG: Texture loading complete
+DEBUG: Creating render pass...
+DEBUG: Creating framebuffer...
+DEBUG: Initialization complete
+REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=2056
+Window resized to 1866x1026
+Clearing pipeline cache (2 entries)
+DEBUG: Loading texture from file: test3.png
+DEBUG: File size: 513626 bytes
+DEBUG: Image dimensions: 1024 x 1024 channels: 4
+DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Creating staging buffer...
+DEBUG: Staging buffer created
+DEBUG: Mapping staging buffer memory...
+DEBUG: Copying data to staging buffer...
+DEBUG: Unmapping staging buffer...
+DEBUG: Creating texture image...
+DEBUG: Texture image created
+DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
+DEBUG: Copying buffer to image...
+DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
+DEBUG: Texture loading complete
+DEBUG: Creating render pass...
+DEBUG: Creating framebuffer...
+DEBUG: Initialization complete
+REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=1026

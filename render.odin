@@ -8,7 +8,7 @@ import "core:time"
 import vk "vendor:vulkan"
 import "vendor:glfw"
 
-QUAD_COUNT :: 200000
+QUAD_COUNT :: 9000
 
 
 // Dual buffer system for efficient culling
@@ -148,9 +148,13 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 
 	// Read visible count from GPU buffer
 	mapped_memory: rawptr
-	vk.MapMemory(device, visibleCountBufferMemory, 0, size_of(u32), {}, &mapped_memory)
-	visible_count := (^u32)(mapped_memory)^
-	vk.UnmapMemory(device, visibleCountBufferMemory)
+    vk.MapMemory(device, visibleCountBufferMemory, 0, size_of(u32), {}, &mapped_memory)
+    visible_count := (^u32)(mapped_memory)^
+    vk.UnmapMemory(device, visibleCountBufferMemory)
+    // Fallback to avoid zero-instance first frame due to one-frame latency
+    if visible_count == 0 {
+        visible_count = QUAD_COUNT
+    }
 
 	// Write indirect draw command: {vertexCount, instanceCount, firstVertex, firstInstance}
 	indirect_mapped: rawptr
@@ -206,36 +210,24 @@ graphics_pass :: proc(
 	fragment_push_size: u32 = 0,
 	clear_values: [4]f32 = {0.0, 0.0, 0.0, 1.0},
 	*/
-	render_passes[1] = graphics_pass(
-		shader = "graphics.hlsl",
-		render_pass = offscreen_pass,
-		framebuffer = offscreen_fb,
-		vertices = 6,
-		instances = visible_count, // not used when drawing indirect
-		resources = {visibleBuffer, texture_sampler, textureImageView},
-		vertex_push_data = &VertexPushConstants{screen_width = i32(width), screen_height = i32(height)},
-		vertex_push_size = size_of(VertexPushConstants),
-		clear_values = {0.0, 0.0, 0.0, 1.0}, // Clear color + depth = 1.0 for farthest
-	)
-	// Switch to indirect rendering for the main pass
-	render_passes[1].graphics.indirect_buffer = indirectBuffer
-	render_passes[1].graphics.indirect_offset = 0
+    // Draw the main scene directly to the swapchain (no post-process pass)
+    render_passes[1] = graphics_pass(
+        shader = "graphics.hlsl",
+        render_pass = render_pass,
+        framebuffer = element.framebuffer,
+        vertices = 6,
+        instances = visible_count, // not used when drawing indirect
+        resources = {visibleBuffer, texture_sampler, textureImageView},
+        vertex_push_data = &VertexPushConstants{screen_width = i32(width), screen_height = i32(height)},
+        vertex_push_size = size_of(VertexPushConstants),
+        clear_values = {0.0, 0.0, 0.0, 1.0},
+    )
+    // Switch to indirect rendering for the main pass
+    render_passes[1].graphics.indirect_buffer = indirectBuffer
+    render_passes[1].graphics.indirect_offset = 0
 
-	render_passes[2] = graphics_pass(
-		"post_process.hlsl",
-		render_pass,
-		element.framebuffer,
-		3,
-		1,
-		{offscreenImageView, texture_sampler},
-		nil,
-		0,
-		&PostProcessPushConstants{time = elapsed_time, intensity = 1.0},
-		size_of(PostProcessPushConstants),
-		{0.0, 0.0, 1.0, 1.0}, // Blue clear color
-	)
-
-	execute_passes(&encoder, render_passes[:])
+    // Execute only compute + main graphics passes
+    execute_passes(&encoder, render_passes[0:2])
 	finish_encoding(&encoder)
 }
 

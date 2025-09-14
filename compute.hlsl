@@ -94,27 +94,32 @@ void main(uint3 global_id : SV_DispatchThreadID) {
     float pos_seed_y = (float)quad_id * 0.2718281 + 2000.0; // Different seed for Y
 
     // Create infinite world positions using multiple octaves of noise-like functions
-    float world_scale = 15.0; // How spread out quads are in world space - smaller for denser particles
+    // Concentrate particles closer to the origin to densely fill the screen
+    float world_scale = 1.2; // Smaller spread -> higher on-screen density
     float base_x = sin(pos_seed_x) * world_scale + cos(pos_seed_x * 0.7) * world_scale * 0.5;
     float base_y = sin(pos_seed_y) * world_scale + cos(pos_seed_y * 0.7) * world_scale * 0.5;
 
     // Add chaotic movement and drift for animation
     float chaos_factor = sin((float)quad_id * 0.1 + push_constants.time * 0.01) * cos((float)quad_id * 0.7 + push_constants.time * 1.5);
-    float drift_x = sin((float)quad_id * 0.123 + push_constants.time * 0.08) * 2.0;
-    float drift_y = cos((float)quad_id * 0.456 + push_constants.time * 0.2) * 2.0;
+    // Reduce drift so particles remain within view more consistently
+    float drift_x = sin((float)quad_id * 0.123 + push_constants.time * 0.08) * 0.25;
+    float drift_y = cos((float)quad_id * 0.456 + push_constants.time * 0.2) * 0.25;
 
     // Constant quad size - not dependent on count or grid
-    float2 constant_size = float2(0.08, 0.08); // Fixed size for all quads - smaller for denser appearance
-    float size_variation = 1.0 + sin((float)quad_id * 0.789 + push_constants.time * 0.6) * 0.3; // Small variation
+    // Use smaller quads for a denser, non-blocky appearance
+    float2 constant_size = float2(0.03, 0.03);
+    float size_variation = 1.0 + sin((float)quad_id * 0.789 + push_constants.time * 0.6) * 0.25; // Small variation
     float2 quad_size = constant_size * size_variation;
 
     float2 world_pos = float2(base_x + drift_x, base_y + drift_y);
 
     float2 camera_relative_pos = world_pos + float2(camera[0].x, camera[0].y);
-    float2 final_size = min(quad_size * camera[0].zoom, float2(1.5, 1.5));
+    // Clamp maximum size to avoid huge quads that cause heavy overdraw
+    float2 final_size = min(quad_size * camera[0].zoom, float2(0.3, 0.3));
 
     // Enhanced culling: frustum + size-based performance culling
-    float4 screen_bounds = float4(-1.2, -1.2, 1.2, 1.2); // Slightly expanded for safety
+    // Slightly wider bounds to avoid over-culling due to aspect/transform differences
+    float4 screen_bounds = float4(-1.6, -1.6, 1.6, 1.6);
     float2 quad_half_size = final_size * 0.5;
     float4 quad_bounds = float4(
         camera_relative_pos.x - quad_half_size.x,
@@ -132,15 +137,16 @@ void main(uint3 global_id : SV_DispatchThreadID) {
     // Balanced culling - eliminate worst offenders but keep variety
     float max_size = max(final_size.x, final_size.y);
     float area = final_size.x * final_size.y;
-    bool too_big = max_size > 0.6 || area > 0.2; // Less strict limits
-    bool too_small = max_size < 0.005; // Keep more small quads visible
+    bool too_big = max_size > 0.6 || area > 0.2; // Retain protection from giant quads
+    bool too_small = false; // Do not cull tiny quads; maximize density
 
     // Additional performance-based culling for overlaps
     float distance_from_center = length(camera_relative_pos);
     bool very_close_to_camera = distance_from_center < 0.05;
     bool performance_cull = very_close_to_camera && max_size > 0.4; // Less aggressive
 
-    bool should_cull = outside_frustum || too_big || too_small; // Re-enable culling but remove performance_cull
+    // Temporarily disable culling to guarantee visibility and validate depth path
+    bool should_cull = false;
 
     // Calculate depth with better separation for early Z rejection
     // Use quad ID to create hierarchical depth layers
@@ -150,7 +156,8 @@ void main(uint3 global_id : SV_DispatchThreadID) {
     // Combine level-based depth with size factor for better separation
     float base_depth = quad_level * 0.6; // Level contributes 0.0-0.6
     float size_depth = clamp(size_factor * 0.1, 0.0, 0.4); // Size contributes 0.0-0.4
-    float computed_depth = clamp(base_depth + size_depth, 0.0, 1.0);
+    // Keep depth strictly below clear value to guarantee passing with LESS or LESS_OR_EQUAL
+    float computed_depth = clamp(base_depth + size_depth, 0.0, 0.99);
 
     // Always update world buffer with computed quad data
     world_quads[quad_id].position = camera_relative_pos;
