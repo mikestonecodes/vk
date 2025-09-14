@@ -210,11 +210,11 @@ graphics_pass :: proc(
 	fragment_push_size: u32 = 0,
 	clear_values: [4]f32 = {0.0, 0.0, 0.0, 1.0},
 	*/
-    // Draw the main scene directly to the swapchain (no post-process pass)
+    // Main scene to offscreen target with depth
     render_passes[1] = graphics_pass(
         shader = "graphics.hlsl",
-        render_pass = render_pass,
-        framebuffer = element.framebuffer,
+        render_pass = offscreen_pass,
+        framebuffer = offscreen_fb,
         vertices = 6,
         instances = visible_count, // not used when drawing indirect
         resources = {visibleBuffer, texture_sampler, textureImageView},
@@ -222,13 +222,27 @@ graphics_pass :: proc(
         vertex_push_size = size_of(VertexPushConstants),
         clear_values = {0.0, 0.0, 0.0, 1.0},
     )
-    // Switch to indirect rendering for the main pass
+    // Indirect draw for the main pass
     render_passes[1].graphics.indirect_buffer = indirectBuffer
     render_passes[1].graphics.indirect_offset = 0
 
-    // Execute only compute + main graphics passes
-    execute_passes(&encoder, render_passes[0:2])
-	finish_encoding(&encoder)
+    // Post-process / present: sample offscreen color to swapchain
+    // Provide fragment push constants to satisfy shader layout (intensity used in shader)
+    render_passes[2] = graphics_pass(
+        shader = "post_process.hlsl",
+        render_pass = render_pass,
+        framebuffer = element.framebuffer,
+        vertices = 3,
+        instances = 1,
+        resources = {offscreenImageView, texture_sampler},
+        fragment_push_data = &PostProcessPushConstants{time = elapsed_time, intensity = 1.0},
+        fragment_push_size = size_of(PostProcessPushConstants),
+        clear_values = {0.0, 0.0, 0.0, 1.0},
+    )
+
+    // Execute compute + main (depth) + post-process
+    execute_passes(&encoder, render_passes[0:3])
+    finish_encoding(&encoder)
 }
 
 cleanup_render_resources :: proc() {

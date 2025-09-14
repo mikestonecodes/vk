@@ -246,6 +246,7 @@ GraphicsPassInfo :: struct {
     resources:       []DescriptorResource,
     push_constants:  Maybe(PushConstantInfo),
     clear_values:    []vk.ClearValue,
+    has_depth:       bool,
     // Optional indirect draw configuration
     indirect_buffer: vk.Buffer,
     indirect_offset: vk.DeviceSize,
@@ -288,28 +289,30 @@ graphics_pass :: proc(
     render_pass: vk.RenderPass,
     framebuffer: vk.Framebuffer,
     vertices: u32,
-	instances: u32 = 1,
-	resources: []DescriptorResource = nil,
-	vertex_push_data: rawptr = nil,
-	vertex_push_size: u32 = 0,
-	fragment_push_data: rawptr = nil,
-	fragment_push_size: u32 = 0,
-	clear_values: [4]f32 = {0.0, 0.0, 0.0, 1.0},
+    instances: u32 = 1,
+    resources: []DescriptorResource = nil,
+    vertex_push_data: rawptr = nil,
+    vertex_push_size: u32 = 0,
+    fragment_push_data: rawptr = nil,
+    fragment_push_size: u32 = 0,
+    clear_values: [4]f32 = {0.0, 0.0, 0.0, 1.0},
+    with_depth: bool = false,
 ) -> Pass {
-	pass := Pass {
-		type = .GRAPHICS,
-	}
-	pass.graphics.vertex_shader = shader
-	pass.graphics.fragment_shader = shader
-	pass.graphics.render_pass = render_pass
-	pass.graphics.framebuffer = framebuffer
-	pass.graphics.vertices = vertices
-	pass.graphics.instances = instances
+    pass := Pass {
+        type = .GRAPHICS,
+    }
+    pass.graphics.vertex_shader = shader
+    pass.graphics.fragment_shader = shader
+    pass.graphics.render_pass = render_pass
+    pass.graphics.framebuffer = framebuffer
+    pass.graphics.vertices = vertices
+    pass.graphics.instances = instances
     pass.graphics.resources = resources
+    pass.graphics.has_depth = with_depth
 
     // Build clear values matching the render pass attachments
-    // Always clear color. Add a depth clear only if this pass uses the offscreen render pass (which has depth)
-    if render_pass == offscreen_pass {
+    // Always clear color. Add a depth clear only when requested
+    if with_depth {
         pass.graphics.clear_values = []vk.ClearValue {
             {color = vk.ClearColorValue{float32 = clear_values}},
             {depthStencil = vk.ClearDepthStencilValue{depth = 1.0, stencil = 0}}, // Far plane = 1.0
@@ -407,15 +410,15 @@ execute_compute_pass :: proc(encoder: ^CommandEncoder, pass: ^ComputePassInfo) {
 }
 
 execute_graphics_pass :: proc(encoder: ^CommandEncoder, pass: ^GraphicsPassInfo) {
-	// Enable depth testing for offscreen render pass (which has depth buffer)
-	has_depth := pass.render_pass == offscreen_pass
-	pipeline, layout := get_graphics_pipeline(
-		pass.vertex_shader,
-		pass.fragment_shader,
-		pass.render_pass,
-		pass.push_constants,
-		has_depth,
-	)
+    // Enable depth testing when this pass is configured with depth
+    has_depth := pass.has_depth
+    pipeline, layout := get_graphics_pipeline(
+        pass.vertex_shader,
+        pass.fragment_shader,
+        pass.render_pass,
+        pass.push_constants,
+        has_depth,
+    )
 	if pipeline == {} do return
 
 	render_area := vk.Rect2D {
@@ -439,14 +442,14 @@ execute_graphics_pass :: proc(encoder: ^CommandEncoder, pass: ^GraphicsPassInfo)
 
 	// Always create and bind descriptor set if pipeline expects descriptors
 	// NOTE: Must match the exact cache key used in get_graphics_pipeline (includes depth flag)
-	graphics_key := fmt.aprintf(
-		"%s+%s+%dx%d+d%s",
-		pass.vertex_shader,
-		pass.fragment_shader,
-		width,
-		height,
-		has_depth ? "1" : "0",
-	)
+    graphics_key := fmt.aprintf(
+        "%s+%s+%dx%d+d%s",
+        pass.vertex_shader,
+        pass.fragment_shader,
+        width,
+        height,
+        has_depth ? "1" : "0",
+    )
 	defer delete(graphics_key)
 
 	// Use shader names only for descriptor set caching (dimensions don't affect descriptor layout)
@@ -798,13 +801,14 @@ get_graphics_pipeline :: proc(
             vk.ColorComponentFlag.B,
             vk.ColorComponentFlag.A,
         },
-        // Opaque: disable blending for maximal early-Z efficiency
-        blendEnable = false,
-        srcColorBlendFactor = vk.BlendFactor.ONE,
-        dstColorBlendFactor = vk.BlendFactor.ZERO,
+        // Enable standard alpha blending for textures with transparency
+        blendEnable = true,
+        srcColorBlendFactor = vk.BlendFactor.SRC_ALPHA,
+        dstColorBlendFactor = vk.BlendFactor.ONE_MINUS_SRC_ALPHA,
         colorBlendOp = vk.BlendOp.ADD,
+        // Write alpha as srcAlpha to target
         srcAlphaBlendFactor = vk.BlendFactor.ONE,
-        dstAlphaBlendFactor = vk.BlendFactor.ZERO,
+        dstAlphaBlendFactor = vk.BlendFactor.ONE_MINUS_SRC_ALPHA,
         alphaBlendOp = vk.BlendOp.ADD,
     }
 	color_blending := vk.PipelineColorBlendStateCreateInfo {
