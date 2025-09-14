@@ -1,10 +1,12 @@
 [Desktop Entry]
 Type=Application
 Name=Odin Launcher (Watcher)
-Comment=Watch a project folder and run `odin build` on changes
+Comment=Watch a project folder and run `odin run` on changes
 Terminal=false
-TryExec=/home/mike/Source/vk/tools/tools
+TryExec=odin
 Exec=/home/mike/Source/vk/tools/tools /home/mike/Source/vk
 Path=/home/mike/Source/vk
 Icon=utilities-terminal
 Categories=Development;
+SingleMainWindow=true
+StartupNotify=true

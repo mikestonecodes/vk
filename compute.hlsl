@@ -65,8 +65,7 @@ void main(uint3 global_id : SV_DispatchThreadID) {
         uint dummy;
         InterlockedExchange(visible_count[0], 0, dummy);
 
-        float move_speed = 2.0;
-        float zoom_speed = 0.1;
+        float move_speed = 1.0;
         float dt = push_constants.delta_time;
 
         // Update camera based on input (WASD)
@@ -75,13 +74,7 @@ void main(uint3 global_id : SV_DispatchThreadID) {
         if (push_constants.key_w != 0) { camera[0].y += move_speed * dt; }
         if (push_constants.key_s != 0) { camera[0].y -= move_speed * dt; }
 
-        // Zoom with q/e - multiplicative zoom for smooth "through" feeling
-        if (push_constants.key_e != 0) {
-            camera[0].zoom *= 1.0 + zoom_speed * dt * 5.0; // zoom in multiplicatively
-        }
-        if (push_constants.key_q != 0) {
-            camera[0].zoom /= 1.0 + zoom_speed * dt * 5.0; // zoom out multiplicatively
-        }
+        // Keep zoom fixed; ignore Q/E input
         camera[0].zoom = max(0.01, camera[0].zoom);
         // For next frame, draw all quads and preserve deterministic ordering by ID
         // Host reads this value one frame later, so set it now after reset
