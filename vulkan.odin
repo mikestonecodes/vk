@@ -271,6 +271,7 @@ clear_pipeline_cache :: proc() {
 			vk.DestroyDescriptorSetLayout(device, layout, nil)
 		}
 		delete(cached.descriptor_set_layouts)
+		delete(cached.descriptor_bindings)
 		delete(key)
 	}
 
@@ -827,6 +828,8 @@ texture_sampler: vk.Sampler
 PostProcessPushConstants :: struct {
     time: f32,
     intensity: f32,
+    texture_width: u32,
+    texture_height: u32,
 }
 
 
@@ -853,6 +856,10 @@ ComputePushConstants :: struct {
 	key_d: u32,
 	key_q: u32,
 	key_e: u32,
+	texture_width: u32,
+	texture_height: u32,
+	splat_extent: f32,
+	fog_strength: f32,
 }
 
 VertexPushConstants :: struct {
@@ -1255,6 +1262,11 @@ transitionImageLayout :: proc(image: vk.Image, format: vk.Format, old_layout: vk
 		barrier.dstAccessMask = {vk.AccessFlag.SHADER_READ}
 		source_stage = {vk.PipelineStageFlag.TRANSFER}
 		destination_stage = {vk.PipelineStageFlag.FRAGMENT_SHADER}
+	} else if old_layout == vk.ImageLayout.UNDEFINED && new_layout == vk.ImageLayout.GENERAL {
+		barrier.srcAccessMask = {}
+		barrier.dstAccessMask = {vk.AccessFlag.SHADER_READ, vk.AccessFlag.SHADER_WRITE}
+		source_stage = {vk.PipelineStageFlag.TOP_OF_PIPE}
+		destination_stage = {vk.PipelineStageFlag.COMPUTE_SHADER}
 	}
 
 	vk.CmdPipelineBarrier(
@@ -1321,13 +1333,6 @@ endSingleTimeCommands :: proc(cmd_buffer: vk.CommandBuffer) {
 	vk.QueueSubmit(queue, 1, &submit_info, {})
 	vk.QueueWaitIdle(queue)
 	vk.FreeCommandBuffers(device, command_pool, 1, &cmd_buffer_ptr)
-}
-
-
-
-
-getOffscreenImageView :: proc() -> vk.ImageView {
-	return offscreenImageView
 }
 
 

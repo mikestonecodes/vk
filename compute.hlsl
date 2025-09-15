@@ -21,6 +21,10 @@ struct PushConstants {
     uint key_d;
     uint key_q;
     uint key_e;
+    uint texture_width;
+    uint texture_height;
+    float splat_extent;
+    float fog_strength;
 };
 
 [[vk::push_constant]] PushConstants push_constants;
@@ -51,6 +55,7 @@ RWStructuredBuffer<Quad> world_quads : register(u0);
 RWStructuredBuffer<Quad> visible_quads : register(u1);
 RWStructuredBuffer<uint> visible_count : register(u2);
 RWStructuredBuffer<CameraState> camera : register(u3);
+RWStructuredBuffer<uint> accum_buffer : register(u4);
 
 [numthreads(64, 1, 1)]
 void main(uint3 global_id : SV_DispatchThreadID) {
@@ -197,6 +202,62 @@ void main(uint3 global_id : SV_DispatchThreadID) {
             paint_color.b * depth_brightness,
             alpha_variation * depth_alpha_factor
         );
+
+        // Project particle into the accumulation texture and splat with a soft falloff
+        uint tex_w = push_constants.texture_width;
+        uint tex_h = push_constants.texture_height;
+        if (tex_w > 0 && tex_h > 0) {
+            float aspect_ratio = (float)tex_w / max(1.0, (float)tex_h);
+            float2 ndc = float2(camera_relative_pos.x / aspect_ratio, camera_relative_pos.y);
+            float2 uv = ndc * 0.5 + 0.5;
+
+            bool inside = uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0;
+            if (inside) {
+                float2 dims = float2((float)tex_w, (float)tex_h);
+                float2 pixel_f = uv * (dims - 1.0);
+                int2 base_pixel = int2(pixel_f + 0.5);
+
+                float splat_extent = max(push_constants.splat_extent, 0.0);
+                int radius = min(3, max(1, (int)ceil(splat_extent)));
+                float gaussian_base = 0.65 + push_constants.fog_strength * 0.45;
+
+                const float COLOR_SCALE = 4096.0;
+                const float WEIGHT_SCALE = 2048.0;
+
+                float depth_energy = saturate(1.0 - computed_depth * 0.9);
+                float fog_boost = exp(-computed_depth * 2.2) * push_constants.fog_strength;
+                float intensity = saturate(world_quads[quad_id].color.a * 0.5 + depth_energy * 0.7 + fog_boost);
+                float3 deposit_color = saturate(world_quads[quad_id].color.rgb * intensity);
+
+                for (int oy = -radius; oy <= radius; ++oy) {
+                    for (int ox = -radius; ox <= radius; ++ox) {
+                        int2 pixel_coord = base_pixel + int2(ox, oy);
+                        if (pixel_coord.x < 0 || pixel_coord.y < 0 || pixel_coord.x >= int(tex_w) || pixel_coord.y >= int(tex_h)) {
+                            continue;
+                        }
+
+                        float distance2 = (float)(ox * ox + oy * oy);
+                        float falloff = exp(-distance2 * gaussian_base);
+                        float local_weight = intensity * falloff;
+                        if (local_weight <= 0.0001) {
+                            continue;
+                        }
+
+                        float3 local_color = saturate(deposit_color * falloff);
+                        uint encoded_r = (uint)round(local_color.r * COLOR_SCALE);
+                        uint encoded_g = (uint)round(local_color.g * COLOR_SCALE);
+                        uint encoded_b = (uint)round(local_color.b * COLOR_SCALE);
+                        uint encoded_w = max(1, (uint)round(local_weight * WEIGHT_SCALE));
+
+                        uint base_index = (uint(pixel_coord.y) * tex_w + uint(pixel_coord.x)) * 4;
+                        InterlockedAdd(accum_buffer[base_index + 0], encoded_r);
+                        InterlockedAdd(accum_buffer[base_index + 1], encoded_g);
+                        InterlockedAdd(accum_buffer[base_index + 2], encoded_b);
+                        InterlockedAdd(accum_buffer[base_index + 3], encoded_w);
+                    }
+                }
+            }
+        }
 
         visible_quads[quad_id] = world_quads[quad_id];
     }
