@@ -325,6 +325,7 @@ image_count: c.uint32_t = 0
 timeline_semaphore: vk.Semaphore
 timeline_value: c.uint64_t = 0
 image_available_semaphore: vk.Semaphore
+independent_blend_supported: bool
 
 
 
@@ -783,32 +784,47 @@ setup_physical_device :: proc() -> bool {
 }
 
 create_logical_device :: proc() -> bool {
-	queue_priority: f32 = 1.0
-	queue_create_info := vk.DeviceQueueCreateInfo {
-		sType            = vk.StructureType.DEVICE_QUEUE_CREATE_INFO,
-		queueFamilyIndex = queue_family_index,
-		queueCount       = 1,
-		pQueuePriorities = &queue_priority,
-	}
+        queue_priority: f32 = 1.0
+        queue_create_info := vk.DeviceQueueCreateInfo {
+                sType            = vk.StructureType.DEVICE_QUEUE_CREATE_INFO,
+                queueFamilyIndex = queue_family_index,
+                queueCount       = 1,
+                pQueuePriorities = &queue_priority,
+        }
 
-	// Enable timeline semaphore features
-	timeline_features := vk.PhysicalDeviceTimelineSemaphoreFeatures {
-		sType             = vk.StructureType.PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
-		timelineSemaphore = true,
-	}
+        // Query device feature support so we only enable capabilities that exist on the runtime
+        available_features: vk.PhysicalDeviceFeatures
+        vk.GetPhysicalDeviceFeatures(phys_device, &available_features)
 
-	device_create_info := vk.DeviceCreateInfo {
-		sType                   = vk.StructureType.DEVICE_CREATE_INFO,
-		pNext                   = &timeline_features,
-		queueCreateInfoCount    = 1,
-		pQueueCreateInfos       = &queue_create_info,
-		enabledLayerCount       = ENABLE_VALIDATION ? len(layer_names) : 0,
-		ppEnabledLayerNames     = ENABLE_VALIDATION ? raw_data(layer_names[:]) : nil,
-		enabledExtensionCount   = len(device_extension_names),
-		ppEnabledExtensionNames = raw_data(device_extension_names[:]),
-	}
+        // Weighted OIT relies on separate blend equations per render target. Enable the
+        // independent blend feature when the driver exposes it and remember the result
+        device_features := vk.PhysicalDeviceFeatures{}
+        if available_features.independentBlend {
+                device_features.independentBlend = true
+                independent_blend_supported = true
+        } else {
+                fmt.println("Warning: GPU does not support independentBlend; weighted OIT will fall back to basic blending")
+        }
 
-	result := vk.CreateDevice(phys_device, &device_create_info, nil, &device)
+        // Enable timeline semaphore features
+        timeline_features := vk.PhysicalDeviceTimelineSemaphoreFeatures {
+                sType             = vk.StructureType.PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
+                timelineSemaphore = true,
+        }
+
+        device_create_info := vk.DeviceCreateInfo {
+                sType                   = vk.StructureType.DEVICE_CREATE_INFO,
+                pNext                   = &timeline_features,
+                queueCreateInfoCount    = 1,
+                pQueueCreateInfos       = &queue_create_info,
+                enabledLayerCount       = ENABLE_VALIDATION ? len(layer_names) : 0,
+                ppEnabledLayerNames     = ENABLE_VALIDATION ? raw_data(layer_names[:]) : nil,
+                enabledExtensionCount   = len(device_extension_names),
+                ppEnabledExtensionNames = raw_data(device_extension_names[:]),
+                pEnabledFeatures        = &device_features,
+        }
+
+        result := vk.CreateDevice(phys_device, &device_create_info, nil, &device)
 	if result != vk.Result.SUCCESS {
 		fmt.printf("Failed to create device: %d\n", result)
 		return false

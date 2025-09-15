@@ -52,6 +52,7 @@ descriptor_set_cache: map[string]CachedDescriptorSet
 
 // Global descriptor pool for all descriptor sets
 global_descriptor_pool: vk.DescriptorPool
+independent_blend_fallback_logged: bool
 
 // Initialize global descriptor pool
 init_descriptor_pool :: proc() -> bool {
@@ -844,6 +845,7 @@ get_graphics_pipeline :: proc(
         blend_attachments := make([dynamic]vk.PipelineColorBlendAttachmentState, int(color_target_count))
         defer delete(blend_attachments)
 
+        fallback_uniform_blend := color_target_count > 1 && !independent_blend_supported
         for i in 0 ..< len(blend_attachments) {
                 attachment := &blend_attachments[i]
                 attachment.colorWriteMask = {
@@ -854,7 +856,18 @@ get_graphics_pipeline :: proc(
                 }
                 attachment.blendEnable = true
 
-                if color_target_count > 1 && i == 0 {
+                if fallback_uniform_blend {
+                        if !independent_blend_fallback_logged {
+                                fmt.println("Warning: independentBlend feature is disabled; using standard alpha blending for all attachments")
+                                independent_blend_fallback_logged = true
+                        }
+                        attachment.srcColorBlendFactor = vk.BlendFactor.SRC_ALPHA
+                        attachment.dstColorBlendFactor = vk.BlendFactor.ONE_MINUS_SRC_ALPHA
+                        attachment.colorBlendOp = vk.BlendOp.ADD
+                        attachment.srcAlphaBlendFactor = vk.BlendFactor.ONE
+                        attachment.dstAlphaBlendFactor = vk.BlendFactor.ONE_MINUS_SRC_ALPHA
+                        attachment.alphaBlendOp = vk.BlendOp.ADD
+                } else if color_target_count > 1 && i == 0 {
                         // Weighted blended OIT accumulation target uses additive blending
                         attachment.srcColorBlendFactor = vk.BlendFactor.ONE
                         attachment.dstColorBlendFactor = vk.BlendFactor.ONE
