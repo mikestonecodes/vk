@@ -22,6 +22,7 @@ PipelineEntry :: struct {
 	pipeline:               vk.Pipeline,
 	layout:                 vk.PipelineLayout,
 	descriptor_set_layouts: []vk.DescriptorSetLayout,
+	descriptor_bindings:    []vk.DescriptorSetLayoutBinding,
 }
 
 // Function to get descriptor set layout for a specific pipeline
@@ -55,11 +56,12 @@ global_descriptor_pool: vk.DescriptorPool
 
 // Initialize global descriptor pool
 init_descriptor_pool :: proc() -> bool {
-	pool_sizes := [4]vk.DescriptorPoolSize {
+	pool_sizes := [5]vk.DescriptorPoolSize {
 		{type = .STORAGE_BUFFER, descriptorCount = 1000},
 		{type = .UNIFORM_BUFFER, descriptorCount = 1000},
 		{type = .SAMPLED_IMAGE, descriptorCount = 1000},
 		{type = .SAMPLER, descriptorCount = 1000},
+		{type = .STORAGE_IMAGE, descriptorCount = 1000},
 	}
 
 	pool_info := vk.DescriptorPoolCreateInfo {
