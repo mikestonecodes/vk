@@ -85,7 +85,7 @@ void main(uint3 global_id : SV_DispatchThreadID) {
         // Zoom controls (Q = zoom in, E = zoom out)
         if (push_constants.key_q != 0) { camera[0].zoom += zoom_speed * dt; }
         if (push_constants.key_e != 0) { camera[0].zoom -= zoom_speed * dt; }
-        camera[0].zoom = clamp(camera[0].zoom, 0.05, 30.0);
+        camera[0].zoom = max(0.01, camera[0].zoom);
         // For next frame, draw all quads and preserve deterministic ordering by ID
         // Host reads this value one frame later, so set it now after reset
         visible_count[0] = push_constants.quad_count;
