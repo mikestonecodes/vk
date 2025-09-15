@@ -147,8 +147,7 @@ acquire_next_image :: proc() -> bool {
 
 
 ShaderInfo :: struct {
-	wgsl_path: string,
-	spv_path: string,
+	source_path: string,
 	last_modified: time.Time,
 }
 
@@ -161,6 +160,13 @@ init_shader_times :: proc() {
 }
 
 discover_shaders :: proc() {
+	if shader_registry == nil {
+		shader_registry = make(map[string]ShaderInfo)
+	} else {
+		delete(shader_registry)
+		shader_registry = make(map[string]ShaderInfo)
+	}
+
 	handle, err := os.open(".")
 	if err != nil {
 		fmt.println("Failed to open current directory for shader discovery")
@@ -176,12 +182,9 @@ discover_shaders :: proc() {
 	defer delete(files)
 
 	for file in files {
-		if strings.has_suffix(file.name, ".wgsl") {
-			spv_name, _ := strings.replace(file.name, ".wgsl", ".spv", 1)
-
+		if strings.has_suffix(file.name, ".hlsl") {
 			shader_registry[strings.clone(file.name)] = ShaderInfo{
-				wgsl_path = strings.clone(file.name),
-				spv_path = spv_name,
+				source_path = strings.clone(file.name),
 				last_modified = file.modification_time,
 			}
 		}
@@ -205,7 +208,7 @@ check_shader_reload :: proc() -> bool {
 	defer delete(changed_shaders)
 
 	for name, &info in shader_registry {
-		file_info, err := os.stat(info.wgsl_path)
+		file_info, err := os.stat(info.source_path)
 		if err != nil {
 			continue
 		}
@@ -244,15 +247,9 @@ compile_changed_shaders :: proc(changed_shaders: []string) -> bool {
 			continue
 		}
 
-		cmd := fmt.aprintf("./naga %s %s", info.wgsl_path, info.spv_path)
-		defer delete(cmd)
-
-		cmd_cstr := strings.clone_to_cstring(cmd)
-		defer delete(cmd_cstr)
-
-		fmt.printf("Compiling %s -> %s\n", info.wgsl_path, info.spv_path)
-		if system(cmd_cstr) != 0 {
-			fmt.printf("Failed to compile %s\n", info.wgsl_path)
+		fmt.printf("Compiling shader %s\n", info.source_path)
+		if !compile_shader(info.source_path) {
+			fmt.printf("Failed to compile %s\n", info.source_path)
 			success = false
 		}
 	}
