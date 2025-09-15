@@ -5,8 +5,9 @@ struct PushConstants {
 
 [[vk::push_constant]] PushConstants push_constants;
 
-Texture2D input_texture : register(t0);
-SamplerState texture_sampler : register(s1);
+Texture2D accum_texture : register(t0);
+Texture2D reveal_texture : register(t1);
+SamplerState texture_sampler : register(s2);
 
 struct VertexOutput {
     float4 clip_position : SV_POSITION;
@@ -33,14 +34,29 @@ VertexOutput vs_main(uint vertex_index : SV_VertexID) {
     return output;
 }
 
+float4 sample_composited(float2 uv) {
+    float4 accum = accum_texture.Sample(texture_sampler, uv);
+    float reveal = reveal_texture.Sample(texture_sampler, uv).r;
+    float weight = max(accum.a, 1e-4);
+    float3 resolved = accum.rgb / weight;
+    float alpha = saturate(1.0 - reveal);
+    return float4(resolved * alpha, alpha);
+}
+
+float3 apply_tone_map(float3 color) {
+    float3 tone_mapped = color / (color + float3(1.0, 1.0, 1.0));
+    return pow(tone_mapped, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
+}
+
 float4 fs_main(VertexOutput input_data) : SV_Target {
     uint2 texture_size;
-    input_texture.GetDimensions(texture_size.x, texture_size.y);
+    accum_texture.GetDimensions(texture_size.x, texture_size.y);
     float2 resolution = float2(texture_size);
     float2 uv = input_data.uv;
 
-    // Sample the original color
-    float3 color = input_texture.Sample(texture_sampler, uv).rgb;
+    // Sample the resolved weighted-blended color
+    float4 base_sample = sample_composited(uv);
+    float3 color = base_sample.rgb;
 
     // Apply bloom effect
     float bloom_radius = 3.0;
@@ -50,8 +66,8 @@ float4 fs_main(VertexOutput input_data) : SV_Target {
     for (float x = -1.0; x <= 1.0; x += 1.0) {
         for (float y = -1.0; y <= 1.0; y += 1.0) {
             float2 offset = float2(x, y) * bloom_radius / resolution;
-            float3 sample_color = input_texture.Sample(texture_sampler, uv + offset).rgb;
-            bloom_color += sample_color;
+            float4 bloom_sample = sample_composited(uv + offset);
+            bloom_color += bloom_sample.rgb;
         }
     }
     bloom_color /= bloom_samples;
@@ -59,11 +75,7 @@ float4 fs_main(VertexOutput input_data) : SV_Target {
     // Apply color grading and tone mapping
     float3 bloomed = lerp(color, bloom_color, 0.3);
 
-    // Simple tone mapping (Reinhard)
-    float3 tone_mapped = bloomed / (bloomed + float3(1.0, 1.0, 1.0));
-
-    // Apply gamma correction
-    float3 gamma_corrected = pow(tone_mapped, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
+    float3 gamma_corrected = apply_tone_map(bloomed);
 
     // Add slight vignetting
     float2 center = float2(0.5, 0.5);
@@ -72,9 +84,11 @@ float4 fs_main(VertexOutput input_data) : SV_Target {
 
     // Apply chromatic aberration
     float aberration_strength = 0.002 * push_constants.intensity;
-    float r = input_texture.Sample(texture_sampler, uv + float2(aberration_strength, 0.0)).r;
+    float3 aberration_r_sample = apply_tone_map(sample_composited(uv + float2(aberration_strength, 0.0)).rgb);
+    float3 aberration_b_sample = apply_tone_map(sample_composited(uv - float2(aberration_strength, 0.0)).rgb);
+    float r = aberration_r_sample.r;
     float g = gamma_corrected.g;
-    float b = input_texture.Sample(texture_sampler, uv - float2(aberration_strength, 0.0)).b;
+    float b = aberration_b_sample.b;
 
     float3 final_color = float3(r, g, b) * vignette;
 

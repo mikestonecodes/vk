@@ -29,9 +29,20 @@ lineBufferMemory: vk.DeviceMemory
 cameraBuffer: vk.Buffer
 cameraBufferMemory: vk.DeviceMemory
 
-offscreenImage: vk.Image
-offscreenImageMemory: vk.DeviceMemory
-offscreenImageView: vk.ImageView
+offscreenAccumImage: vk.Image
+offscreenAccumImageMemory: vk.DeviceMemory
+offscreenAccumImageView: vk.ImageView
+offscreenRevealImage: vk.Image
+offscreenRevealImageMemory: vk.DeviceMemory
+offscreenRevealImageView: vk.ImageView
+
+OIT_ACCUM_FORMAT :: vk.Format.R16G16B16A16_SFLOAT
+OIT_REVEAL_FORMAT :: vk.Format.R16_SFLOAT
+
+oit_clear_values := [2]vk.ClearValue {
+        {color = vk.ClearColorValue{float32 = {0.0, 0.0, 0.0, 0.0}}},
+        {color = vk.ClearColorValue{float32 = {1.0, 1.0, 1.0, 1.0}}},
+}
 
 // Depth buffer for proper Z-testing
 depthImage: vk.Image
@@ -113,12 +124,19 @@ init_render_resources :: proc() {
 	vk.MapMemory(device, cameraBufferMemory, 0, size_of(CameraState), {}, &mapped_memory)
 	(^CameraState)(mapped_memory)^ = camera_data
 	vk.UnmapMemory(device, cameraBufferMemory)
-	offscreenImage, offscreenImageMemory, offscreenImageView = createImage(
-		width,
-		height,
-		format,
-		{vk.ImageUsageFlag.COLOR_ATTACHMENT, vk.ImageUsageFlag.SAMPLED},
-	)
+        offscreenAccumImage, offscreenAccumImageMemory, offscreenAccumImageView = createImage(
+                width,
+                height,
+                OIT_ACCUM_FORMAT,
+                {vk.ImageUsageFlag.COLOR_ATTACHMENT, vk.ImageUsageFlag.SAMPLED},
+        )
+
+        offscreenRevealImage, offscreenRevealImageMemory, offscreenRevealImageView = createImage(
+                width,
+                height,
+                OIT_REVEAL_FORMAT,
+                {vk.ImageUsageFlag.COLOR_ATTACHMENT, vk.ImageUsageFlag.SAMPLED},
+        )
 
 	// Create depth buffer with proper aspect mask
 	depthImage, depthImageMemory, depthImageView = createDepthImage(
@@ -133,9 +151,10 @@ init_render_resources :: proc() {
 	textureImage, textureImageMemory, textureImageView, _ = loadTextureFromFile("test3.png")
     fmt.println("DEBUG: Creating render pass...")
     // Use color-only offscreen pass to render without depth testing.
-    offscreen_pass = create_render_pass(format)
+    offscreen_pass = create_weighted_oit_render_pass(OIT_ACCUM_FORMAT, OIT_REVEAL_FORMAT)
     fmt.println("DEBUG: Creating framebuffer...")
-    offscreen_fb = create_framebuffer(offscreen_pass, offscreenImageView, width, height)
+    oit_views := [2]vk.ImageView{offscreenAccumImageView, offscreenRevealImageView}
+    offscreen_fb = create_framebuffer_with_attachments(offscreen_pass, oit_views[:], width, height)
 	fmt.println("DEBUG: Initialization complete")
 }
 
@@ -220,7 +239,7 @@ graphics_pass :: proc(
         resources = {visibleBuffer, texture_sampler, textureImageView},
         vertex_push_data = &VertexPushConstants{screen_width = i32(width), screen_height = i32(height)},
         vertex_push_size = size_of(VertexPushConstants),
-        clear_values = {0.0, 0.0, 0.0, 1.0},
+        custom_clear_values = oit_clear_values[:],
     )
     // Indirect draw for the main pass
     render_passes[1].graphics.indirect_buffer = indirectBuffer
@@ -234,7 +253,7 @@ graphics_pass :: proc(
         framebuffer = element.framebuffer,
         vertices = 3,
         instances = 1,
-        resources = {offscreenImageView, texture_sampler},
+        resources = {offscreenAccumImageView, offscreenRevealImageView, texture_sampler},
         fragment_push_data = &PostProcessPushConstants{time = elapsed_time, intensity = 1.0},
         fragment_push_size = size_of(PostProcessPushConstants),
         clear_values = {0.0, 0.0, 0.0, 1.0},
@@ -268,9 +287,13 @@ cleanup_render_resources :: proc() {
 	vk.DestroyBuffer(device, cameraBuffer, nil)
 	vk.FreeMemory(device, cameraBufferMemory, nil)
 
-	vk.DestroyImageView(device, offscreenImageView, nil)
-	vk.DestroyImage(device, offscreenImage, nil)
-	vk.FreeMemory(device, offscreenImageMemory, nil)
+        vk.DestroyImageView(device, offscreenAccumImageView, nil)
+        vk.DestroyImage(device, offscreenAccumImage, nil)
+        vk.FreeMemory(device, offscreenAccumImageMemory, nil)
+
+        vk.DestroyImageView(device, offscreenRevealImageView, nil)
+        vk.DestroyImage(device, offscreenRevealImage, nil)
+        vk.FreeMemory(device, offscreenRevealImageMemory, nil)
 
 	vk.DestroyImageView(device, depthImageView, nil)
 	vk.DestroyImage(device, depthImage, nil)

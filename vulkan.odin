@@ -1327,7 +1327,7 @@ endSingleTimeCommands :: proc(cmd_buffer: vk.CommandBuffer) {
 
 
 getOffscreenImageView :: proc() -> vk.ImageView {
-	return offscreenImageView
+        return offscreenAccumImageView
 }
 
 

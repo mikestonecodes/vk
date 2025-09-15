@@ -82,9 +82,14 @@ VertexOutput vs_main(uint vertex_index : SV_VertexID, uint instance_index : SV_I
 SamplerState texture_sampler : register(s1);
 Texture2D texture_image : register(t2);
 
-// Early depth testing to discard hidden pixels before expensive operations
-[earlydepthstencil]
-float4 fs_main(VertexOutput input) : SV_Target {
+struct OitOutput {
+    float4 accum : SV_Target0;
+    float revealage : SV_Target1;
+};
+
+OitOutput fs_main(VertexOutput input) {
+    OitOutput output;
+
     float4 tex_color = texture_image.Sample(texture_sampler, input.tex_coord);
 
     // Enhanced depth perception through multiple visual cues
@@ -99,9 +104,13 @@ float4 fs_main(VertexOutput input) : SV_Target {
     float edge_fade = 1.0 - clamp(center_distance * 0.3, 0.0, 0.2);
     float combined_depth_factor = depth_darkness * edge_fade;
 
-    // Blend texture color with quad color and apply all depth effects
-    float3 final_color = tex_color.rgb * input.color.rgb * combined_depth_factor;
-    // Preserve transparency from texture and vertex color
-    float final_alpha = tex_color.a * input.color.a;
-    return float4(final_color, final_alpha);
+    float3 shaded_color = tex_color.rgb * input.color.rgb * combined_depth_factor;
+    float alpha = saturate(tex_color.a * input.color.a * combined_depth_factor);
+
+    float depth_weight = saturate(1.0 - depth_from_z);
+    float weight = max(depth_weight * 0.8 + 0.2, 0.01);
+
+    output.accum = float4(shaded_color * alpha * weight, alpha * weight);
+    output.revealage = alpha;
+    return output;
 }

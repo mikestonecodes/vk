@@ -297,6 +297,7 @@ graphics_pass :: proc(
     fragment_push_size: u32 = 0,
     clear_values: [4]f32 = {0.0, 0.0, 0.0, 1.0},
     with_depth: bool = false,
+    custom_clear_values: []vk.ClearValue = nil,
 ) -> Pass {
     pass := Pass {
         type = .GRAPHICS,
@@ -312,7 +313,9 @@ graphics_pass :: proc(
 
     // Build clear values matching the render pass attachments
     // Always clear color. Add a depth clear only when requested
-    if with_depth {
+    if custom_clear_values != nil {
+        pass.graphics.clear_values = custom_clear_values
+    } else if with_depth {
         pass.graphics.clear_values = []vk.ClearValue {
             {color = vk.ClearColorValue{float32 = clear_values}},
             {depthStencil = vk.ClearDepthStencilValue{depth = 1.0, stencil = 0}}, // Far plane = 1.0
@@ -557,10 +560,10 @@ insert_pass_barrier :: proc(encoder: ^CommandEncoder, from_type: PassType, to_ty
 
 // Helper to detect shader descriptor usage from HLSL
 detect_shader_descriptors :: proc(shader_content: string) -> []vk.DescriptorSetLayoutBinding {
-	bindings := make([dynamic]vk.DescriptorSetLayoutBinding)
+        bindings := make([dynamic]vk.DescriptorSetLayoutBinding)
 
-	lines := strings.split(shader_content, "\n")
-	defer delete(lines)
+        lines := strings.split(shader_content, "\n")
+        defer delete(lines)
 
 	for line in lines {
 		trimmed := strings.trim_space(line)
@@ -611,7 +614,50 @@ detect_shader_descriptors :: proc(shader_content: string) -> []vk.DescriptorSetL
 		}
 	}
 
-	return bindings[:]
+        return bindings[:]
+}
+
+count_color_targets :: proc(shader_content: string) -> u32 {
+        token := "SV_Target"
+        token_len := len(token)
+        targets := make(map[int]bool)
+        defer delete(targets)
+
+        i := 0
+        length := len(shader_content)
+        for i <= length - token_len {
+                if shader_content[i:i + token_len] == token {
+                        digits_start := i + token_len
+                        digits_end := digits_start
+
+                        for digits_end < length {
+                                ch := shader_content[digits_end]
+                                if ch < '0' || ch > '9' {
+                                        break
+                                }
+                                digits_end += 1
+                        }
+
+                        target_index := 0
+                        if digits_end > digits_start {
+                                digits := shader_content[digits_start:digits_end]
+                                if parsed, ok := strconv.parse_int(digits); ok {
+                                        target_index = int(parsed)
+                                }
+                        }
+
+                        targets[target_index] = true
+                        i = digits_end
+                } else {
+                        i += 1
+                }
+        }
+
+        count := u32(len(targets))
+        if count == 0 {
+                count = 1
+        }
+        return count
 }
 cleanup_pipelines :: proc() {
 	// Cleanup global descriptor pool first (before destroying descriptor set layouts)
@@ -794,28 +840,52 @@ get_graphics_pipeline :: proc(
 		rasterizationSamples = {vk.SampleCountFlag._1},
 	}
 
-    color_attachment := vk.PipelineColorBlendAttachmentState {
-        colorWriteMask = {
-            vk.ColorComponentFlag.R,
-            vk.ColorComponentFlag.G,
-            vk.ColorComponentFlag.B,
-            vk.ColorComponentFlag.A,
-        },
-        // Enable standard alpha blending for textures with transparency
-        blendEnable = true,
-        srcColorBlendFactor = vk.BlendFactor.SRC_ALPHA,
-        dstColorBlendFactor = vk.BlendFactor.ONE_MINUS_SRC_ALPHA,
-        colorBlendOp = vk.BlendOp.ADD,
-        // Write alpha as srcAlpha to target
-        srcAlphaBlendFactor = vk.BlendFactor.ONE,
-        dstAlphaBlendFactor = vk.BlendFactor.ONE_MINUS_SRC_ALPHA,
-        alphaBlendOp = vk.BlendOp.ADD,
-    }
-	color_blending := vk.PipelineColorBlendStateCreateInfo {
-		sType           = vk.StructureType.PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-		attachmentCount = 1,
-		pAttachments    = &color_attachment,
-	}
+        color_target_count := count_color_targets(frag_text)
+        blend_attachments := make([dynamic]vk.PipelineColorBlendAttachmentState, int(color_target_count))
+        defer delete(blend_attachments)
+
+        for i in 0 ..< len(blend_attachments) {
+                attachment := &blend_attachments[i]
+                attachment.colorWriteMask = {
+                        vk.ColorComponentFlag.R,
+                        vk.ColorComponentFlag.G,
+                        vk.ColorComponentFlag.B,
+                        vk.ColorComponentFlag.A,
+                }
+                attachment.blendEnable = true
+
+                if color_target_count > 1 && i == 0 {
+                        // Weighted blended OIT accumulation target uses additive blending
+                        attachment.srcColorBlendFactor = vk.BlendFactor.ONE
+                        attachment.dstColorBlendFactor = vk.BlendFactor.ONE
+                        attachment.colorBlendOp = vk.BlendOp.ADD
+                        attachment.srcAlphaBlendFactor = vk.BlendFactor.ONE
+                        attachment.dstAlphaBlendFactor = vk.BlendFactor.ONE
+                        attachment.alphaBlendOp = vk.BlendOp.ADD
+                } else if color_target_count > 1 && i == 1 {
+                        // Revealage target multiplies existing value by (1 - alpha)
+                        attachment.srcColorBlendFactor = vk.BlendFactor.ZERO
+                        attachment.dstColorBlendFactor = vk.BlendFactor.ONE_MINUS_SRC_ALPHA
+                        attachment.colorBlendOp = vk.BlendOp.ADD
+                        attachment.srcAlphaBlendFactor = vk.BlendFactor.ZERO
+                        attachment.dstAlphaBlendFactor = vk.BlendFactor.ONE_MINUS_SRC_ALPHA
+                        attachment.alphaBlendOp = vk.BlendOp.ADD
+                } else {
+                        // Default alpha blending for single render targets
+                        attachment.srcColorBlendFactor = vk.BlendFactor.SRC_ALPHA
+                        attachment.dstColorBlendFactor = vk.BlendFactor.ONE_MINUS_SRC_ALPHA
+                        attachment.colorBlendOp = vk.BlendOp.ADD
+                        attachment.srcAlphaBlendFactor = vk.BlendFactor.ONE
+                        attachment.dstAlphaBlendFactor = vk.BlendFactor.ONE_MINUS_SRC_ALPHA
+                        attachment.alphaBlendOp = vk.BlendOp.ADD
+                }
+        }
+
+        color_blending := vk.PipelineColorBlendStateCreateInfo {
+                sType           = vk.StructureType.PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                attachmentCount = u32(color_target_count),
+                pAttachments    = len(blend_attachments) > 0 ? raw_data(blend_attachments) : nil,
+        }
 
 	// Create descriptor set layout if bindings exist
 	descriptor_set_layouts := make([dynamic]vk.DescriptorSetLayout)
@@ -1079,10 +1149,10 @@ compile_shader :: proc(shader_file: string) -> bool {
 
 // Generic render pass creation
 create_render_pass :: proc(
-	format: vk.Format,
-	final_layout: vk.ImageLayout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
+        format: vk.Format,
+        final_layout: vk.ImageLayout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
 ) -> vk.RenderPass {
-	attachment := vk.AttachmentDescription {
+        attachment := vk.AttachmentDescription {
 		format         = format,
 		samples        = {vk.SampleCountFlag._1},
 		loadOp         = vk.AttachmentLoadOp.CLEAR,
@@ -1118,7 +1188,62 @@ create_render_pass :: proc(
 		return {}
 	}
 
-	return render_pass
+        return render_pass
+}
+
+create_weighted_oit_render_pass :: proc(
+        accum_format: vk.Format,
+        reveal_format: vk.Format,
+) -> vk.RenderPass {
+        attachments := [2]vk.AttachmentDescription {
+                {
+                        format        = accum_format,
+                        samples       = {vk.SampleCountFlag._1},
+                        loadOp        = vk.AttachmentLoadOp.CLEAR,
+                        storeOp       = vk.AttachmentStoreOp.STORE,
+                        stencilLoadOp = vk.AttachmentLoadOp.DONT_CARE,
+                        stencilStoreOp = vk.AttachmentStoreOp.DONT_CARE,
+                        initialLayout = vk.ImageLayout.UNDEFINED,
+                        finalLayout   = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
+                },
+                {
+                        format        = reveal_format,
+                        samples       = {vk.SampleCountFlag._1},
+                        loadOp        = vk.AttachmentLoadOp.CLEAR,
+                        storeOp       = vk.AttachmentStoreOp.STORE,
+                        stencilLoadOp = vk.AttachmentLoadOp.DONT_CARE,
+                        stencilStoreOp = vk.AttachmentStoreOp.DONT_CARE,
+                        initialLayout = vk.ImageLayout.UNDEFINED,
+                        finalLayout   = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
+                },
+        }
+
+        attachment_refs := [2]vk.AttachmentReference {
+                {attachment = 0, layout = vk.ImageLayout.COLOR_ATTACHMENT_OPTIMAL},
+                {attachment = 1, layout = vk.ImageLayout.COLOR_ATTACHMENT_OPTIMAL},
+        }
+
+        subpass := vk.SubpassDescription {
+                pipelineBindPoint    = vk.PipelineBindPoint.GRAPHICS,
+                colorAttachmentCount = u32(len(attachment_refs)),
+                pColorAttachments    = raw_data(attachment_refs[:]),
+        }
+
+        render_pass_info := vk.RenderPassCreateInfo {
+                sType           = vk.StructureType.RENDER_PASS_CREATE_INFO,
+                attachmentCount = u32(len(attachments)),
+                pAttachments    = raw_data(attachments[:]),
+                subpassCount    = 1,
+                pSubpasses      = &subpass,
+        }
+
+        render_pass: vk.RenderPass
+        if vk.CreateRenderPass(device, &render_pass_info, nil, &render_pass) != vk.Result.SUCCESS {
+                fmt.println("Failed to create weighted OIT render pass")
+                return {}
+        }
+
+        return render_pass
 }
 
 // Depth-enabled render pass for proper Z-testing
@@ -1182,29 +1307,53 @@ create_render_pass_with_depth :: proc(format: vk.Format) -> vk.RenderPass {
 
 // Generic framebuffer creation
 create_framebuffer :: proc(
-	render_pass: vk.RenderPass,
-	image_view: vk.ImageView,
-	width, height: u32,
+        render_pass: vk.RenderPass,
+        image_view: vk.ImageView,
+        width, height: u32,
 ) -> vk.Framebuffer {
-	attachments := [1]vk.ImageView{image_view}
+        attachments := [1]vk.ImageView{image_view}
 
-	fb_info := vk.FramebufferCreateInfo {
-		sType           = vk.StructureType.FRAMEBUFFER_CREATE_INFO,
-		renderPass      = render_pass,
-		attachmentCount = 1,
-		pAttachments    = raw_data(attachments[:]),
-		width           = width,
-		height          = height,
-		layers          = 1,
-	}
+        fb_info := vk.FramebufferCreateInfo {
+                sType           = vk.StructureType.FRAMEBUFFER_CREATE_INFO,
+                renderPass      = render_pass,
+                attachmentCount = 1,
+                pAttachments    = raw_data(attachments[:]),
+                width           = width,
+                height          = height,
+                layers          = 1,
+        }
 
-	framebuffer: vk.Framebuffer
-	if vk.CreateFramebuffer(device, &fb_info, nil, &framebuffer) != vk.Result.SUCCESS {
-		fmt.println("Failed to create framebuffer")
-		return {}
-	}
+        framebuffer: vk.Framebuffer
+        if vk.CreateFramebuffer(device, &fb_info, nil, &framebuffer) != vk.Result.SUCCESS {
+                fmt.println("Failed to create framebuffer")
+                return {}
+        }
 
-	return framebuffer
+        return framebuffer
+}
+
+create_framebuffer_with_attachments :: proc(
+        render_pass: vk.RenderPass,
+        attachments: []vk.ImageView,
+        width, height: u32,
+) -> vk.Framebuffer {
+        fb_info := vk.FramebufferCreateInfo {
+                sType           = vk.StructureType.FRAMEBUFFER_CREATE_INFO,
+                renderPass      = render_pass,
+                attachmentCount = u32(len(attachments)),
+                pAttachments    = len(attachments) > 0 ? raw_data(attachments) : nil,
+                width           = width,
+                height          = height,
+                layers          = 1,
+        }
+
+        framebuffer: vk.Framebuffer
+        if vk.CreateFramebuffer(device, &fb_info, nil, &framebuffer) != vk.Result.SUCCESS {
+                fmt.println("Failed to create framebuffer with attachments")
+                return {}
+        }
+
+        return framebuffer
 }
 
 // Framebuffer with depth attachment
