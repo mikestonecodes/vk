@@ -73,7 +73,7 @@ void main(uint3 global_id : SV_DispatchThreadID) {
         InterlockedExchange(visible_count[0], 0, dummy);
 
         float move_speed = 1.0;
-        float zoom_speed = 1.5;
+        float zoom_speed = 2.0;
         float dt = push_constants.delta_time;
 
         // Update camera based on input (WASD)
@@ -83,9 +83,12 @@ void main(uint3 global_id : SV_DispatchThreadID) {
         if (push_constants.key_s != 0) { camera[0].y -= move_speed * dt; }
 
         // Zoom controls (Q = zoom in, E = zoom out)
-        if (push_constants.key_q != 0) { camera[0].zoom += zoom_speed * dt; }
-        if (push_constants.key_e != 0) { camera[0].zoom -= zoom_speed * dt; }
-        camera[0].zoom = max(0.01, camera[0].zoom);
+        if (push_constants.key_q != 0) {
+            camera[0].zoom = min(camera[0].zoom * exp(zoom_speed * dt), 1.0e6);
+        }
+        if (push_constants.key_e != 0) {
+            camera[0].zoom = max(camera[0].zoom / exp(zoom_speed * dt), 0.01);
+        }
         // For next frame, draw all quads and preserve deterministic ordering by ID
         // Host reads this value one frame later, so set it now after reset
         visible_count[0] = push_constants.quad_count;
@@ -121,8 +124,8 @@ void main(uint3 global_id : SV_DispatchThreadID) {
 
     float zoom = camera[0].zoom;
     float2 camera_relative_pos = (world_pos + float2(camera[0].x, camera[0].y)) * zoom;
-    // Clamp maximum size to avoid unbounded growth when zoomed in heavily
-    float2 final_size = min(quad_size * zoom, float2(1.0, 1.0));
+    // Allow particles to scale naturally with zoom for close inspection
+    float2 final_size = quad_size * zoom;
 
     // Enhanced culling: frustum + size-based performance culling
     // Slightly wider bounds to avoid over-culling due to aspect/transform differences
@@ -177,8 +180,8 @@ void main(uint3 global_id : SV_DispatchThreadID) {
     float color_pulse = cos((float)quad_id * 0.891 + push_constants.time * 0.2);
 
     float3 base_colors[2] = {
-        float3(0.2, 0.4, 9.9),  // Deep blue
-        float3(0.2, 0.4, 9.9),  // Deep blue
+        float3(0.1, 0.4, 9.9),  // Deep blue
+        float3(0.1, 0.4, 9.9),  // Deep blue
     };
 
     uint color_index = (uint)abs(color_shift * 2.5) % 5;

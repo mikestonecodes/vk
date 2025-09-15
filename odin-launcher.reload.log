@@ -96,3 +96,33 @@ DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
 DEBUG: Texture loading complete
 DEBUG: Initialization complete
 REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
+Detected changes in shaders: compute.hlsl 
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Clearing pipeline cache (2 entries)
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
+Detected changes in shaders: compute.hlsl 
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Clearing pipeline cache (2 entries)
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
+Detected changes in shaders: compute.hlsl 
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Clearing pipeline cache (2 entries)
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
+Detected changes in shaders: compute.hlsl 
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Clearing pipeline cache (2 entries)
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
+Detected changes in shaders: compute.hlsl 
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Clearing pipeline cache (2 entries)
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
+Detected changes in shaders: compute.hlsl 
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Clearing pipeline cache (2 entries)
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
