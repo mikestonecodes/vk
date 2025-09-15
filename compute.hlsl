@@ -73,6 +73,7 @@ void main(uint3 global_id : SV_DispatchThreadID) {
         InterlockedExchange(visible_count[0], 0, dummy);
 
         float move_speed = 1.0;
+        float zoom_speed = 1.5;
         float dt = push_constants.delta_time;
 
         // Update camera based on input (WASD)
@@ -81,8 +82,10 @@ void main(uint3 global_id : SV_DispatchThreadID) {
         if (push_constants.key_w != 0) { camera[0].y += move_speed * dt; }
         if (push_constants.key_s != 0) { camera[0].y -= move_speed * dt; }
 
-        // Keep zoom fixed; ignore Q/E input
-        camera[0].zoom = max(0.01, camera[0].zoom);
+        // Zoom controls (Q = zoom in, E = zoom out)
+        if (push_constants.key_q != 0) { camera[0].zoom += zoom_speed * dt; }
+        if (push_constants.key_e != 0) { camera[0].zoom -= zoom_speed * dt; }
+        camera[0].zoom = clamp(camera[0].zoom, 0.05, 30.0);
         // For next frame, draw all quads and preserve deterministic ordering by ID
         // Host reads this value one frame later, so set it now after reset
         visible_count[0] = push_constants.quad_count;
@@ -116,9 +119,10 @@ void main(uint3 global_id : SV_DispatchThreadID) {
 
     float2 world_pos = float2(base_x + drift_x, base_y + drift_y);
 
-    float2 camera_relative_pos = world_pos + float2(camera[0].x, camera[0].y);
-    // Clamp maximum size to avoid huge quads that cause heavy overdraw
-    float2 final_size = min(quad_size * camera[0].zoom, float2(0.3, 0.3));
+    float zoom = camera[0].zoom;
+    float2 camera_relative_pos = (world_pos + float2(camera[0].x, camera[0].y)) * zoom;
+    // Clamp maximum size to avoid unbounded growth when zoomed in heavily
+    float2 final_size = min(quad_size * zoom, float2(1.0, 1.0));
 
     // Enhanced culling: frustum + size-based performance culling
     // Slightly wider bounds to avoid over-culling due to aspect/transform differences
@@ -189,6 +193,7 @@ void main(uint3 global_id : SV_DispatchThreadID) {
         alpha_variation
     );
 
+
     // Only add to visible buffer if not culled
     if (!should_cull) {
         // Deterministic painter-style ordering: write by quad ID index
@@ -204,6 +209,7 @@ void main(uint3 global_id : SV_DispatchThreadID) {
             paint_color.b * depth_brightness,
             alpha_variation * depth_alpha_factor
         );
+
 
         // Project particle into the accumulation texture and splat with a soft falloff
         uint tex_w = push_constants.texture_width;
