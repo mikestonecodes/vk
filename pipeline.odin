@@ -148,74 +148,79 @@ create_pipeline_descriptor_generic :: proc(
 
 	// Only write descriptors for the resources we have
 	for resource, i in resources {
-		if i < len(resources) { 	// Bound check
-			write := vk.WriteDescriptorSet {
-				sType           = vk.StructureType.WRITE_DESCRIPTOR_SET,
-				dstSet          = set,
-				dstBinding      = u32(i),
-				dstArrayElement = 0,
-				descriptorCount = 1,
+		if i >= len(resources) {
+			continue
+		}
+
+		write := vk.WriteDescriptorSet {
+			sType           = vk.StructureType.WRITE_DESCRIPTOR_SET,
+			dstSet          = set,
+			dstBinding      = u32(i),
+			dstArrayElement = 0,
+			descriptorCount = 1,
+		}
+
+		binding_type := vk.DescriptorType.STORAGE_BUFFER
+		binding_index := u32(i)
+		if entry, has_entry := pipeline_cache[pipeline_name]; has_entry {
+			if i < len(entry.descriptor_bindings) {
+				binding_type = entry.descriptor_bindings[i].descriptorType
+				binding_index = entry.descriptor_bindings[i].binding
+			}
+		}
+		write.dstBinding = binding_index
+
+		switch r in resource {
+		case vk.Buffer:
+			if r != {} {
+				descriptor := binding_type
+				if descriptor != .UNIFORM_BUFFER {
+					descriptor = .STORAGE_BUFFER
+				}
+				write.descriptorType = descriptor
+				buffer_info := vk.DescriptorBufferInfo {
+					buffer = r,
+					offset = 0,
+					range  = vk.DeviceSize(vk.WHOLE_SIZE),
+				}
+				append(&buffer_infos, buffer_info)
+				write.pBufferInfo = &buffer_infos[len(buffer_infos) - 1]
+				append(&writes, write)
 			}
 
-			binding_type := vk.DescriptorType.STORAGE_BUFFER
-			if entry, has_entry := pipeline_cache[pipeline_name]; has_entry {
-				if i < len(entry.descriptor_bindings) {
-					binding_type = entry.descriptor_bindings[i].descriptorType
+		case vk.ImageView:
+			if r != {} {
+				descriptor := binding_type
+				if descriptor != .STORAGE_IMAGE && descriptor != .SAMPLED_IMAGE && descriptor != .COMBINED_IMAGE_SAMPLER {
+					descriptor = .SAMPLED_IMAGE
 				}
+				write.descriptorType = descriptor
+				layout := vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
+				if descriptor == .STORAGE_IMAGE {
+					layout = vk.ImageLayout.GENERAL
+				}
+				image_info := vk.DescriptorImageInfo {
+					imageView   = r,
+					imageLayout = layout,
+				}
+				append(&image_infos, image_info)
+				write.pImageInfo = &image_infos[len(image_infos) - 1]
+				append(&writes, write)
 			}
 
-			switch r in resource {
-			case vk.Buffer:
-				if r != {} { 	// Only write if valid buffer
-					descriptor := binding_type
-					if descriptor != .UNIFORM_BUFFER {
-						descriptor = .STORAGE_BUFFER
-					}
-					write.descriptorType = descriptor
-					buffer_info := vk.DescriptorBufferInfo {
-						buffer = r,
-						offset = 0,
-						range  = vk.DeviceSize(vk.WHOLE_SIZE),
-					}
-					append(&buffer_infos, buffer_info)
-					write.pBufferInfo = &buffer_infos[len(buffer_infos) - 1]
-					append(&writes, write)
+		case vk.Sampler:
+			if r != {} {
+				descriptor := binding_type
+				if descriptor != .SAMPLER && descriptor != .COMBINED_IMAGE_SAMPLER {
+					descriptor = .SAMPLER
 				}
-
-			case vk.ImageView:
-				if r != {} { 	// Only write if valid image view
-					descriptor := binding_type
-					if descriptor != .STORAGE_IMAGE && descriptor != .SAMPLED_IMAGE && descriptor != .COMBINED_IMAGE_SAMPLER {
-						descriptor = .SAMPLED_IMAGE
-					}
-					write.descriptorType = descriptor
-					layout := vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
-					if descriptor == .STORAGE_IMAGE {
-						layout = vk.ImageLayout.GENERAL
-					}
-					image_info := vk.DescriptorImageInfo {
-						imageView   = r,
-						imageLayout = layout,
-					}
-					append(&image_infos, image_info)
-					write.pImageInfo = &image_infos[len(image_infos) - 1]
-					append(&writes, write)
+				write.descriptorType = descriptor
+				sampler_info := vk.DescriptorImageInfo {
+					sampler = r,
 				}
-
-			case vk.Sampler:
-				if r != {} { 	// Only write if valid sampler
-					descriptor := binding_type
-					if descriptor != .SAMPLER && descriptor != .COMBINED_IMAGE_SAMPLER {
-						descriptor = .SAMPLER
-					}
-					write.descriptorType = descriptor
-					sampler_info := vk.DescriptorImageInfo {
-						sampler = r,
-					}
-					append(&image_infos, sampler_info)
-					write.pImageInfo = &image_infos[len(image_infos) - 1]
-					append(&writes, write)
-				}
+				append(&image_infos, sampler_info)
+				write.pImageInfo = &image_infos[len(image_infos) - 1]
+				append(&writes, write)
 			}
 		}
 	}

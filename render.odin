@@ -26,6 +26,11 @@ splatBuffer: vk.Buffer
 splatBufferMemory: vk.DeviceMemory
 splatBufferSize: vk.DeviceSize
 
+// Particle sprite texture resources
+particleTextureImage: vk.Image
+particleTextureMemory: vk.DeviceMemory
+particleTextureView: vk.ImageView
+
 render_passes: [2]Pass // Pre-allocated pass array
 
 init_render_resources :: proc() {
@@ -84,6 +89,17 @@ init_render_resources :: proc() {
 		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
 	)
 
+	// Load particle texture used by the compute splat shader
+	ok: bool
+	particleTextureImage, particleTextureMemory, particleTextureView, ok = loadTextureFromFile("test.png")
+	if !ok {
+		fmt.println("Falling back to procedural particle texture")
+		particleTextureImage, particleTextureMemory, particleTextureView, ok = createTestTexture()
+		if !ok {
+			fmt.println("Failed to create fallback particle texture")
+		}
+	}
+
 	fmt.println("DEBUG: Initialization complete")
 }
 
@@ -123,7 +139,7 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 	render_passes[0] = compute_pass(
 		"compute.hlsl",
 		{u32((QUAD_COUNT + 63) / 64), 1, 1},
-		{worldBuffer, visibleBuffer, visibleCountBuffer, cameraBuffer, splatBuffer},
+		{worldBuffer, visibleBuffer, visibleCountBuffer, cameraBuffer, splatBuffer, particleTextureView, texture_sampler},
 		&ComputePushConstants{
 			time = elapsed_time,
 			quad_count = QUAD_COUNT,
@@ -216,5 +232,18 @@ cleanup_render_resources :: proc() {
 
 	vk.DestroyBuffer(device, splatBuffer, nil)
 	vk.FreeMemory(device, splatBufferMemory, nil)
+
+	if particleTextureView != {} {
+		vk.DestroyImageView(device, particleTextureView, nil)
+		particleTextureView = {}
+	}
+	if particleTextureImage != {} {
+		vk.DestroyImage(device, particleTextureImage, nil)
+		particleTextureImage = {}
+	}
+	if particleTextureMemory != {} {
+		vk.FreeMemory(device, particleTextureMemory, nil)
+		particleTextureMemory = {}
+	}
 
 }

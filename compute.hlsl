@@ -56,6 +56,8 @@ RWStructuredBuffer<Quad> visible_quads : register(u1);
 RWStructuredBuffer<uint> visible_count : register(u2);
 RWStructuredBuffer<CameraState> camera : register(u3);
 RWStructuredBuffer<uint> accum_buffer : register(u4);
+Texture2D sprite_texture : register(t5);
+SamplerState sprite_sampler : register(s6);
 
 [numthreads(64, 1, 1)]
 void main(uint3 global_id : SV_DispatchThreadID) {
@@ -219,6 +221,7 @@ void main(uint3 global_id : SV_DispatchThreadID) {
 
                 float splat_extent = max(push_constants.splat_extent, 0.0);
                 int radius = min(3, max(1, (int)ceil(splat_extent)));
+                float radius_f = max(1.0, (float)radius);
                 float gaussian_base = 0.65 + push_constants.fog_strength * 0.45;
 
                 const float COLOR_SCALE = 4096.0;
@@ -238,12 +241,25 @@ void main(uint3 global_id : SV_DispatchThreadID) {
 
                         float distance2 = (float)(ox * ox + oy * oy);
                         float falloff = exp(-distance2 * gaussian_base);
-                        float local_weight = intensity * falloff;
+                        float2 sprite_uv = (float2(float(ox), float(oy)) / radius_f) * 0.5 + 0.5;
+                        if (sprite_uv.x < 0.0 || sprite_uv.x > 1.0 || sprite_uv.y < 0.0 || sprite_uv.y > 1.0) {
+                            continue;
+                        }
+
+                        float4 sprite_sample = sprite_texture.SampleLevel(sprite_sampler, sprite_uv, 0.0);
+                        float sprite_alpha = sprite_sample.a;
+                        if (sprite_alpha <= 0.0001) {
+                            continue;
+                        }
+
+                        float local_weight = intensity * sprite_alpha * falloff;
                         if (local_weight <= 0.0001) {
                             continue;
                         }
 
-                        float3 local_color = saturate(deposit_color * falloff);
+                        float3 texture_color = sprite_sample.rgb;
+                        float3 color_tint = lerp(float3(1.0, 1.0, 1.0), texture_color, sprite_alpha);
+                        float3 local_color = saturate(deposit_color * color_tint * sprite_alpha * falloff);
                         uint encoded_r = (uint)round(local_color.r * COLOR_SCALE);
                         uint encoded_g = (uint)round(local_color.g * COLOR_SCALE);
                         uint encoded_b = (uint)round(local_color.b * COLOR_SCALE);
