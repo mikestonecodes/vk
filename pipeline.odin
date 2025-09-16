@@ -22,6 +22,7 @@ PipelineEntry :: struct {
 	pipeline:               vk.Pipeline,
 	layout:                 vk.PipelineLayout,
 	descriptor_set_layouts: []vk.DescriptorSetLayout,
+	descriptor_bindings:    []vk.DescriptorSetLayoutBinding,
 }
 
 // Function to get descriptor set layout for a specific pipeline
@@ -55,11 +56,12 @@ global_descriptor_pool: vk.DescriptorPool
 
 // Initialize global descriptor pool
 init_descriptor_pool :: proc() -> bool {
-	pool_sizes := [4]vk.DescriptorPoolSize {
+	pool_sizes := [5]vk.DescriptorPoolSize {
 		{type = .STORAGE_BUFFER, descriptorCount = 1000},
 		{type = .UNIFORM_BUFFER, descriptorCount = 1000},
 		{type = .SAMPLED_IMAGE, descriptorCount = 1000},
 		{type = .SAMPLER, descriptorCount = 1000},
+		{type = .STORAGE_IMAGE, descriptorCount = 1000},
 	}
 
 	pool_info := vk.DescriptorPoolCreateInfo {
@@ -146,51 +148,79 @@ create_pipeline_descriptor_generic :: proc(
 
 	// Only write descriptors for the resources we have
 	for resource, i in resources {
-		if i < len(resources) { 	// Bound check
-			write := vk.WriteDescriptorSet {
-				sType           = vk.StructureType.WRITE_DESCRIPTOR_SET,
-				dstSet          = set,
-				dstBinding      = u32(i),
-				dstArrayElement = 0,
-				descriptorCount = 1,
+		if i >= len(resources) {
+			continue
+		}
+
+		write := vk.WriteDescriptorSet {
+			sType           = vk.StructureType.WRITE_DESCRIPTOR_SET,
+			dstSet          = set,
+			dstBinding      = u32(i),
+			dstArrayElement = 0,
+			descriptorCount = 1,
+		}
+
+		binding_type := vk.DescriptorType.STORAGE_BUFFER
+		binding_index := u32(i)
+		if entry, has_entry := pipeline_cache[pipeline_name]; has_entry {
+			if i < len(entry.descriptor_bindings) {
+				binding_type = entry.descriptor_bindings[i].descriptorType
+				binding_index = entry.descriptor_bindings[i].binding
+			}
+		}
+		write.dstBinding = binding_index
+
+		switch r in resource {
+		case vk.Buffer:
+			if r != {} {
+				descriptor := binding_type
+				if descriptor != .UNIFORM_BUFFER {
+					descriptor = .STORAGE_BUFFER
+				}
+				write.descriptorType = descriptor
+				buffer_info := vk.DescriptorBufferInfo {
+					buffer = r,
+					offset = 0,
+					range  = vk.DeviceSize(vk.WHOLE_SIZE),
+				}
+				append(&buffer_infos, buffer_info)
+				write.pBufferInfo = &buffer_infos[len(buffer_infos) - 1]
+				append(&writes, write)
 			}
 
-			switch r in resource {
-			case vk.Buffer:
-				if r != {} { 	// Only write if valid buffer
-					write.descriptorType = .STORAGE_BUFFER
-					buffer_info := vk.DescriptorBufferInfo {
-						buffer = r,
-						offset = 0,
-						range  = vk.DeviceSize(vk.WHOLE_SIZE),
-					}
-					append(&buffer_infos, buffer_info)
-					write.pBufferInfo = &buffer_infos[len(buffer_infos) - 1]
-					append(&writes, write)
+		case vk.ImageView:
+			if r != {} {
+				descriptor := binding_type
+				if descriptor != .STORAGE_IMAGE && descriptor != .SAMPLED_IMAGE && descriptor != .COMBINED_IMAGE_SAMPLER {
+					descriptor = .SAMPLED_IMAGE
 				}
+				write.descriptorType = descriptor
+				layout := vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
+				if descriptor == .STORAGE_IMAGE {
+					layout = vk.ImageLayout.GENERAL
+				}
+				image_info := vk.DescriptorImageInfo {
+					imageView   = r,
+					imageLayout = layout,
+				}
+				append(&image_infos, image_info)
+				write.pImageInfo = &image_infos[len(image_infos) - 1]
+				append(&writes, write)
+			}
 
-			case vk.ImageView:
-				if r != {} { 	// Only write if valid image view
-					write.descriptorType = .SAMPLED_IMAGE
-					image_info := vk.DescriptorImageInfo {
-						imageView   = r,
-						imageLayout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
-					}
-					append(&image_infos, image_info)
-					write.pImageInfo = &image_infos[len(image_infos) - 1]
-					append(&writes, write)
+		case vk.Sampler:
+			if r != {} {
+				descriptor := binding_type
+				if descriptor != .SAMPLER && descriptor != .COMBINED_IMAGE_SAMPLER {
+					descriptor = .SAMPLER
 				}
-
-			case vk.Sampler:
-				if r != {} { 	// Only write if valid sampler
-					write.descriptorType = .SAMPLER
-					sampler_info := vk.DescriptorImageInfo {
-						sampler = r,
-					}
-					append(&image_infos, sampler_info)
-					write.pImageInfo = &image_infos[len(image_infos) - 1]
-					append(&writes, write)
+				write.descriptorType = descriptor
+				sampler_info := vk.DescriptorImageInfo {
+					sampler = r,
 				}
+				append(&image_infos, sampler_info)
+				write.pImageInfo = &image_infos[len(image_infos) - 1]
+				append(&writes, write)
 			}
 		}
 	}
@@ -590,7 +620,11 @@ detect_shader_descriptors :: proc(shader_content: string) -> []vk.DescriptorSetL
 									descriptor_type = .SAMPLED_IMAGE
 								}
 							case 'u': // UAV/RWStructuredBuffer (read-write)
-								descriptor_type = .STORAGE_BUFFER
+								if strings.contains(trimmed, "RWTexture") {
+									descriptor_type = .STORAGE_IMAGE
+								} else {
+									descriptor_type = .STORAGE_BUFFER
+								}
 							case 's': // Sampler
 								descriptor_type = .SAMPLER
 							case 'b': // Constant Buffer
@@ -626,6 +660,7 @@ cleanup_pipelines :: proc() {
 			vk.DestroyDescriptorSetLayout(device, layout, nil)
 		}
 		delete(entry.descriptor_set_layouts)
+		delete(entry.descriptor_bindings)
 		delete(key)
 	}
 	delete(pipeline_cache)
@@ -907,10 +942,15 @@ get_graphics_pipeline :: proc(
 	// Cache the result
 	cached_layouts := make([]vk.DescriptorSetLayout, len(descriptor_set_layouts))
 	copy(cached_layouts, descriptor_set_layouts[:])
+	binding_copy := make([]vk.DescriptorSetLayoutBinding, len(combined_bindings))
+	if len(combined_bindings) > 0 {
+		copy(binding_copy, combined_bindings[:])
+	}
 	pipeline_cache[strings.clone(key)] = PipelineEntry {
 		pipeline               = pipeline,
 		layout                 = layout,
 		descriptor_set_layouts = cached_layouts,
+		descriptor_bindings    = binding_copy,
 	}
 
 	return pipeline, layout
@@ -1047,10 +1087,15 @@ get_compute_pipeline :: proc(
 	// Cache the result
 	cached_layouts := make([]vk.DescriptorSetLayout, len(descriptor_set_layouts))
 	copy(cached_layouts, descriptor_set_layouts[:])
+	binding_copy := make([]vk.DescriptorSetLayoutBinding, len(compute_bindings))
+	if len(compute_bindings) > 0 {
+		copy(binding_copy, compute_bindings[:])
+	}
 	pipeline_cache[strings.clone(shader)] = PipelineEntry {
 		pipeline               = pipeline,
 		layout                 = layout,
 		descriptor_set_layouts = cached_layouts,
+		descriptor_bindings    = binding_copy,
 	}
 
 	return pipeline, layout

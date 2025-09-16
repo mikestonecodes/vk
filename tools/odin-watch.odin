@@ -50,14 +50,19 @@ build_and_run :: proc() {
 	time.sleep(120 * time.Millisecond)
 	system("pkill -KILL vk 2>/dev/null || true")
 
-	// Build
-	build_result := system("odin build . ")
+	// Reset log for new build output
+	system("echo '' > odin-launcher.reload.log")
+
+	// Build (capture stdout/stderr into reload log)
+	build_result := system("odin build . >> odin-launcher.reload.log 2>&1")
 
 	if build_result == 0 {
+		system("echo '\nBuild succeeded, launching vk...' >> odin-launcher.reload.log")
 		time.sleep(150 * time.Millisecond)
-		system("echo '' > odin-launcher.reload.log")
-		system("nohup ./vk > odin-launcher.reload.log 2>&1 &")
-	}
+		system("nohup ./vk >> odin-launcher.reload.log 2>&1 &")
+	} else {
+		system("echo '\nBuild failed. See errors above.' >> odin-launcher.reload.log")
+}
 }
 
 

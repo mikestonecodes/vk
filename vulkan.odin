@@ -147,8 +147,7 @@ acquire_next_image :: proc() -> bool {
 
 
 ShaderInfo :: struct {
-	wgsl_path: string,
-	spv_path: string,
+	source_path: string,
 	last_modified: time.Time,
 }
 
@@ -161,6 +160,13 @@ init_shader_times :: proc() {
 }
 
 discover_shaders :: proc() {
+	if shader_registry == nil {
+		shader_registry = make(map[string]ShaderInfo)
+	} else {
+		delete(shader_registry)
+		shader_registry = make(map[string]ShaderInfo)
+	}
+
 	handle, err := os.open(".")
 	if err != nil {
 		fmt.println("Failed to open current directory for shader discovery")
@@ -176,12 +182,9 @@ discover_shaders :: proc() {
 	defer delete(files)
 
 	for file in files {
-		if strings.has_suffix(file.name, ".wgsl") {
-			spv_name, _ := strings.replace(file.name, ".wgsl", ".spv", 1)
-
+		if strings.has_suffix(file.name, ".hlsl") {
 			shader_registry[strings.clone(file.name)] = ShaderInfo{
-				wgsl_path = strings.clone(file.name),
-				spv_path = spv_name,
+				source_path = strings.clone(file.name),
 				last_modified = file.modification_time,
 			}
 		}
@@ -205,7 +208,7 @@ check_shader_reload :: proc() -> bool {
 	defer delete(changed_shaders)
 
 	for name, &info in shader_registry {
-		file_info, err := os.stat(info.wgsl_path)
+		file_info, err := os.stat(info.source_path)
 		if err != nil {
 			continue
 		}
@@ -244,15 +247,9 @@ compile_changed_shaders :: proc(changed_shaders: []string) -> bool {
 			continue
 		}
 
-		cmd := fmt.aprintf("./naga %s %s", info.wgsl_path, info.spv_path)
-		defer delete(cmd)
-
-		cmd_cstr := strings.clone_to_cstring(cmd)
-		defer delete(cmd_cstr)
-
-		fmt.printf("Compiling %s -> %s\n", info.wgsl_path, info.spv_path)
-		if system(cmd_cstr) != 0 {
-			fmt.printf("Failed to compile %s\n", info.wgsl_path)
+		fmt.printf("Compiling shader %s\n", info.source_path)
+		if !compile_shader(info.source_path) {
+			fmt.printf("Failed to compile %s\n", info.source_path)
 			success = false
 		}
 	}
@@ -271,6 +268,7 @@ clear_pipeline_cache :: proc() {
 			vk.DestroyDescriptorSetLayout(device, layout, nil)
 		}
 		delete(cached.descriptor_set_layouts)
+		delete(cached.descriptor_bindings)
 		delete(key)
 	}
 
@@ -827,6 +825,8 @@ texture_sampler: vk.Sampler
 PostProcessPushConstants :: struct {
     time: f32,
     intensity: f32,
+    texture_width: u32,
+    texture_height: u32,
 }
 
 
@@ -853,6 +853,10 @@ ComputePushConstants :: struct {
 	key_d: u32,
 	key_q: u32,
 	key_e: u32,
+	texture_width: u32,
+	texture_height: u32,
+	splat_extent: f32,
+	fog_strength: f32,
 }
 
 VertexPushConstants :: struct {
@@ -1255,6 +1259,11 @@ transitionImageLayout :: proc(image: vk.Image, format: vk.Format, old_layout: vk
 		barrier.dstAccessMask = {vk.AccessFlag.SHADER_READ}
 		source_stage = {vk.PipelineStageFlag.TRANSFER}
 		destination_stage = {vk.PipelineStageFlag.FRAGMENT_SHADER}
+	} else if old_layout == vk.ImageLayout.UNDEFINED && new_layout == vk.ImageLayout.GENERAL {
+		barrier.srcAccessMask = {}
+		barrier.dstAccessMask = {vk.AccessFlag.SHADER_READ, vk.AccessFlag.SHADER_WRITE}
+		source_stage = {vk.PipelineStageFlag.TOP_OF_PIPE}
+		destination_stage = {vk.PipelineStageFlag.COMPUTE_SHADER}
 	}
 
 	vk.CmdPipelineBarrier(
@@ -1321,13 +1330,6 @@ endSingleTimeCommands :: proc(cmd_buffer: vk.CommandBuffer) {
 	vk.QueueSubmit(queue, 1, &submit_info, {})
 	vk.QueueWaitIdle(queue)
 	vk.FreeCommandBuffers(device, command_pool, 1, &cmd_buffer_ptr)
-}
-
-
-
-
-getOffscreenImageView :: proc() -> vk.ImageView {
-	return offscreenImageView
 }
 
 

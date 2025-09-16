@@ -58,10 +58,10 @@ Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver:
 DEBUG: Loading device procedures
 DEBUG: Creating swapchain
 DEBUG: Initializing resources
-DEBUG: Loading texture from file: test3.png
-DEBUG: File size: 513626 bytes
-DEBUG: Image dimensions: 1024 x 1024 channels: 4
-DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+DEBUG: Loading texture from file: test.png
+DEBUG: File size: 3367 bytes
+DEBUG: Image dimensions: 225 x 225 channels: 3
+DEBUG: Loading texture data, size: 202500 bytes, dimensions: 225 x 225
 DEBUG: Creating staging buffer...
 DEBUG: Staging buffer created
 DEBUG: Mapping staging buffer memory...
@@ -73,19 +73,16 @@ DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
 DEBUG: Copying buffer to image...
 DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
 DEBUG: Texture loading complete
-DEBUG: Creating render pass...
-DEBUG: Creating framebuffer...
 DEBUG: Initialization complete
 DEBUG: Vulkan init complete
-Discovered 0 shaders: 
-REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=800, height=600
+Discovered 3 shaders: graphics.hlsl post_process.hlsl compute.hlsl 
 REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=800, height=600
-Window resized to 1866x2056
-Clearing pipeline cache (3 entries)
-DEBUG: Loading texture from file: test3.png
-DEBUG: File size: 513626 bytes
-DEBUG: Image dimensions: 1024 x 1024 channels: 4
-DEBUG: Loading texture data, size: 4194304 bytes, dimensions: 1024 x 1024
+Window resized to 1866x1026
+Clearing pipeline cache (2 entries)
+DEBUG: Loading texture from file: test.png
+DEBUG: File size: 3367 bytes
+DEBUG: Image dimensions: 225 x 225 channels: 3
+DEBUG: Loading texture data, size: 202500 bytes, dimensions: 225 x 225
 DEBUG: Creating staging buffer...
 DEBUG: Staging buffer created
 DEBUG: Mapping staging buffer memory...
@@ -97,9 +94,35 @@ DEBUG: Transitioning image layout to TRANSFER_DST_OPTIMAL...
 DEBUG: Copying buffer to image...
 DEBUG: Transitioning image layout to SHADER_READ_ONLY_OPTIMAL...
 DEBUG: Texture loading complete
-DEBUG: Creating render pass...
-DEBUG: Creating framebuffer...
 DEBUG: Initialization complete
-REDOING Pipeline: vertex=graphics.hlsl, fragment=graphics.hlsl, width=1866, height=2056
-REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=2056
-Cleaning up GLFW...
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
+Detected changes in shaders: compute.hlsl 
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Clearing pipeline cache (2 entries)
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
+Detected changes in shaders: compute.hlsl 
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Clearing pipeline cache (2 entries)
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
+Detected changes in shaders: compute.hlsl 
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Clearing pipeline cache (2 entries)
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
+Detected changes in shaders: compute.hlsl 
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Clearing pipeline cache (2 entries)
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
+Detected changes in shaders: compute.hlsl 
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Clearing pipeline cache (2 entries)
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026
+Detected changes in shaders: compute.hlsl 
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Clearing pipeline cache (2 entries)
+REDOING Pipeline: vertex=post_process.hlsl, fragment=post_process.hlsl, width=1866, height=1026

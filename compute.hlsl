@@ -21,6 +21,10 @@ struct PushConstants {
     uint key_d;
     uint key_q;
     uint key_e;
+    uint texture_width;
+    uint texture_height;
+    float splat_extent;
+    float fog_strength;
 };
 
 [[vk::push_constant]] PushConstants push_constants;
@@ -51,6 +55,9 @@ RWStructuredBuffer<Quad> world_quads : register(u0);
 RWStructuredBuffer<Quad> visible_quads : register(u1);
 RWStructuredBuffer<uint> visible_count : register(u2);
 RWStructuredBuffer<CameraState> camera : register(u3);
+RWStructuredBuffer<uint> accum_buffer : register(u4);
+Texture2D sprite_texture : register(t5);
+SamplerState sprite_sampler : register(s6);
 
 [numthreads(64, 1, 1)]
 void main(uint3 global_id : SV_DispatchThreadID) {
@@ -66,6 +73,7 @@ void main(uint3 global_id : SV_DispatchThreadID) {
         InterlockedExchange(visible_count[0], 0, dummy);
 
         float move_speed = 1.0;
+        float zoom_speed = 2.0;
         float dt = push_constants.delta_time;
 
         // Update camera based on input (WASD)
@@ -74,8 +82,13 @@ void main(uint3 global_id : SV_DispatchThreadID) {
         if (push_constants.key_w != 0) { camera[0].y += move_speed * dt; }
         if (push_constants.key_s != 0) { camera[0].y -= move_speed * dt; }
 
-        // Keep zoom fixed; ignore Q/E input
-        camera[0].zoom = max(0.01, camera[0].zoom);
+        // Zoom controls (Q = zoom in, E = zoom out)
+        if (push_constants.key_q != 0) {
+            camera[0].zoom = min(camera[0].zoom * exp(zoom_speed * dt), 1.0e6);
+        }
+        if (push_constants.key_e != 0) {
+            camera[0].zoom = max(camera[0].zoom / exp(zoom_speed * dt), 0.01);
+        }
         // For next frame, draw all quads and preserve deterministic ordering by ID
         // Host reads this value one frame later, so set it now after reset
         visible_count[0] = push_constants.quad_count;
@@ -109,9 +122,10 @@ void main(uint3 global_id : SV_DispatchThreadID) {
 
     float2 world_pos = float2(base_x + drift_x, base_y + drift_y);
 
-    float2 camera_relative_pos = world_pos + float2(camera[0].x, camera[0].y);
-    // Clamp maximum size to avoid huge quads that cause heavy overdraw
-    float2 final_size = min(quad_size * camera[0].zoom, float2(0.3, 0.3));
+    float zoom = camera[0].zoom;
+    float2 camera_relative_pos = (world_pos + float2(camera[0].x, camera[0].y)) * zoom;
+    // Allow particles to scale naturally with zoom for close inspection
+    float2 final_size = quad_size * zoom;
 
     // Enhanced culling: frustum + size-based performance culling
     // Slightly wider bounds to avoid over-culling due to aspect/transform differences
@@ -166,8 +180,8 @@ void main(uint3 global_id : SV_DispatchThreadID) {
     float color_pulse = cos((float)quad_id * 0.891 + push_constants.time * 0.2);
 
     float3 base_colors[2] = {
-        float3(0.2, 0.4, 9.9),  // Deep blue
-        float3(0.2, 0.4, 9.9),  // Deep blue
+        float3(0.1, 0.4, 9.9),  // Deep blue
+        float3(0.1, 0.4, 9.9),  // Deep blue
     };
 
     uint color_index = (uint)abs(color_shift * 2.5) % 5;
@@ -181,6 +195,7 @@ void main(uint3 global_id : SV_DispatchThreadID) {
         paint_color.b,
         alpha_variation
     );
+
 
     // Only add to visible buffer if not culled
     if (!should_cull) {
@@ -197,6 +212,77 @@ void main(uint3 global_id : SV_DispatchThreadID) {
             paint_color.b * depth_brightness,
             alpha_variation * depth_alpha_factor
         );
+
+
+        // Project particle into the accumulation texture and splat with a soft falloff
+        uint tex_w = push_constants.texture_width;
+        uint tex_h = push_constants.texture_height;
+        if (tex_w > 0 && tex_h > 0) {
+            float aspect_ratio = (float)tex_w / max(1.0, (float)tex_h);
+            float2 ndc = float2(camera_relative_pos.x / aspect_ratio, camera_relative_pos.y);
+            float2 uv = ndc * 0.5 + 0.5;
+
+            bool inside = uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0;
+            if (inside) {
+                float2 dims = float2((float)tex_w, (float)tex_h);
+                float2 pixel_f = uv * (dims - 1.0);
+                int2 base_pixel = int2(pixel_f + 0.5);
+
+                float splat_extent = max(push_constants.splat_extent, 0.0);
+                int radius = min(3, max(1, (int)ceil(splat_extent)));
+                float radius_f = max(1.0, (float)radius);
+                float gaussian_base = 0.65 + push_constants.fog_strength * 0.45;
+
+                const float COLOR_SCALE = 4096.0;
+                const float WEIGHT_SCALE = 2048.0;
+
+                float depth_energy = saturate(1.0 - computed_depth * 0.9);
+                float fog_boost = exp(-computed_depth * 2.2) * push_constants.fog_strength;
+                float intensity = saturate(world_quads[quad_id].color.a * 0.5 + depth_energy * 0.7 + fog_boost);
+                float3 deposit_color = saturate(world_quads[quad_id].color.rgb * intensity);
+
+                for (int oy = -radius; oy <= radius; ++oy) {
+                    for (int ox = -radius; ox <= radius; ++ox) {
+                        int2 pixel_coord = base_pixel + int2(ox, oy);
+                        if (pixel_coord.x < 0 || pixel_coord.y < 0 || pixel_coord.x >= int(tex_w) || pixel_coord.y >= int(tex_h)) {
+                            continue;
+                        }
+
+                        float distance2 = (float)(ox * ox + oy * oy);
+                        float falloff = exp(-distance2 * gaussian_base);
+                        float2 sprite_uv = (float2(float(ox), float(oy)) / radius_f) * 0.5 + 0.5;
+                        if (sprite_uv.x < 0.0 || sprite_uv.x > 1.0 || sprite_uv.y < 0.0 || sprite_uv.y > 1.0) {
+                            continue;
+                        }
+
+                        float4 sprite_sample = sprite_texture.SampleLevel(sprite_sampler, sprite_uv, 0.0);
+                        float sprite_alpha = sprite_sample.a;
+                        if (sprite_alpha <= 0.0001) {
+                            continue;
+                        }
+
+                        float local_weight = intensity * sprite_alpha * falloff;
+                        if (local_weight <= 0.0001) {
+                            continue;
+                        }
+
+                        float3 texture_color = sprite_sample.rgb;
+                        float3 color_tint = lerp(float3(1.0, 1.0, 1.0), texture_color, sprite_alpha);
+                        float3 local_color = saturate(deposit_color * color_tint * sprite_alpha * falloff);
+                        uint encoded_r = (uint)round(local_color.r * COLOR_SCALE);
+                        uint encoded_g = (uint)round(local_color.g * COLOR_SCALE);
+                        uint encoded_b = (uint)round(local_color.b * COLOR_SCALE);
+                        uint encoded_w = max(1, (uint)round(local_weight * WEIGHT_SCALE));
+
+                        uint base_index = (uint(pixel_coord.y) * tex_w + uint(pixel_coord.x)) * 4;
+                        InterlockedAdd(accum_buffer[base_index + 0], encoded_r);
+                        InterlockedAdd(accum_buffer[base_index + 1], encoded_g);
+                        InterlockedAdd(accum_buffer[base_index + 2], encoded_b);
+                        InterlockedAdd(accum_buffer[base_index + 3], encoded_w);
+                    }
+                }
+            }
+        }
 
         visible_quads[quad_id] = world_quads[quad_id];
     }
