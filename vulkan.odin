@@ -257,6 +257,10 @@ handle_resize :: proc() {
 		}
 		// Recreate offscreen resources with new dimensions (handled by render init)
 		init_render_resources()
+
+		destroy_render_pipeline_state(render_pipeline_states[:])
+		pipelines_ready = build_pipelines(render_pipeline_specs[:], render_pipeline_states[:])
+
 	}
 }
 
@@ -986,6 +990,8 @@ init_vulkan_resources :: proc() -> bool {
 		return false
 	}
 	init_render_resources()
+	destroy_render_pipeline_state(render_pipeline_states[:])
+	pipelines_ready = build_pipelines(render_pipeline_specs[:], render_pipeline_states[:])
 	if !pipelines_ready {
 		fmt.println("Render pipelines failed to initialize")
 		return false

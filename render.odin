@@ -79,9 +79,9 @@ init_render_resources :: proc() {
 		vignette_strength = 0.35,
 		_pad0             = 0.0,
 	}
+
 	init_barriers(accumulation_buffer, accumulation_size)
-	destroy_render_pipeline_state(render_pipeline_states[:])
-	pipelines_ready = build_pipelines(render_pipeline_specs[:], render_pipeline_states[:])
+
 }
 
 record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {

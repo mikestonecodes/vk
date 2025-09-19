@@ -22,7 +22,6 @@ PipelineState :: struct {
 	descriptor_layout: vk.DescriptorSetLayout,
 	descriptor_set:    vk.DescriptorSet,
 	push_stage:        vk.ShaderStageFlags,
-	push_size:         u32,
 }
 
 PipelineKind :: enum {
@@ -155,11 +154,6 @@ bind :: proc(
 	push_constants: ^$T,
 ) {
 	push_size := u32(size_of(T))
-	runtime.assert(state != nil, "pipeline state must be valid inside bind")
-	runtime.assert(state.pipeline != {}, "pipeline must be created before binding")
-	runtime.assert(state.layout != {}, "pipeline layout must be created before binding")
-	runtime.assert(state.descriptor_set != {}, "descriptor set must be allocated before binding")
-
 	vk.CmdBindPipeline(frame.cmd, bind_point, state.pipeline)
 	vk.CmdBindDescriptorSets(
 		frame.cmd,
@@ -171,17 +165,6 @@ bind :: proc(
 		0,
 		nil,
 	)
-
-	if state.push_size == 0 {
-		runtime.assert(push_constants == nil, "bind: unexpected push constants for this pipeline")
-		runtime.assert(push_size == 0, "bind: unexpected push constant size for this pipeline")
-		return
-	}
-
-	runtime.assert(push_constants != nil, "bind: missing push constant data")
-	runtime.assert(push_size == state.push_size, "bind: push constant size mismatch")
-	runtime.assert(state.push_stage != {}, "bind: push constant stage missing")
-
 	vk.CmdPushConstants(frame.cmd, state.layout, state.push_stage, 0, push_size, push_constants)
 }
 
@@ -549,7 +532,6 @@ build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 		descriptor_layout = desc_layout,
 		descriptor_set    = desc_set,
 		push_stage        = spec.push.stage,
-		push_size         = spec.push.size,
 	}
 
 	// transfer ownership to state
@@ -572,7 +554,6 @@ reset_pipeline_state :: proc(state: ^PipelineState) {
 	}
 	state.descriptor_set = {}
 	state.push_stage = {}
-	state.push_size = 0
 }
 
 destroy_render_pipeline_state :: proc(states: []PipelineState) {
