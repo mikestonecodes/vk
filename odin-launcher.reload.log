@@ -62,5 +62,5 @@ DEBUG: Loading device procedures
 DEBUG: Creating swapchain
 DEBUG: Initializing resources
 DEBUG: Vulkan init complete
-Discovered 3 shaders: compute.hlsl graphics.hlsl post_process.hlsl 
+Discovered 3 shaders: post_process.hlsl compute.hlsl graphics.hlsl 
 Window resized to 1866x666

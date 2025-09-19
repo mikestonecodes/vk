@@ -97,13 +97,9 @@ simulate_particles :: proc(frame: FrameInputs) {
 	vk.CmdFillBuffer(frame.cmd, accumulation_buffer, 0, accumulation_size, 0)
 	apply_transfer_to_compute_barrier(frame.cmd)
 
-	compute_state := &render_pipeline_states[0]
-
 	compute_push_constants.time = frame.time
 	compute_push_constants.delta_time = frame.delta_time
-
-
-	bind(frame, compute_state, .COMPUTE, &compute_push_constants)
+	bind(frame,  &render_pipeline_states[0], .COMPUTE, &compute_push_constants)
 
 	vk.CmdDispatch(frame.cmd, (PARTICLE_COUNT + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE, 1, 1)
 	apply_compute_to_fragment_barrier(frame.cmd)
@@ -111,8 +107,6 @@ simulate_particles :: proc(frame: FrameInputs) {
 
 // accumulation_buffer -> post_process.hlsl -> swapchain framebuffer
 composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) {
-	post_state := &render_pipeline_states[1]
-
 	vk.CmdBeginRenderPass(
 		frame.cmd,
 		&vk.RenderPassBeginInfo {
@@ -129,9 +123,7 @@ composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) 
 	)
 
 	post_process_push_constants.time = frame.time
-
-	bind(frame, post_state, .GRAPHICS, &post_process_push_constants)
-
+	bind(frame, &render_pipeline_states[1], .GRAPHICS, &post_process_push_constants)
 	vk.CmdDraw(frame.cmd, 3, 1, 0, 0)
 	vk.CmdEndRenderPass(frame.cmd)
 }
