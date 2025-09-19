@@ -1,8 +1,12 @@
 struct PushConstants {
     float time;
-    float intensity;
+    float exposure;
+    float gamma;
+    float contrast;
     uint texture_width;
     uint texture_height;
+    float vignette_strength;
+    float _pad0;
 };
 
 [[vk::push_constant]] PushConstants push_constants;
@@ -14,117 +18,91 @@ struct VertexOutput {
     float2 uv : TEXCOORD0;
 };
 
-// Fullscreen triangle vertices
-static float2 positions[3] = {
-    float2(-1.0, -1.0),
-    float2(3.0, -1.0),
-    float2(-1.0, 3.0)
+static const float2 POSITIONS[3] = {
+    float2(-1.0f, -1.0f),
+    float2( 3.0f, -1.0f),
+    float2(-1.0f,  3.0f)
 };
 
-static float2 uvs[3] = {
-    float2(0.0, 1.0),
-    float2(2.0, 1.0),
-    float2(0.0, -1.0)
+static const float2 UVS[3] = {
+    float2(0.0f, 1.0f),
+    float2(2.0f, 1.0f),
+    float2(0.0f, -1.0f)
 };
 
 VertexOutput vs_main(uint vertex_index : SV_VertexID) {
     VertexOutput output;
-    output.clip_position = float4(positions[vertex_index], 0.0, 1.0);
-    output.uv = uvs[vertex_index];
+    output.clip_position = float4(POSITIONS[vertex_index], 0.0f, 1.0f);
+    output.uv = UVS[vertex_index];
     return output;
 }
 
-static const float COLOR_SCALE = 4096.0;
-static const float WEIGHT_SCALE = 2048.0;
+static const float COLOR_SCALE = 4096.0f;
+static const float WEIGHT_SCALE = 1024.0f;
 
-float3 decode_color(int2 coord, int2 size, out float weight) {
-    coord = clamp(coord, int2(0, 0), size - 1);
-    uint base_index = (uint(coord.y) * push_constants.texture_width + uint(coord.x)) * 4u;
-    uint4 raw = uint4(
-        accum_buffer[base_index + 0],
-        accum_buffer[base_index + 1],
-        accum_buffer[base_index + 2],
-        accum_buffer[base_index + 3]
+float3 decode_pixel(uint2 coord, uint2 dims, out float weight) {
+    coord = min(coord, dims - 1);
+    uint index = (coord.y * dims.x + coord.x) * 4u;
+    uint4 encoded = uint4(
+        accum_buffer[index + 0],
+        accum_buffer[index + 1],
+        accum_buffer[index + 2],
+        accum_buffer[index + 3]
     );
-    weight = (float)raw.w / WEIGHT_SCALE;
-    float3 accum = float3(raw.xyz) / COLOR_SCALE;
-    if (weight <= 0.0001) {
-        weight = 0.0;
-        return float3(0.0, 0.0, 0.0);
+    weight = (float)encoded.w / WEIGHT_SCALE;
+    if (weight <= 0.0001f) {
+        weight = 0.0f;
+        return float3(0.0f, 0.0f, 0.0f);
     }
+    float3 accum = float3(encoded.xyz) / COLOR_SCALE;
     return accum / weight;
 }
 
 float4 fs_main(VertexOutput input_data) : SV_Target {
-    int2 texture_size = int2(int(push_constants.texture_width), int(push_constants.texture_height));
-    float2 dims = max(float2(texture_size), float2(1.0, 1.0));
-    float2 uv = saturate(input_data.uv);
+    uint width = push_constants.texture_width;
+    uint height = push_constants.texture_height;
+    if (width == 0 || height == 0) {
+        return float4(0.0f, 0.0f, 0.0f, 1.0f);
+    }
 
-    float2 pixel = uv * max(dims - 1.0, float2(1.0, 1.0));
-    int2 base_coord = int2(pixel);
+    float2 dims_f = float2((float)width, (float)height);
+    float2 uv = saturate(input_data.uv);
+    float2 pixel = uv * (dims_f - 1.0f);
+    uint2 base = (uint2)pixel;
     float2 frac_coord = frac(pixel);
 
-    float3 accum_color = float3(0.0, 0.0, 0.0);
-    float accum_weight = 0.0;
+    float3 accum_color = 0.0f.xxx;
+    float accum_weight = 0.0f;
 
-    // Manual bilinear filter for integer texture
-    for (int oy = 0; oy <= 1; ++oy) {
-        for (int ox = 0; ox <= 1; ++ox) {
-            int2 coord = base_coord + int2(ox, oy);
+    [unroll]
+    for (uint oy = 0; oy <= 1; ++oy) {
+        for (uint ox = 0; ox <= 1; ++ox) {
+            uint2 coord = base + uint2(ox, oy);
             float sample_weight;
-            float3 sample_color = decode_color(coord, texture_size, sample_weight);
-            float wx = (ox == 0) ? (1.0 - frac_coord.x) : frac_coord.x;
-            float wy = (oy == 0) ? (1.0 - frac_coord.y) : frac_coord.y;
+            float3 sample = decode_pixel(coord, uint2(width, height), sample_weight);
+            float wx = (ox == 0) ? (1.0f - frac_coord.x) : frac_coord.x;
+            float wy = (oy == 0) ? (1.0f - frac_coord.y) : frac_coord.y;
             float w = wx * wy;
-            float weighted = sample_weight * w;
-            accum_color += sample_color * weighted;
-            accum_weight += weighted;
+            accum_color += sample * sample_weight * w;
+            accum_weight += sample_weight * w;
         }
     }
 
-    float3 base_color = (accum_weight > 0.0) ? accum_color / accum_weight : float3(0.0, 0.0, 0.0);
+    float3 color = (accum_weight > 0.0f) ? (accum_color / accum_weight) : float3(0.0f, 0.0f, 0.0f);
 
-    // Capture central weight for fog modulation
-    float center_weight;
-    float3 center_color = decode_color(base_coord, texture_size, center_weight);
-    float density = saturate(center_weight * 0.12);
+    float exposure = max(push_constants.exposure, 0.1f);
+    color = 1.0f - exp(-color * exposure);
 
-    // Soft bloom by sampling a wider neighborhood
-    float3 bloom_color = float3(0.0, 0.0, 0.0);
-    float bloom_weight = 0.0;
-    const int bloom_radius = 2;
-    for (int y = -bloom_radius; y <= bloom_radius; ++y) {
-        for (int x = -bloom_radius; x <= bloom_radius; ++x) {
-            int2 coord = base_coord + int2(x, y);
-            float sample_weight;
-            float3 sample_color = decode_color(coord, texture_size, sample_weight);
-            float falloff = exp(-float(x * x + y * y) * 0.35);
-            bloom_color += sample_color * falloff;
-            bloom_weight += falloff;
-        }
-    }
-    bloom_color /= max(bloom_weight, 0.001);
+    float gamma = max(push_constants.gamma, 0.01f);
+    color = pow(color, float3(1.0f / gamma, 1.0f / gamma, 1.0f / gamma));
 
-    float3 combined = lerp(base_color, bloom_color, 0.4);
-    combined = lerp(combined, center_color, 0.2);
+    float contrast = clamp(push_constants.contrast, 0.0f, 2.0f);
+    color = lerp(float3(0.5f, 0.5f, 0.5f), color, contrast);
 
-    // Fog-style blend pulls color toward a cool mist as density increases
-    float fog_factor = saturate(1.0 - exp(-density * 2.2));
-    float3 fog_tint = float3(0.08, 0.12, 0.18);
-    combined = lerp(combined, fog_tint, fog_factor * 0.5);
+    float vignette_strength = saturate(push_constants.vignette_strength);
+    float2 centered = uv - 0.5f.xx;
+    float vignette = 1.0f - vignette_strength * smoothstep(0.4f, 0.9f, dot(centered, centered));
+    color *= vignette;
 
-    // Tone mapping and gamma correction for final image
-    float3 tone_mapped = combined / (combined + float3(1.0, 1.0, 1.0));
-    float3 gamma_corrected = pow(tone_mapped, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
-
-    // Vignette for subtle framing
-    float vignette = 1.0 - smoothstep(0.45, 0.85, length(uv - float2(0.5, 0.5)));
-
-    // Slight animated pulse to keep things lively
-    float pulse = 0.05 * sin(push_constants.time * 0.8);
-    float exposure = 1.0 + pulse + push_constants.intensity * 0.1;
-
-    float3 final_color = saturate(gamma_corrected * exposure) * vignette;
-
-    return float4(final_color, 1.0);
+    return float4(saturate(color), 1.0f);
 }

@@ -1,0 +1,7 @@
+{
+  "collections": ["src"],
+  "enable_format": true,
+  "formatter": {
+    "max_width": 120
+  }
+}
