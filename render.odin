@@ -1,7 +1,6 @@
 package main
 
 import "base:runtime"
-import "core:time"
 import vk "vendor:vulkan"
 
 PARTICLE_COUNT :: u32(980_000)
@@ -9,7 +8,7 @@ COMPUTE_GROUP_SIZE :: u32(128)
 PIPELINE_COUNT :: 2
 
 accumulation_buffer: BufferResource
-
+accumulation_barriers: BufferBarriers
 
 PostProcessPushConstants :: struct {
 	time:              f32,
@@ -44,7 +43,7 @@ init_render_resources :: proc() {
 
 	create_buffer(
 		&accumulation_buffer,
-		 vk.DeviceSize(width) * vk.DeviceSize(height) * 4 * vk.DeviceSize(size_of(u32)),
+		vk.DeviceSize(width) * vk.DeviceSize(height) * 4 * vk.DeviceSize(size_of(u32)),
 		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
 	)
 
@@ -103,11 +102,9 @@ init_render_resources :: proc() {
 
 }
 
-record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
-	encoder, frame := begin_frame_commands(element, start_time)
+record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
 	simulate_particles(frame)
 	composite_to_swapchain(frame, element.framebuffer)
-	finish_encoding(&encoder)
 }
 
 
@@ -126,21 +123,7 @@ simulate_particles :: proc(frame: FrameInputs) {
 
 // accumulation_buffer -> post_process.hlsl -> swapchain framebuffer
 composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) {
-	vk.CmdBeginRenderPass(
-		frame.cmd,
-		&vk.RenderPassBeginInfo {
-			sType = vk.StructureType.RENDER_PASS_BEGIN_INFO,
-			renderPass = render_pass,
-			framebuffer = framebuffer,
-			renderArea = {{x = 0, y = 0}, {width, height}},
-			clearValueCount = 1,
-			pClearValues = &vk.ClearValue {
-				color = vk.ClearColorValue{float32 = [4]f32{0.0, 0.0, 0.0, 1.0}},
-			},
-		},
-		.INLINE,
-	)
-
+	begin_render_pass(frame, framebuffer)
 	post_process_push_constants.time = frame.time
 	bind(frame, &render_pipeline_states[1], .GRAPHICS, &post_process_push_constants)
 	vk.CmdDraw(frame.cmd, 3, 1, 0, 0)
@@ -148,7 +131,6 @@ composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) 
 }
 
 cleanup_render_resources :: proc() {
-	destroy_render_pipeline_state(render_pipeline_states[:])
 	destroy_buffer(&accumulation_buffer)
 	reset_buffer_barriers(&accumulation_barriers)
 }

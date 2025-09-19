@@ -65,7 +65,6 @@ GraphicsPipelineConfig :: struct {
 	descriptor: DescriptorBindingInfo,
 }
 
-accumulation_barriers: BufferBarriers
 last_frame_time: f32
 
 descriptor_pool: vk.DescriptorPool
@@ -76,6 +75,20 @@ pipelines_ready: bool
 render_pipeline_specs: [PIPELINE_COUNT]PipelineSpec
 render_pipeline_states: [PIPELINE_COUNT]PipelineState
 
+begin_render_pass :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) {
+	vk.CmdBeginRenderPass(
+		frame.cmd,
+		&vk.RenderPassBeginInfo {
+			sType = vk.StructureType.RENDER_PASS_BEGIN_INFO,
+			renderPass = render_pass,
+			framebuffer = framebuffer,
+			renderArea = {{0, 0}, {width, height}},
+			clearValueCount = 1,
+			pClearValues = &vk.ClearValue{color = {float32 = {0, 0, 0, 1}}},
+		},
+		.INLINE,
+	)
+}
 make_compute_pipeline_spec :: proc(config: ComputePipelineConfig) -> PipelineSpec {
 	return PipelineSpec {
 		name = config.name,
@@ -102,6 +115,7 @@ push_constant_info :: proc(
 ) -> PushConstantInfo {
 	return PushConstantInfo{label = label, stage = stage, size = size}
 }
+
 
 storage_buffer_binding :: proc(
 	label: string,
@@ -166,8 +180,6 @@ bind :: proc(
 	)
 	vk.CmdPushConstants(frame.cmd, state.layout, state.push_stage, 0, push_size, push_constants)
 }
-
-
 
 
 load_shader_module :: proc(path: string) -> (shader: vk.ShaderModule, ok: bool) {

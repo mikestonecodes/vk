@@ -223,8 +223,13 @@ render_frame :: proc(start_time: time.Time) {
 	vk.WaitForFences(device, 1, &element.fence, true, ~u64(0))
 	vk.ResetFences(device, 1, &element.fence)
 
+
+	encoder, frame := begin_frame_commands(element, start_time)
+
 	// 3. Record draw commands
-	record_commands(element, start_time)
+	record_commands(element, frame)
+
+	finish_encoding(&encoder)
 	// 4. Submit to GPU and present
 	submit_commands(element)
 	present_frame()
@@ -246,6 +251,7 @@ handle_resize :: proc() {
 
 		// Destroy old offscreen image resource (handled by render cleanup)
 		cleanup_render_resources()
+		destroy_render_pipeline_state(render_pipeline_states[:])
 
 		destroy_swapchain()
 		create_swapchain()
@@ -1152,6 +1158,8 @@ vulkan_cleanup :: proc() {
 	destroy_swapchain()
 
 	cleanup_render_resources()
+
+	destroy_render_pipeline_state(render_pipeline_states[:])
 
 	// Cleanup remaining vulkan resources
 	vk.DestroySemaphore(device, timeline_semaphore, nil)
