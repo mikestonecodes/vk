@@ -88,7 +88,7 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 	encoder, frame := begin_frame_commands(element, start_time)
 	simulate_particles(frame)
 	composite_to_swapchain(frame, element.framebuffer)
-	finish_frame_commands(&encoder)
+	finish_encoding(&encoder)
 }
 
 
