@@ -4,10 +4,17 @@ import "base:runtime"
 import "core:fmt"
 import "core:os"
 import "core:strings"
+import "core:time"
 import vk "vendor:vulkan"
 
 CommandEncoder :: struct {
 	command_buffer: vk.CommandBuffer,
+}
+
+FrameInputs :: struct {
+	cmd:        vk.CommandBuffer,
+	time:       f32,
+	delta_time: f32,
 }
 
 PipelineState :: struct {
@@ -17,19 +24,231 @@ PipelineState :: struct {
 	descriptor_set:    vk.DescriptorSet,
 }
 
-PipelineSpec :: struct {
-	name:             string,
-	descriptor_stage: vk.ShaderStageFlags,
-	push_stage:       vk.ShaderStageFlags,
-	push_size:        u32,
-	compute_module:   string,
-	vertex_module:    string,
-	fragment_module:  string,
+PushConstantInfo :: struct {
+	label: string,
+	stage: vk.ShaderStageFlags,
+	size:  u32,
 }
+
+DescriptorBindingInfo :: struct {
+	label:          string,
+	binding:        u32,
+	descriptorType: vk.DescriptorType,
+	stage:          vk.ShaderStageFlags,
+}
+
+PipelineSpec :: struct {
+	name:            string,
+	push:            PushConstantInfo,
+	descriptor:      DescriptorBindingInfo,
+	compute_module:  string,
+	vertex_module:   string,
+	fragment_module: string,
+}
+
+ComputePipelineConfig :: struct {
+	name:       string,
+	shader:     string,
+	push:       PushConstantInfo,
+	descriptor: DescriptorBindingInfo,
+}
+
+GraphicsPipelineConfig :: struct {
+	name:       string,
+	vertex:     string,
+	fragment:   string,
+	push:       PushConstantInfo,
+	descriptor: DescriptorBindingInfo,
+}
+
+transfer_to_compute_barrier: vk.BufferMemoryBarrier
+compute_to_fragment_barrier: vk.BufferMemoryBarrier
+last_frame_time: f32
 
 descriptor_pool: vk.DescriptorPool
 
 pipelines_ready: bool
+
+make_compute_pipeline_spec :: proc(config: ComputePipelineConfig) -> PipelineSpec {
+	return PipelineSpec {
+		name           = config.name,
+		push           = config.push,
+		descriptor     = config.descriptor,
+		compute_module = config.shader,
+	}
+}
+
+make_graphics_pipeline_spec :: proc(config: GraphicsPipelineConfig) -> PipelineSpec {
+	return PipelineSpec {
+		name            = config.name,
+		push            = config.push,
+		descriptor      = config.descriptor,
+		vertex_module   = config.vertex,
+		fragment_module = config.fragment,
+	}
+}
+
+push_constant_info :: proc(label: string, stage: vk.ShaderStageFlags, size: u32) -> PushConstantInfo {
+	return PushConstantInfo {label = label, stage = stage, size = size}
+}
+
+storage_buffer_binding :: proc(label: string, stage: vk.ShaderStageFlags, binding: u32 = 0) -> DescriptorBindingInfo {
+	return DescriptorBindingInfo {
+		label          = label,
+		binding        = binding,
+		descriptorType = vk.DescriptorType.STORAGE_BUFFER,
+		stage          = stage,
+	}
+}
+
+reset_frame_timing :: proc() {
+	last_frame_time = 0.0
+}
+
+begin_frame_commands :: proc(element: ^SwapchainElement, start_time: time.Time) -> (encoder: CommandEncoder, frame: FrameInputs) {
+	runtime.assert(
+		accumulation_buffer != {},
+		"accumulation buffer missing before recording commands",
+	)
+	runtime.assert(accumulation_size > 0, "accumulation buffer size must be positive")
+
+	encoder = begin_encoding(element)
+	current_time := f32(time.duration_seconds(time.diff(start_time, time.now())))
+	delta := current_time - last_frame_time
+	if last_frame_time == 0.0 || delta < 0.0 {
+		delta = 0.0
+	}
+	last_frame_time = current_time
+
+	frame = FrameInputs {
+		cmd        = encoder.command_buffer,
+		time       = current_time,
+		delta_time = delta,
+	}
+	return
+}
+
+finish_frame_commands :: proc(encoder: ^CommandEncoder) {
+	finish_encoding(encoder)
+}
+
+push_compute_constants :: proc(cmd: vk.CommandBuffer, layout: vk.PipelineLayout, constants: ^ComputePushConstants) {
+	vk.CmdPushConstants(
+		cmd,
+		layout,
+		{vk.ShaderStageFlag.COMPUTE},
+		0,
+		u32(size_of(ComputePushConstants)),
+		constants,
+	)
+}
+
+push_post_process_constants :: proc(cmd: vk.CommandBuffer, layout: vk.PipelineLayout, constants: ^PostProcessPushConstants) {
+	vk.CmdPushConstants(
+		cmd,
+		layout,
+		{vk.ShaderStageFlag.FRAGMENT},
+		0,
+		u32(size_of(PostProcessPushConstants)),
+		constants,
+	)
+}
+
+bind_pipeline :: proc(cmd: vk.CommandBuffer, bind_point: vk.PipelineBindPoint, state: ^PipelineState) {
+	vk.CmdBindPipeline(cmd, bind_point, state.pipeline)
+}
+
+bind_descriptor_set :: proc(cmd: vk.CommandBuffer, bind_point: vk.PipelineBindPoint, state: ^PipelineState) {
+	vk.CmdBindDescriptorSets(
+		cmd,
+		bind_point,
+		state.layout,
+		0,
+		1,
+		&state.descriptor_set,
+		0,
+		nil,
+	)
+}
+
+bind_compute_pipeline :: proc(cmd: vk.CommandBuffer, state: ^PipelineState, push: ^ComputePushConstants) {
+	bind_pipeline(cmd, .COMPUTE, state)
+	bind_descriptor_set(cmd, .COMPUTE, state)
+	push_compute_constants(cmd, state.layout, push)
+}
+
+bind_post_pipeline :: proc(cmd: vk.CommandBuffer, state: ^PipelineState, push: ^PostProcessPushConstants) {
+	bind_pipeline(cmd, .GRAPHICS, state)
+	bind_descriptor_set(cmd, .GRAPHICS, state)
+	push_post_process_constants(cmd, state.layout, push)
+}
+
+init_accumulation_barriers :: proc(buffer: vk.Buffer, size: vk.DeviceSize) {
+	transfer_to_compute_barrier = vk.BufferMemoryBarrier {
+		sType               = vk.StructureType.BUFFER_MEMORY_BARRIER,
+		srcAccessMask       = {vk.AccessFlag.TRANSFER_WRITE},
+		dstAccessMask       = {vk.AccessFlag.SHADER_WRITE},
+		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		buffer              = buffer,
+		offset              = 0,
+		size                = size,
+	}
+
+	compute_to_fragment_barrier = vk.BufferMemoryBarrier {
+		sType               = vk.StructureType.BUFFER_MEMORY_BARRIER,
+		srcAccessMask       = {vk.AccessFlag.SHADER_WRITE},
+		dstAccessMask       = {vk.AccessFlag.SHADER_READ},
+		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		buffer              = buffer,
+		offset              = 0,
+		size                = size,
+	}
+}
+
+reset_accumulation_barriers :: proc() {
+	transfer_to_compute_barrier = vk.BufferMemoryBarrier{}
+	compute_to_fragment_barrier = vk.BufferMemoryBarrier{}
+}
+
+apply_transfer_to_compute_barrier :: proc(cmd: vk.CommandBuffer) {
+	runtime.assert(
+		transfer_to_compute_barrier.buffer != {},
+		"transfer barrier requested before initialization",
+	)
+	vk.CmdPipelineBarrier(
+		cmd,
+		{vk.PipelineStageFlag.TRANSFER},
+		{vk.PipelineStageFlag.COMPUTE_SHADER},
+		{},
+		0,
+		nil,
+		1,
+		&transfer_to_compute_barrier,
+		0,
+		nil,
+	)
+}
+
+apply_compute_to_fragment_barrier :: proc(cmd: vk.CommandBuffer) {
+	runtime.assert(
+		compute_to_fragment_barrier.buffer != {},
+		"compute barrier requested before initialization",
+	)
+	vk.CmdPipelineBarrier(
+		cmd,
+		{vk.PipelineStageFlag.COMPUTE_SHADER},
+		{vk.PipelineStageFlag.FRAGMENT_SHADER},
+		{},
+		0,
+		nil,
+		1,
+		&compute_to_fragment_barrier,
+		0,
+		nil,
+	)
+}
 
 
 load_shader_module :: proc(path: string) -> (shader: vk.ShaderModule, ok: bool) {
@@ -137,10 +356,10 @@ make_stage :: proc(
 build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 	bindings := []vk.DescriptorSetLayoutBinding {
 		{
-			binding = 0,
-			descriptorType = vk.DescriptorType.STORAGE_BUFFER,
+			binding         = spec.descriptor.binding,
+			descriptorType  = spec.descriptor.descriptorType,
 			descriptorCount = 1,
-			stageFlags = spec.descriptor_stage,
+			stageFlags      = spec.descriptor.stage,
 		},
 	}
 
@@ -158,7 +377,10 @@ build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 	) or_return
 	defer vk.DestroyDescriptorSetLayout(device, desc_layout, nil)
 
-	push_ranges := []vk.PushConstantRange{{stageFlags = spec.push_stage, size = spec.push_size}}
+	push_ranges: []vk.PushConstantRange
+	if spec.push.size > 0 {
+		push_ranges = []vk.PushConstantRange{{stageFlags = spec.push.stage, size = spec.push.size}}
+	}
 	layouts := []vk.DescriptorSetLayout{desc_layout}
 
 	// Create pipeline layout
@@ -201,6 +423,20 @@ build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 		frag := load_shader_module(spec.fragment_module) or_return
 		defer {vk.DestroyShaderModule(device, vert, nil);vk.DestroyShaderModule(device, frag, nil)}
 
+		viewport := vk.Viewport {
+			x        = 0,
+			y        = 0,
+			width    = f32(width),
+			height   = f32(height),
+			minDepth = 0,
+			maxDepth = 1,
+		}
+
+		scissor := vk.Rect2D {
+			offset = {x = 0, y = 0},
+			extent = {width = u32(width), height = u32(height)},
+		}
+
 		stages := [2]vk.PipelineShaderStageCreateInfo {
 			make_stage(vk.ShaderStageFlag.VERTEX, vert, "vs_main"),
 			make_stage(vk.ShaderStageFlag.FRAGMENT, frag, "fs_main"),
@@ -222,16 +458,11 @@ build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 					   topology = vk.PrimitiveTopology.TRIANGLE_LIST,
 				   },
 				   pViewportState = &vk.PipelineViewportStateCreateInfo {
-					   sType = vk.StructureType.PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+					   sType         = vk.StructureType.PIPELINE_VIEWPORT_STATE_CREATE_INFO,
 					   viewportCount = 1,
-					   pViewports = &vk.Viewport {
-						   x = 0,
-						   y = 0,
-						   width = f32(width),
-						   height = f32(height),
-						   minDepth = 0,
-						   maxDepth = 1,
-					   },
+					   pViewports    = &viewport,
+					   scissorCount  = 1,
+					   pScissors     = &scissor,
 				   },
 				   pRasterizationState = &vk.PipelineRasterizationStateCreateInfo {
 					   sType = vk.StructureType.PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -288,14 +519,14 @@ build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 		device,
 		1,
 		&vk.WriteDescriptorSet {
-			sType = vk.StructureType.WRITE_DESCRIPTOR_SET,
-			dstSet = desc_set,
-			dstBinding = 0,
-			descriptorType = vk.DescriptorType.STORAGE_BUFFER,
+			sType           = vk.StructureType.WRITE_DESCRIPTOR_SET,
+			dstSet          = desc_set,
+			dstBinding      = spec.descriptor.binding,
+			descriptorType  = spec.descriptor.descriptorType,
 			descriptorCount = 1,
-			pBufferInfo = &vk.DescriptorBufferInfo {
+			pBufferInfo     = &vk.DescriptorBufferInfo {
 				buffer = accumulation_buffer,
-				range = vk.DeviceSize(vk.WHOLE_SIZE),
+				range  = vk.DeviceSize(vk.WHOLE_SIZE),
 			},
 		},
 		0,

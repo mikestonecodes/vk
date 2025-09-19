@@ -61,14 +61,6 @@ Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver:
 DEBUG: Loading device procedures
 DEBUG: Creating swapchain
 DEBUG: Initializing resources
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pViewportState->scissorCount can't be 0 unless VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT is used.
-The Vulkan spec states: If the graphics pipeline is being created with VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT set then scissorCount must be 0, otherwise scissorCount must be greater than 0 (https://docs.vulkan.org/spec/latest/chapters/vertexpostproc.html#VUID-VkPipelineViewportStateCreateInfo-scissorCount-04136)
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pViewportState scissorCount (0) is different to viewportCount (1).
-The Vulkan spec states: If scissorCount and viewportCount are both not dynamic, then scissorCount and viewportCount must be identical (https://docs.vulkan.org/spec/latest/chapters/vertexpostproc.html#VUID-VkPipelineViewportStateCreateInfo-scissorCount-04134)
 DEBUG: Vulkan init complete
-Discovered 3 shaders: graphics.hlsl post_process.hlsl compute.hlsl 
-Window resized to 1866x1026
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pViewportState->scissorCount can't be 0 unless VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT is used.
-The Vulkan spec states: If the graphics pipeline is being created with VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT set then scissorCount must be 0, otherwise scissorCount must be greater than 0 (https://docs.vulkan.org/spec/latest/chapters/vertexpostproc.html#VUID-VkPipelineViewportStateCreateInfo-scissorCount-04136)
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pViewportState scissorCount (0) is different to viewportCount (1).
-The Vulkan spec states: If scissorCount and viewportCount are both not dynamic, then scissorCount and viewportCount must be identical (https://docs.vulkan.org/spec/latest/chapters/vertexpostproc.html#VUID-VkPipelineViewportStateCreateInfo-scissorCount-04134)
+Discovered 3 shaders: post_process.hlsl compute.hlsl graphics.hlsl 
+Window resized to 1866x666

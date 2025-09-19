@@ -1,16 +1,19 @@
 package main
 
 import "base:runtime"
-import "core:fmt"
 import "core:time"
 import vk "vendor:vulkan"
 
-PARTICLE_COUNT :: u32(180_000)
+PARTICLE_COUNT :: u32(980_000)
 COMPUTE_GROUP_SIZE :: u32(128)
 
 accumulation_buffer: vk.Buffer
 accumulation_memory: vk.DeviceMemory
 accumulation_size: vk.DeviceSize
+
+compute_push_constants: ComputePushConstants
+post_process_push_constants: PostProcessPushConstants
+compute_dispatch_groups: [3]u32
 
 PipelineKind :: enum {
 	Compute,
@@ -18,25 +21,7 @@ PipelineKind :: enum {
 }
 
 PIPELINE_COUNT :: 2
-
-render_pipeline_specs := [PIPELINE_COUNT]PipelineSpec {
-	{
-		name = "compute",
-		descriptor_stage = {vk.ShaderStageFlag.COMPUTE},
-		push_stage = {vk.ShaderStageFlag.COMPUTE},
-		push_size = u32(size_of(ComputePushConstants)),
-		compute_module = "compute.spv",
-	},
-	{
-		name = "post",
-		descriptor_stage = {vk.ShaderStageFlag.FRAGMENT},
-		push_stage = {vk.ShaderStageFlag.FRAGMENT},
-		push_size = u32(size_of(PostProcessPushConstants)),
-		vertex_module = "post_process_vs.spv",
-		fragment_module = "post_process_fs.spv",
-	},
-}
-
+render_pipeline_specs: [PIPELINE_COUNT]PipelineSpec
 render_pipeline_states: [PIPELINE_COUNT]PipelineState
 
 init_render_resources :: proc() {
@@ -55,160 +40,131 @@ init_render_resources :: proc() {
 		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
 	)
 	runtime.assert(accumulation_buffer != {}, "accumulation buffer allocation failed")
-	compile_shader("compute.hlsl")
-	compile_shader("post_process.hlsl")
-	init_render_pipeline_state(render_pipeline_specs[:], render_pipeline_states[:])
-}
 
-record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
-	runtime.assert(
-		accumulation_buffer != {},
-		"accumulation buffer missing before recording commands",
-	)
-	runtime.assert(accumulation_size > 0, "accumulation buffer size must be positive")
+	configure_pipeline_specs()
 
-	encoder := begin_encoding(element)
-	frame := FrameInputs {
-		cmd  = encoder.command_buffer,
-		time = f32(time.duration_seconds(time.diff(start_time, time.now()))),
+
+	compute_dispatch_groups = [3]u32{
+		(PARTICLE_COUNT + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE,
+		1,
+		1,
 	}
 
-	reset_accumulation(frame)
-	issue_compute_pass(frame)
-	issue_post_pass(frame, element.framebuffer)
-
-	finish_encoding(&encoder)
-}
-
-FrameInputs :: struct {
-	cmd:  vk.CommandBuffer,
-	time: f32,
-}
-
-reset_accumulation :: proc(frame: FrameInputs) {
-	vk.CmdFillBuffer(frame.cmd, accumulation_buffer, 0, accumulation_size, 0)
-	vk.CmdPipelineBarrier(
-		frame.cmd,
-		{vk.PipelineStageFlag.TRANSFER},
-		{vk.PipelineStageFlag.COMPUTE_SHADER},
-		{},
-		0,
-		nil,
-		1,
-		&vk.BufferMemoryBarrier {
-			sType = vk.StructureType.BUFFER_MEMORY_BARRIER,
-			srcAccessMask = {vk.AccessFlag.TRANSFER_WRITE},
-			dstAccessMask = {vk.AccessFlag.SHADER_WRITE},
-			srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-			dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-			buffer = accumulation_buffer,
-			offset = 0,
-			size = accumulation_size,
-		},
-		0,
-		nil,
-	)
-}
-
-issue_compute_pass :: proc(frame: FrameInputs) {
-	compute_state := &render_pipeline_states[int(PipelineKind.Compute)]
-	runtime.assert(pipelines_ready, "dispatch without ready pipelines")
-	runtime.assert(compute_state.pipeline != {}, "compute pipeline missing")
-	runtime.assert(compute_state.descriptor_set != {}, "compute descriptor set missing")
-
-	push := ComputePushConstants {
-		time           = frame.time,
-		delta_time     = 0.016,
+	compute_push_constants = ComputePushConstants {
+		time           = 0.0,
+		delta_time     = 0.0,
 		particle_count = PARTICLE_COUNT,
 		texture_width  = u32(width),
 		texture_height = u32(height),
 		spread         = 1.0,
 		brightness     = 1.0,
 	}
-	workgroups := [3]u32{(PARTICLE_COUNT + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE, 1, 1}
 
-	vk.CmdBindPipeline(frame.cmd, .COMPUTE, compute_state.pipeline)
-	vk.CmdBindDescriptorSets(
-		frame.cmd,
-		.COMPUTE,
-		compute_state.layout,
-		0,
-		1,
-		&compute_state.descriptor_set,
-		0,
-		nil,
-	)
-
-	vk.CmdPushConstants(
-		frame.cmd,
-		compute_state.layout,
-		{vk.ShaderStageFlag.COMPUTE},
-		0,
-		u32(size_of(ComputePushConstants)),
-		&push,
-	)
-
-	vk.CmdDispatch(frame.cmd, workgroups[0], workgroups[1], workgroups[2])
-
-	barrier := vk.BufferMemoryBarrier {
-		sType               = vk.StructureType.BUFFER_MEMORY_BARRIER,
-		srcAccessMask       = {vk.AccessFlag.SHADER_WRITE},
-		dstAccessMask       = {vk.AccessFlag.SHADER_READ},
-		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		buffer              = accumulation_buffer,
-		offset              = 0,
-		size                = accumulation_size,
+	post_process_push_constants = PostProcessPushConstants {
+		time              = 0.0,
+		exposure          = 1.2,
+		gamma             = 2.2,
+		contrast          = 1.0,
+		texture_width     = u32(width),
+		texture_height    = u32(height),
+		vignette_strength = 0.35,
+		_pad0             = 0.0,
 	}
 
-	vk.CmdPipelineBarrier(
-		frame.cmd,
-		{vk.PipelineStageFlag.COMPUTE_SHADER},
-		{vk.PipelineStageFlag.FRAGMENT_SHADER},
-		{},
-		0,
-		nil,
-		1,
-		&barrier,
-		0,
-		nil,
-	)
+	reset_frame_timing()
+	init_accumulation_barriers(accumulation_buffer, accumulation_size)
+	compile_shader("compute.hlsl")
+	compile_shader("post_process.hlsl")
+	init_render_pipeline_state(render_pipeline_specs[:], render_pipeline_states[:])
 }
 
-issue_post_pass :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) {
+configure_pipeline_specs :: proc() {
+	render_pipeline_specs[0] = make_compute_pipeline_spec(ComputePipelineConfig {
+		name       = "particles",
+		shader     = "compute.spv",
+		push       = push_constant_info(
+			"ComputePushConstants",
+			{vk.ShaderStageFlag.COMPUTE},
+			u32(size_of(ComputePushConstants)),
+		),
+		descriptor = storage_buffer_binding(
+			"accumulation-buffer",
+			{vk.ShaderStageFlag.COMPUTE},
+		),
+	})
+
+	render_pipeline_specs[1] = make_graphics_pipeline_spec(GraphicsPipelineConfig {
+		name      = "tone-map",
+		vertex    = "post_process_vs.spv",
+		fragment  = "post_process_fs.spv",
+		push      = push_constant_info(
+			"PostProcessPushConstants",
+			{vk.ShaderStageFlag.FRAGMENT},
+			u32(size_of(PostProcessPushConstants)),
+		),
+		descriptor = storage_buffer_binding(
+			"accumulation-buffer",
+			{vk.ShaderStageFlag.FRAGMENT},
+		),
+	})
+}
+
+record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
+	encoder, frame := begin_frame_commands(element, start_time)
+	simulate_particles(frame)
+	composite_to_swapchain(frame, element.framebuffer)
+	finish_frame_commands(&encoder)
+}
+
+
+// compute.hlsl -> accumulation_buffer
+simulate_particles :: proc(frame: FrameInputs) {
+	vk.CmdFillBuffer(frame.cmd, accumulation_buffer, 0, accumulation_size, 0)
+	apply_transfer_to_compute_barrier(frame.cmd)
+
+	compute_state := &render_pipeline_states[int(PipelineKind.Compute)]
+	runtime.assert(pipelines_ready, "dispatch without ready pipelines")
+	runtime.assert(compute_state.pipeline != {}, "compute pipeline missing")
+	runtime.assert(compute_state.descriptor_set != {}, "compute descriptor set missing")
+
+	compute_push_constants.time = frame.time
+	compute_push_constants.delta_time = frame.delta_time
+
+	bind_compute_pipeline(frame.cmd, compute_state, &compute_push_constants)
+
+	vk.CmdDispatch(
+		frame.cmd,
+		compute_dispatch_groups[0],
+		compute_dispatch_groups[1],
+		compute_dispatch_groups[2],
+	)
+	apply_compute_to_fragment_barrier(frame.cmd)
+}
+
+// accumulation_buffer -> post_process.hlsl -> swapchain framebuffer
+composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) {
 	post_state := &render_pipeline_states[int(PipelineKind.Post)]
 	runtime.assert(post_state.pipeline != {}, "post pipeline missing")
 	runtime.assert(post_state.descriptor_set != {}, "post descriptor set missing")
 
-	vk.CmdBeginRenderPass(frame.cmd, &vk.RenderPassBeginInfo {
-		sType           = vk.StructureType.RENDER_PASS_BEGIN_INFO,
-		renderPass      = render_pass,
-		framebuffer     = framebuffer,
-		renderArea      = {{x = 0, y = 0}, {width, height}},
-		clearValueCount = 1,
-		pClearValues    = &vk.ClearValue{color = vk.ClearColorValue{float32 = [4]f32{0.0, 0.0, 0.0, 1.0}}},
-	}, .INLINE)
-
-	vk.CmdBindPipeline(frame.cmd, .GRAPHICS, post_state.pipeline)
-	vk.CmdBindDescriptorSets(
+	vk.CmdBeginRenderPass(
 		frame.cmd,
-		.GRAPHICS,
-		post_state.layout,
-		0,
-		1,
-		&post_state.descriptor_set,
-		0,
-		nil,
+		&vk.RenderPassBeginInfo {
+			sType = vk.StructureType.RENDER_PASS_BEGIN_INFO,
+			renderPass = render_pass,
+			framebuffer = framebuffer,
+			renderArea = {{x = 0, y = 0}, {width, height}},
+			clearValueCount = 1,
+			pClearValues = &vk.ClearValue {
+				color = vk.ClearColorValue{float32 = [4]f32{0.0, 0.0, 0.0, 1.0}},
+			},
+		},
+		.INLINE,
 	)
 
-	vk.CmdPushConstants(
-		frame.cmd,
-		post_state.layout,
-		{vk.ShaderStageFlag.FRAGMENT},
-		0,
-		u32(size_of(PostProcessPushConstants)),
-		&PostProcessPushConstants{frame.time, 1.2, 2.2, 1.0, u32(width), u32(height), 0.35, 0.0},
-	)
+	post_process_push_constants.time = frame.time
+
+	bind_post_pipeline(frame.cmd, post_state, &post_process_push_constants)
 
 	vk.CmdDraw(frame.cmd, 3, 1, 0, 0)
 	vk.CmdEndRenderPass(frame.cmd)
@@ -223,6 +179,7 @@ destroy_accumulation_buffer :: proc() {
 	if accumulation_buffer == {} {
 		accumulation_memory = {}
 		accumulation_size = 0
+		reset_accumulation_barriers()
 		return
 	}
 
@@ -231,4 +188,5 @@ destroy_accumulation_buffer :: proc() {
 	accumulation_buffer = {}
 	accumulation_memory = {}
 	accumulation_size = 0
+	reset_accumulation_barriers()
 }
