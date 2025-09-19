@@ -8,25 +8,50 @@ PARTICLE_COUNT :: u32(980_000)
 COMPUTE_GROUP_SIZE :: u32(128)
 PIPELINE_COUNT :: 2
 
-accumulation_buffer: vk.Buffer
-accumulation_memory: vk.DeviceMemory
-accumulation_size: vk.DeviceSize
+accumulation_buffer: BufferResource
+
+
+PostProcessPushConstants :: struct {
+	time:              f32,
+	exposure:          f32,
+	gamma:             f32,
+	contrast:          f32,
+	texture_width:     u32,
+	texture_height:    u32,
+	vignette_strength: f32,
+	_pad0:             f32,
+}
+
+
+ComputePushConstants :: struct {
+	time:           f32,
+	delta_time:     f32,
+	particle_count: u32,
+	_pad0:          u32,
+	texture_width:  u32,
+	texture_height: u32,
+	spread:         f32,
+	brightness:     f32,
+}
 
 compute_push_constants: ComputePushConstants
 post_process_push_constants: PostProcessPushConstants
 
 init_render_resources :: proc() {
 
-	accumulation_size =
-		vk.DeviceSize(width) * vk.DeviceSize(height) * 4 * vk.DeviceSize(size_of(u32))
+	destroy_buffer(&accumulation_buffer)
+	reset_buffer_barriers(&accumulation_barriers)
 
-	accumulation_buffer, accumulation_memory = createBuffer(
-		int(accumulation_size),
+	create_buffer(
+		&accumulation_buffer,
+		 vk.DeviceSize(width) * vk.DeviceSize(height) * 4 * vk.DeviceSize(size_of(u32)),
 		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
 	)
 
+	init_buffer_barriers(&accumulation_barriers, &accumulation_buffer)
+
 	render_pipeline_specs[0] = make_compute_pipeline_spec(
-		ComputePipelineConfig {
+		{
 			name = "particles",
 			shader = "compute.spv",
 			push = push_constant_info(
@@ -42,7 +67,7 @@ init_render_resources :: proc() {
 	)
 
 	render_pipeline_specs[1] = make_graphics_pipeline_spec(
-		GraphicsPipelineConfig {
+		{
 			name = "tone-map",
 			vertex = "post_process_vs.spv",
 			fragment = "post_process_fs.spv",
@@ -60,27 +85,21 @@ init_render_resources :: proc() {
 
 
 	compute_push_constants = ComputePushConstants {
-		time           = 0.0,
-		delta_time     = 0.0,
-		particle_count = PARTICLE_COUNT,
 		texture_width  = u32(width),
 		texture_height = u32(height),
+		particle_count = PARTICLE_COUNT,
 		spread         = 1.0,
 		brightness     = 1.0,
 	}
 
 	post_process_push_constants = PostProcessPushConstants {
-		time              = 0.0,
+		texture_width     = u32(width),
+		texture_height    = u32(height),
 		exposure          = 1.2,
 		gamma             = 2.2,
 		contrast          = 1.0,
-		texture_width     = u32(width),
-		texture_height    = u32(height),
 		vignette_strength = 0.35,
-		_pad0             = 0.0,
 	}
-
-	init_barriers(accumulation_buffer, accumulation_size)
 
 }
 
@@ -94,15 +113,15 @@ record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
 
 // compute.hlsl -> accumulation_buffer
 simulate_particles :: proc(frame: FrameInputs) {
-	vk.CmdFillBuffer(frame.cmd, accumulation_buffer, 0, accumulation_size, 0)
-	apply_transfer_to_compute_barrier(frame.cmd)
+	vk.CmdFillBuffer(frame.cmd, accumulation_buffer.buffer, 0, accumulation_buffer.size, 0)
+	apply_transfer_to_compute_barrier(frame.cmd, &accumulation_barriers)
 
 	compute_push_constants.time = frame.time
 	compute_push_constants.delta_time = frame.delta_time
-	bind(frame,  &render_pipeline_states[0], .COMPUTE, &compute_push_constants)
+	bind(frame, &render_pipeline_states[0], .COMPUTE, &compute_push_constants)
 
 	vk.CmdDispatch(frame.cmd, (PARTICLE_COUNT + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE, 1, 1)
-	apply_compute_to_fragment_barrier(frame.cmd)
+	apply_compute_to_fragment_barrier(frame.cmd, &accumulation_barriers)
 }
 
 // accumulation_buffer -> post_process.hlsl -> swapchain framebuffer
@@ -130,21 +149,6 @@ composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) 
 
 cleanup_render_resources :: proc() {
 	destroy_render_pipeline_state(render_pipeline_states[:])
-	destroy_accumulation_buffer()
-}
-
-destroy_accumulation_buffer :: proc() {
-	if accumulation_buffer == {} {
-		accumulation_memory = {}
-		accumulation_size = 0
-		reset_accumulation_barriers()
-		return
-	}
-
-	vk.DestroyBuffer(device, accumulation_buffer, nil)
-	vk.FreeMemory(device, accumulation_memory, nil)
-	accumulation_buffer = {}
-	accumulation_memory = {}
-	accumulation_size = 0
-	reset_accumulation_barriers()
+	destroy_buffer(&accumulation_buffer)
+	reset_buffer_barriers(&accumulation_barriers)
 }

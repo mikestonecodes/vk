@@ -65,8 +65,7 @@ GraphicsPipelineConfig :: struct {
 	descriptor: DescriptorBindingInfo,
 }
 
-transfer_to_compute_barrier: vk.BufferMemoryBarrier
-compute_to_fragment_barrier: vk.BufferMemoryBarrier
+accumulation_barriers: BufferBarriers
 last_frame_time: f32
 
 descriptor_pool: vk.DescriptorPool
@@ -126,10 +125,10 @@ begin_frame_commands :: proc(
 	frame: FrameInputs,
 ) {
 	runtime.assert(
-		accumulation_buffer != {},
+		accumulation_buffer.buffer != {},
 		"accumulation buffer missing before recording commands",
 	)
-	runtime.assert(accumulation_size > 0, "accumulation buffer size must be positive")
+	runtime.assert(accumulation_buffer.size > 0, "accumulation buffer size must be positive")
 
 	encoder = begin_encoding(element)
 	current_time := f32(time.duration_seconds(time.diff(start_time, time.now())))
@@ -169,72 +168,6 @@ bind :: proc(
 }
 
 
-init_barriers :: proc(buffer: vk.Buffer, size: vk.DeviceSize) {
-	transfer_to_compute_barrier = vk.BufferMemoryBarrier {
-		sType               = vk.StructureType.BUFFER_MEMORY_BARRIER,
-		srcAccessMask       = {vk.AccessFlag.TRANSFER_WRITE},
-		dstAccessMask       = {vk.AccessFlag.SHADER_WRITE},
-		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		buffer              = buffer,
-		offset              = 0,
-		size                = size,
-	}
-
-	compute_to_fragment_barrier = vk.BufferMemoryBarrier {
-		sType               = vk.StructureType.BUFFER_MEMORY_BARRIER,
-		srcAccessMask       = {vk.AccessFlag.SHADER_WRITE},
-		dstAccessMask       = {vk.AccessFlag.SHADER_READ},
-		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		buffer              = buffer,
-		offset              = 0,
-		size                = size,
-	}
-}
-
-reset_accumulation_barriers :: proc() {
-	transfer_to_compute_barrier = vk.BufferMemoryBarrier{}
-	compute_to_fragment_barrier = vk.BufferMemoryBarrier{}
-}
-
-apply_transfer_to_compute_barrier :: proc(cmd: vk.CommandBuffer) {
-	runtime.assert(
-		transfer_to_compute_barrier.buffer != {},
-		"transfer barrier requested before initialization",
-	)
-	vk.CmdPipelineBarrier(
-		cmd,
-		{vk.PipelineStageFlag.TRANSFER},
-		{vk.PipelineStageFlag.COMPUTE_SHADER},
-		{},
-		0,
-		nil,
-		1,
-		&transfer_to_compute_barrier,
-		0,
-		nil,
-	)
-}
-
-apply_compute_to_fragment_barrier :: proc(cmd: vk.CommandBuffer) {
-	runtime.assert(
-		compute_to_fragment_barrier.buffer != {},
-		"compute barrier requested before initialization",
-	)
-	vk.CmdPipelineBarrier(
-		cmd,
-		{vk.PipelineStageFlag.COMPUTE_SHADER},
-		{vk.PipelineStageFlag.FRAGMENT_SHADER},
-		{},
-		0,
-		nil,
-		1,
-		&compute_to_fragment_barrier,
-		0,
-		nil,
-	)
-}
 
 
 load_shader_module :: proc(path: string) -> (shader: vk.ShaderModule, ok: bool) {
@@ -518,7 +451,7 @@ build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 			descriptorType = spec.descriptor.descriptorType,
 			descriptorCount = 1,
 			pBufferInfo = &vk.DescriptorBufferInfo {
-				buffer = accumulation_buffer,
+				buffer = accumulation_buffer.buffer,
 				range = vk.DeviceSize(vk.WHOLE_SIZE),
 			},
 		},

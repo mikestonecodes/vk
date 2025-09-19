@@ -953,30 +953,6 @@ create_logical_device :: proc() -> bool {
 	return true
 }
 
-
-PostProcessPushConstants :: struct {
-	time:              f32,
-	exposure:          f32,
-	gamma:             f32,
-	contrast:          f32,
-	texture_width:     u32,
-	texture_height:    u32,
-	vignette_strength: f32,
-	_pad0:             f32,
-}
-
-
-ComputePushConstants :: struct {
-	time:           f32,
-	delta_time:     f32,
-	particle_count: u32,
-	_pad0:          u32,
-	texture_width:  u32,
-	texture_height: u32,
-	spread:         f32,
-	brightness:     f32,
-}
-
 VertexPushConstants :: struct {
 	screen_width:  i32,
 	screen_height: i32,
@@ -1053,6 +1029,117 @@ createBuffer :: proc(
 
 	vk.BindBufferMemory(device, buffer, buffer_memory, 0)
 	return buffer, buffer_memory
+}
+
+BufferResource :: struct {
+	buffer: vk.Buffer,
+	memory: vk.DeviceMemory,
+	size:   vk.DeviceSize,
+}
+
+create_buffer :: proc(
+	resource: ^BufferResource,
+	size: vk.DeviceSize,
+	usage: vk.BufferUsageFlags,
+	memory_properties: vk.MemoryPropertyFlags = {vk.MemoryPropertyFlag.DEVICE_LOCAL},
+) -> bool {
+	buffer, memory := createBuffer(int(size), usage, memory_properties)
+	if buffer == {} {
+		resource^ = BufferResource{}
+		return false
+	}
+
+	resource.buffer = buffer
+	resource.memory = memory
+	resource.size = size
+	return true
+}
+
+destroy_buffer :: proc(resource: ^BufferResource) {
+	if resource.buffer != {} {
+		vk.DestroyBuffer(device, resource.buffer, nil)
+	}
+	if resource.memory != {} {
+		vk.FreeMemory(device, resource.memory, nil)
+	}
+	resource^ = BufferResource{}
+}
+
+BufferBarriers :: struct {
+	transfer_to_compute: vk.BufferMemoryBarrier,
+	compute_to_fragment: vk.BufferMemoryBarrier,
+}
+
+init_buffer_barriers :: proc(barriers: ^BufferBarriers, resource: ^BufferResource) {
+	if resource.buffer == {} {
+		barriers^ = BufferBarriers{}
+		return
+	}
+
+	barriers.transfer_to_compute = vk.BufferMemoryBarrier {
+		sType               = vk.StructureType.BUFFER_MEMORY_BARRIER,
+		srcAccessMask       = {vk.AccessFlag.TRANSFER_WRITE},
+		dstAccessMask       = {vk.AccessFlag.SHADER_WRITE},
+		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		buffer              = resource.buffer,
+		offset              = 0,
+		size                = resource.size,
+	}
+
+	barriers.compute_to_fragment = vk.BufferMemoryBarrier {
+		sType               = vk.StructureType.BUFFER_MEMORY_BARRIER,
+		srcAccessMask       = {vk.AccessFlag.SHADER_WRITE},
+		dstAccessMask       = {vk.AccessFlag.SHADER_READ},
+		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		buffer              = resource.buffer,
+		offset              = 0,
+		size                = resource.size,
+	}
+}
+
+reset_buffer_barriers :: proc(barriers: ^BufferBarriers) {
+	barriers.transfer_to_compute = vk.BufferMemoryBarrier{}
+	barriers.compute_to_fragment = vk.BufferMemoryBarrier{}
+}
+
+apply_transfer_to_compute_barrier :: proc(cmd: vk.CommandBuffer, barriers: ^BufferBarriers) {
+	runtime.assert(
+		barriers.transfer_to_compute.buffer != {},
+		"transfer barrier requested before initialization",
+	)
+	vk.CmdPipelineBarrier(
+		cmd,
+		{vk.PipelineStageFlag.TRANSFER},
+		{vk.PipelineStageFlag.COMPUTE_SHADER},
+		{},
+		0,
+		nil,
+		1,
+		&barriers.transfer_to_compute,
+		0,
+		nil,
+	)
+}
+
+apply_compute_to_fragment_barrier :: proc(cmd: vk.CommandBuffer, barriers: ^BufferBarriers) {
+	runtime.assert(
+		barriers.compute_to_fragment.buffer != {},
+		"compute barrier requested before initialization",
+	)
+	vk.CmdPipelineBarrier(
+		cmd,
+		{vk.PipelineStageFlag.COMPUTE_SHADER},
+		{vk.PipelineStageFlag.FRAGMENT_SHADER},
+		{},
+		0,
+		nil,
+		1,
+		&barriers.compute_to_fragment,
+		0,
+		nil,
+	)
 }
 
 
