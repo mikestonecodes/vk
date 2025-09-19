@@ -16,105 +16,146 @@ import vk "vendor:vulkan"
 // ============================================
 
 
-
 // Single object create wrapper
-vkw_create :: proc(call: $T, device: vk.Device, info: ^$U, msg: string, $Out: typeid) -> (Out, bool) {
-    out: Out
-    if call(device, info, nil, &out) != vk.Result.SUCCESS {
-        fmt.printf("%s\n", msg)
-        return {}, false
-    }
-    return out, true
+vkw_create :: proc(
+	call: $T,
+	device: vk.Device,
+	info: ^$U,
+	msg: string,
+	$Out: typeid,
+) -> (
+	Out,
+	bool,
+) {
+	out: Out
+	if call(device, info, nil, &out) != vk.Result.SUCCESS {
+		fmt.printf("%s\n", msg)
+		return {}, false
+	}
+	return out, true
 }
 
 // Array enumeration wrapper (get count, then get array)
 vkw_enumerate :: proc(call: $T, first_param: $P, msg: string, $Out: typeid) -> ([]Out, bool) {
-    count: u32
-    if call(first_param, &count, nil) != .SUCCESS {
-        fmt.printf("Failed to get count for %s\n", msg)
-        return nil, false
-    }
+	count: u32
+	if call(first_param, &count, nil) != .SUCCESS {
+		fmt.printf("Failed to get count for %s\n", msg)
+		return nil, false
+	}
 
-    if count == 0 {
-        return nil, true
-    }
+	if count == 0 {
+		return nil, true
+	}
 
-    array := make([]Out, count)
-    if call(first_param, &count, raw_data(array)) != .SUCCESS {
-        fmt.printf("Failed to get array for %s\n", msg)
-        delete(array)
-        return nil, false
-    }
+	array := make([]Out, count)
+	if call(first_param, &count, raw_data(array)) != .SUCCESS {
+		fmt.printf("Failed to get array for %s\n", msg)
+		delete(array)
+		return nil, false
+	}
 
-    return array, true
+	return array, true
 }
 
 // Device enumeration wrapper (instance-specific)
-vkw_enumerate_device :: proc(call: $T, instance: vk.Instance, msg: string, $Out: typeid) -> ([]Out, bool) {
-    return vkw_enumerate(call, instance, msg, Out)
+vkw_enumerate_device :: proc(
+	call: $T,
+	instance: vk.Instance,
+	msg: string,
+	$Out: typeid,
+) -> (
+	[]Out,
+	bool,
+) {
+	return vkw_enumerate(call, instance, msg, Out)
 }
 
 // Physical device specific enumeration
-vkw_enumerate_physical :: proc(call: $T, phys_device: vk.PhysicalDevice, msg: string, $Out: typeid) -> ([]Out, bool) {
-    return vkw_enumerate(call, phys_device, msg, Out)
+vkw_enumerate_physical :: proc(
+	call: $T,
+	phys_device: vk.PhysicalDevice,
+	msg: string,
+	$Out: typeid,
+) -> (
+	[]Out,
+	bool,
+) {
+	return vkw_enumerate(call, phys_device, msg, Out)
 }
 
 // Surface-specific enumeration (with physical device and surface)
-vkw_enumerate_surface :: proc(call: $T, phys_device: vk.PhysicalDevice, surface: vk.SurfaceKHR, msg: string, $Out: typeid) -> ([]Out, bool) {
-    count: u32
-    if call(phys_device, surface, &count, nil) != .SUCCESS {
-        fmt.printf("Failed to get count for %s\n", msg)
-        return nil, false
-    }
+vkw_enumerate_surface :: proc(
+	call: $T,
+	phys_device: vk.PhysicalDevice,
+	surface: vk.SurfaceKHR,
+	msg: string,
+	$Out: typeid,
+) -> (
+	[]Out,
+	bool,
+) {
+	count: u32
+	if call(phys_device, surface, &count, nil) != .SUCCESS {
+		fmt.printf("Failed to get count for %s\n", msg)
+		return nil, false
+	}
 
-    if count == 0 {
-        return nil, true
-    }
+	if count == 0 {
+		return nil, true
+	}
 
-    array := make([]Out, count)
-    if call(phys_device, surface, &count, raw_data(array)) != .SUCCESS {
-        fmt.printf("Failed to get array for %s\n", msg)
-        delete(array)
-        return nil, false
-    }
+	array := make([]Out, count)
+	if call(phys_device, surface, &count, raw_data(array)) != .SUCCESS {
+		fmt.printf("Failed to get array for %s\n", msg)
+		delete(array)
+		return nil, false
+	}
 
-    return array, true
+	return array, true
 }
 
 // Get single property wrapper
 vkw_get_property :: proc(call: $T, first_param: $P, out: ^$Out, msg: string) -> bool {
-    call(first_param, out)
-    return true // Most property getters don't return errors
+	call(first_param, out)
+	return true // Most property getters don't return errors
 }
 
 // Allocate wrapper (for descriptor sets, command buffers, etc)
 vkw_allocate :: proc(call: $T, device: vk.Device, info: ^$U, out: ^$Out, msg: string) -> bool {
-    if call(device, info, out) != .SUCCESS {
-        fmt.printf("Failed to allocate %s\n", msg)
-        return false
-    }
-    return true
+	if call(device, info, out) != .SUCCESS {
+		fmt.printf("Failed to allocate %s\n", msg)
+		return false
+	}
+	return true
 }
 
 // Create pipeline wrapper (handles array of pipelines)
-vkw_create_pipelines :: proc(call: $T, device: vk.Device, cache: vk.PipelineCache, count: u32, info: ^$U, out: ^$Out, msg: string) -> bool {
-    if call(device, cache, count, info, nil, out) != .SUCCESS {
-        fmt.printf("Failed to create pipeline %s\n", msg)
-        return false
-    }
-    return true
+vkw_create_pipelines :: proc(
+	call: $T,
+	device: vk.Device,
+	cache: vk.PipelineCache,
+	count: u32,
+	info: ^$U,
+	out: ^$Out,
+	msg: string,
+) -> bool {
+	if call(device, cache, count, info, nil, out) != .SUCCESS {
+		fmt.printf("Failed to create pipeline %s\n", msg)
+		return false
+	}
+	return true
 }
 
 // Generic overloaded wrapper
-vkw :: proc{
-    vkw_create,
-    vkw_enumerate,
-    vkw_enumerate_device,
-    vkw_enumerate_physical,
-    vkw_enumerate_surface,
-    vkw_get_property,
-    vkw_allocate,
-    vkw_create_pipelines,
+vkw :: proc {
+	vkw_create,
+	vkw_enumerate,
+	vkw_enumerate_device,
+	vkw_enumerate_physical,
+	vkw_enumerate_surface,
+	vkw_get_property,
+	vkw_allocate,
+	vkw_create_pipelines,
 }
 
 
@@ -209,6 +250,11 @@ handle_resize :: proc() {
 		destroy_swapchain()
 		create_swapchain()
 
+		if width == 0 || height == 0 {
+			runtime.assert(false, "width and height must be greater than 0")
+			pipelines_ready = false
+			return
+		}
 		// Recreate offscreen resources with new dimensions (handled by render init)
 		init_render_resources()
 	}
@@ -933,6 +979,12 @@ VertexPushConstants :: struct {
 }
 
 init_vulkan_resources :: proc() -> bool {
+
+	if width == 0 || height == 0 {
+		runtime.assert(false, "width and height must be greater than 0")
+		pipelines_ready = false
+		return false
+	}
 	init_render_resources()
 	if !pipelines_ready {
 		fmt.println("Render pipelines failed to initialize")

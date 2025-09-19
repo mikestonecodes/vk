@@ -10,7 +10,6 @@ import vk "vendor:vulkan"
 CommandEncoder :: struct {
 	command_buffer: vk.CommandBuffer,
 }
-
 FrameInputs :: struct {
 	cmd:        vk.CommandBuffer,
 	time:       f32,
@@ -24,6 +23,10 @@ PipelineState :: struct {
 	descriptor_set:    vk.DescriptorSet,
 }
 
+PipelineKind :: enum {
+	Compute,
+	Post,
+}
 PushConstantInfo :: struct {
 	label: string,
 	stage: vk.ShaderStageFlags,
@@ -68,6 +71,10 @@ last_frame_time: f32
 descriptor_pool: vk.DescriptorPool
 
 pipelines_ready: bool
+
+
+render_pipeline_specs: [PIPELINE_COUNT]PipelineSpec
+render_pipeline_states: [PIPELINE_COUNT]PipelineState
 
 make_compute_pipeline_spec :: proc(config: ComputePipelineConfig) -> PipelineSpec {
 	return PipelineSpec {
@@ -190,7 +197,7 @@ bind_descriptor_set :: proc(
 }
 
 
-init_accumulation_barriers :: proc(buffer: vk.Buffer, size: vk.DeviceSize) {
+init_barriers :: proc(buffer: vk.Buffer, size: vk.DeviceSize) {
 	transfer_to_compute_barrier = vk.BufferMemoryBarrier {
 		sType               = vk.StructureType.BUFFER_MEMORY_BARRIER,
 		srcAccessMask       = {vk.AccessFlag.TRANSFER_WRITE},
@@ -298,21 +305,28 @@ allocate_descriptor_set :: proc(
 }
 
 init_render_pipeline_state :: proc(specs: []PipelineSpec, states: []PipelineState) -> bool {
-	if pipelines_ready {
-		destroy_render_pipeline_state(states)
+	/*
+	for spec in specs {
+		if spec.compute_module != "" {
+			shader_name := strings.trim_suffix(spec.compute_module, ".spv")
+			shader_file := fmt.aprintf("%s.hlsl", shader_name)
+			defer delete(shader_file)
+			compile_shader(shader_file)
+		}
+		if spec.vertex_module != "" {
+			shader_name := strings.trim_suffix(spec.vertex_module, "_vs.spv")
+			shader_file := fmt.aprintf("%s.hlsl", shader_name)
+			defer delete(shader_file)
+			compile_shader(shader_file)
+		}
+		if spec.fragment_module != "" {
+			shader_name := strings.trim_suffix(spec.fragment_module, "_fs.spv")
+			shader_file := fmt.aprintf("%s.hlsl", shader_name)
+			defer delete(shader_file)
+			compile_shader(shader_file)
+		}
 	}
-
-	runtime.assert(
-		accumulation_buffer != {},
-		"accumulation buffer must be ready before pipeline init",
-	)
-
-	if !build_pipelines(specs, states) {
-		destroy_render_pipeline_state(states)
-		return false
-	}
-
-	pipelines_ready = true
+*/
 	return true
 }
 

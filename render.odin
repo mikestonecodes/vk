@@ -6,6 +6,7 @@ import vk "vendor:vulkan"
 
 PARTICLE_COUNT :: u32(980_000)
 COMPUTE_GROUP_SIZE :: u32(128)
+PIPELINE_COUNT :: 2
 
 accumulation_buffer: vk.Buffer
 accumulation_memory: vk.DeviceMemory
@@ -14,32 +15,15 @@ accumulation_size: vk.DeviceSize
 compute_push_constants: ComputePushConstants
 post_process_push_constants: PostProcessPushConstants
 
-PipelineKind :: enum {
-	Compute,
-	Post,
-}
-
-PIPELINE_COUNT :: 2
-render_pipeline_specs: [PIPELINE_COUNT]PipelineSpec
-render_pipeline_states: [PIPELINE_COUNT]PipelineState
-
 init_render_resources :: proc() {
-	destroy_accumulation_buffer()
-
-	if width == 0 || height == 0 {
-		runtime.assert(false, "width and height must be greater than 0")
-		pipelines_ready = false
-		return
-	}
 
 	accumulation_size =
 		vk.DeviceSize(width) * vk.DeviceSize(height) * 4 * vk.DeviceSize(size_of(u32))
+
 	accumulation_buffer, accumulation_memory = createBuffer(
 		int(accumulation_size),
 		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
 	)
-	runtime.assert(accumulation_buffer != {}, "accumulation buffer allocation failed")
-
 
 	render_pipeline_specs[0] = make_compute_pipeline_spec(
 		ComputePipelineConfig {
@@ -75,7 +59,6 @@ init_render_resources :: proc() {
 	)
 
 
-
 	compute_push_constants = ComputePushConstants {
 		time           = 0.0,
 		delta_time     = 0.0,
@@ -96,12 +79,9 @@ init_render_resources :: proc() {
 		vignette_strength = 0.35,
 		_pad0             = 0.0,
 	}
-
-	last_frame_time = 0.0
-	init_accumulation_barriers(accumulation_buffer, accumulation_size)
-	compile_shader("compute.hlsl")
-	compile_shader("post_process.hlsl")
-	init_render_pipeline_state(render_pipeline_specs[:], render_pipeline_states[:])
+	init_barriers(accumulation_buffer, accumulation_size)
+	destroy_render_pipeline_state(render_pipeline_states[:])
+	pipelines_ready = build_pipelines(render_pipeline_specs[:], render_pipeline_states[:])
 }
 
 record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
