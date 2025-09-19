@@ -71,41 +71,52 @@ pipelines_ready: bool
 
 make_compute_pipeline_spec :: proc(config: ComputePipelineConfig) -> PipelineSpec {
 	return PipelineSpec {
-		name           = config.name,
-		push           = config.push,
-		descriptor     = config.descriptor,
+		name = config.name,
+		push = config.push,
+		descriptor = config.descriptor,
 		compute_module = config.shader,
 	}
 }
 
 make_graphics_pipeline_spec :: proc(config: GraphicsPipelineConfig) -> PipelineSpec {
 	return PipelineSpec {
-		name            = config.name,
-		push            = config.push,
-		descriptor      = config.descriptor,
-		vertex_module   = config.vertex,
+		name = config.name,
+		push = config.push,
+		descriptor = config.descriptor,
+		vertex_module = config.vertex,
 		fragment_module = config.fragment,
 	}
 }
 
-push_constant_info :: proc(label: string, stage: vk.ShaderStageFlags, size: u32) -> PushConstantInfo {
-	return PushConstantInfo {label = label, stage = stage, size = size}
+push_constant_info :: proc(
+	label: string,
+	stage: vk.ShaderStageFlags,
+	size: u32,
+) -> PushConstantInfo {
+	return PushConstantInfo{label = label, stage = stage, size = size}
 }
 
-storage_buffer_binding :: proc(label: string, stage: vk.ShaderStageFlags, binding: u32 = 0) -> DescriptorBindingInfo {
+storage_buffer_binding :: proc(
+	label: string,
+	stage: vk.ShaderStageFlags,
+	binding: u32 = 0,
+) -> DescriptorBindingInfo {
 	return DescriptorBindingInfo {
-		label          = label,
-		binding        = binding,
+		label = label,
+		binding = binding,
 		descriptorType = vk.DescriptorType.STORAGE_BUFFER,
-		stage          = stage,
+		stage = stage,
 	}
 }
 
-reset_frame_timing :: proc() {
-	last_frame_time = 0.0
-}
 
-begin_frame_commands :: proc(element: ^SwapchainElement, start_time: time.Time) -> (encoder: CommandEncoder, frame: FrameInputs) {
+begin_frame_commands :: proc(
+	element: ^SwapchainElement,
+	start_time: time.Time,
+) -> (
+	encoder: CommandEncoder,
+	frame: FrameInputs,
+) {
 	runtime.assert(
 		accumulation_buffer != {},
 		"accumulation buffer missing before recording commands",
@@ -132,7 +143,11 @@ finish_frame_commands :: proc(encoder: ^CommandEncoder) {
 	finish_encoding(encoder)
 }
 
-push_compute_constants :: proc(cmd: vk.CommandBuffer, layout: vk.PipelineLayout, constants: ^ComputePushConstants) {
+push_compute_constants :: proc(
+	cmd: vk.CommandBuffer,
+	layout: vk.PipelineLayout,
+	constants: ^ComputePushConstants,
+) {
 	vk.CmdPushConstants(
 		cmd,
 		layout,
@@ -143,7 +158,11 @@ push_compute_constants :: proc(cmd: vk.CommandBuffer, layout: vk.PipelineLayout,
 	)
 }
 
-push_post_process_constants :: proc(cmd: vk.CommandBuffer, layout: vk.PipelineLayout, constants: ^PostProcessPushConstants) {
+push_post_process_constants :: proc(
+	cmd: vk.CommandBuffer,
+	layout: vk.PipelineLayout,
+	constants: ^PostProcessPushConstants,
+) {
 	vk.CmdPushConstants(
 		cmd,
 		layout,
@@ -154,34 +173,22 @@ push_post_process_constants :: proc(cmd: vk.CommandBuffer, layout: vk.PipelineLa
 	)
 }
 
-bind_pipeline :: proc(cmd: vk.CommandBuffer, bind_point: vk.PipelineBindPoint, state: ^PipelineState) {
+bind_pipeline :: proc(
+	cmd: vk.CommandBuffer,
+	bind_point: vk.PipelineBindPoint,
+	state: ^PipelineState,
+) {
 	vk.CmdBindPipeline(cmd, bind_point, state.pipeline)
 }
 
-bind_descriptor_set :: proc(cmd: vk.CommandBuffer, bind_point: vk.PipelineBindPoint, state: ^PipelineState) {
-	vk.CmdBindDescriptorSets(
-		cmd,
-		bind_point,
-		state.layout,
-		0,
-		1,
-		&state.descriptor_set,
-		0,
-		nil,
-	)
+bind_descriptor_set :: proc(
+	cmd: vk.CommandBuffer,
+	bind_point: vk.PipelineBindPoint,
+	state: ^PipelineState,
+) {
+	vk.CmdBindDescriptorSets(cmd, bind_point, state.layout, 0, 1, &state.descriptor_set, 0, nil)
 }
 
-bind_compute_pipeline :: proc(cmd: vk.CommandBuffer, state: ^PipelineState, push: ^ComputePushConstants) {
-	bind_pipeline(cmd, .COMPUTE, state)
-	bind_descriptor_set(cmd, .COMPUTE, state)
-	push_compute_constants(cmd, state.layout, push)
-}
-
-bind_post_pipeline :: proc(cmd: vk.CommandBuffer, state: ^PipelineState, push: ^PostProcessPushConstants) {
-	bind_pipeline(cmd, .GRAPHICS, state)
-	bind_descriptor_set(cmd, .GRAPHICS, state)
-	push_post_process_constants(cmd, state.layout, push)
-}
 
 init_accumulation_barriers :: proc(buffer: vk.Buffer, size: vk.DeviceSize) {
 	transfer_to_compute_barrier = vk.BufferMemoryBarrier {
@@ -356,10 +363,10 @@ make_stage :: proc(
 build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 	bindings := []vk.DescriptorSetLayoutBinding {
 		{
-			binding         = spec.descriptor.binding,
-			descriptorType  = spec.descriptor.descriptorType,
+			binding = spec.descriptor.binding,
+			descriptorType = spec.descriptor.descriptorType,
 			descriptorCount = 1,
-			stageFlags      = spec.descriptor.stage,
+			stageFlags = spec.descriptor.stage,
 		},
 	}
 
@@ -458,11 +465,11 @@ build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 					   topology = vk.PrimitiveTopology.TRIANGLE_LIST,
 				   },
 				   pViewportState = &vk.PipelineViewportStateCreateInfo {
-					   sType         = vk.StructureType.PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+					   sType = vk.StructureType.PIPELINE_VIEWPORT_STATE_CREATE_INFO,
 					   viewportCount = 1,
-					   pViewports    = &viewport,
-					   scissorCount  = 1,
-					   pScissors     = &scissor,
+					   pViewports = &viewport,
+					   scissorCount = 1,
+					   pScissors = &scissor,
 				   },
 				   pRasterizationState = &vk.PipelineRasterizationStateCreateInfo {
 					   sType = vk.StructureType.PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -519,14 +526,14 @@ build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 		device,
 		1,
 		&vk.WriteDescriptorSet {
-			sType           = vk.StructureType.WRITE_DESCRIPTOR_SET,
-			dstSet          = desc_set,
-			dstBinding      = spec.descriptor.binding,
-			descriptorType  = spec.descriptor.descriptorType,
+			sType = vk.StructureType.WRITE_DESCRIPTOR_SET,
+			dstSet = desc_set,
+			dstBinding = spec.descriptor.binding,
+			descriptorType = spec.descriptor.descriptorType,
 			descriptorCount = 1,
-			pBufferInfo     = &vk.DescriptorBufferInfo {
+			pBufferInfo = &vk.DescriptorBufferInfo {
 				buffer = accumulation_buffer,
-				range  = vk.DeviceSize(vk.WHOLE_SIZE),
+				range = vk.DeviceSize(vk.WHOLE_SIZE),
 			},
 		},
 		0,

@@ -13,7 +13,6 @@ accumulation_size: vk.DeviceSize
 
 compute_push_constants: ComputePushConstants
 post_process_push_constants: PostProcessPushConstants
-compute_dispatch_groups: [3]u32
 
 PipelineKind :: enum {
 	Compute,
@@ -41,14 +40,41 @@ init_render_resources :: proc() {
 	)
 	runtime.assert(accumulation_buffer != {}, "accumulation buffer allocation failed")
 
-	configure_pipeline_specs()
+
+	render_pipeline_specs[0] = make_compute_pipeline_spec(
+		ComputePipelineConfig {
+			name = "particles",
+			shader = "compute.spv",
+			push = push_constant_info(
+				"ComputePushConstants",
+				{vk.ShaderStageFlag.COMPUTE},
+				u32(size_of(ComputePushConstants)),
+			),
+			descriptor = storage_buffer_binding(
+				"accumulation-buffer",
+				{vk.ShaderStageFlag.COMPUTE},
+			),
+		},
+	)
+
+	render_pipeline_specs[1] = make_graphics_pipeline_spec(
+		GraphicsPipelineConfig {
+			name = "tone-map",
+			vertex = "post_process_vs.spv",
+			fragment = "post_process_fs.spv",
+			push = push_constant_info(
+				"PostProcessPushConstants",
+				{vk.ShaderStageFlag.FRAGMENT},
+				u32(size_of(PostProcessPushConstants)),
+			),
+			descriptor = storage_buffer_binding(
+				"accumulation-buffer",
+				{vk.ShaderStageFlag.FRAGMENT},
+			),
+		},
+	)
 
 
-	compute_dispatch_groups = [3]u32{
-		(PARTICLE_COUNT + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE,
-		1,
-		1,
-	}
 
 	compute_push_constants = ComputePushConstants {
 		time           = 0.0,
@@ -71,42 +97,11 @@ init_render_resources :: proc() {
 		_pad0             = 0.0,
 	}
 
-	reset_frame_timing()
+	last_frame_time = 0.0
 	init_accumulation_barriers(accumulation_buffer, accumulation_size)
 	compile_shader("compute.hlsl")
 	compile_shader("post_process.hlsl")
 	init_render_pipeline_state(render_pipeline_specs[:], render_pipeline_states[:])
-}
-
-configure_pipeline_specs :: proc() {
-	render_pipeline_specs[0] = make_compute_pipeline_spec(ComputePipelineConfig {
-		name       = "particles",
-		shader     = "compute.spv",
-		push       = push_constant_info(
-			"ComputePushConstants",
-			{vk.ShaderStageFlag.COMPUTE},
-			u32(size_of(ComputePushConstants)),
-		),
-		descriptor = storage_buffer_binding(
-			"accumulation-buffer",
-			{vk.ShaderStageFlag.COMPUTE},
-		),
-	})
-
-	render_pipeline_specs[1] = make_graphics_pipeline_spec(GraphicsPipelineConfig {
-		name      = "tone-map",
-		vertex    = "post_process_vs.spv",
-		fragment  = "post_process_fs.spv",
-		push      = push_constant_info(
-			"PostProcessPushConstants",
-			{vk.ShaderStageFlag.FRAGMENT},
-			u32(size_of(PostProcessPushConstants)),
-		),
-		descriptor = storage_buffer_binding(
-			"accumulation-buffer",
-			{vk.ShaderStageFlag.FRAGMENT},
-		),
-	})
 }
 
 record_commands :: proc(element: ^SwapchainElement, start_time: time.Time) {
@@ -130,14 +125,12 @@ simulate_particles :: proc(frame: FrameInputs) {
 	compute_push_constants.time = frame.time
 	compute_push_constants.delta_time = frame.delta_time
 
-	bind_compute_pipeline(frame.cmd, compute_state, &compute_push_constants)
 
-	vk.CmdDispatch(
-		frame.cmd,
-		compute_dispatch_groups[0],
-		compute_dispatch_groups[1],
-		compute_dispatch_groups[2],
-	)
+	bind_pipeline(frame.cmd, .COMPUTE, compute_state)
+	bind_descriptor_set(frame.cmd, .COMPUTE, compute_state)
+	push_compute_constants(frame.cmd, compute_state.layout, &compute_push_constants)
+
+	vk.CmdDispatch(frame.cmd, (PARTICLE_COUNT + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE, 1, 1)
 	apply_compute_to_fragment_barrier(frame.cmd)
 }
 
@@ -164,7 +157,10 @@ composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) 
 
 	post_process_push_constants.time = frame.time
 
-	bind_post_pipeline(frame.cmd, post_state, &post_process_push_constants)
+
+	bind_pipeline(frame.cmd, .GRAPHICS, post_state)
+	bind_descriptor_set(frame.cmd, .GRAPHICS, post_state)
+	push_post_process_constants(frame.cmd, post_state.layout, &post_process_push_constants)
 
 	vk.CmdDraw(frame.cmd, 3, 1, 0, 0)
 	vk.CmdEndRenderPass(frame.cmd)
