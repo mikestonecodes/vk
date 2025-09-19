@@ -196,6 +196,33 @@ bind_descriptor_set :: proc(
 	vk.CmdBindDescriptorSets(cmd, bind_point, state.layout, 0, 1, &state.descriptor_set, 0, nil)
 }
 
+bind :: proc(
+	frame: FrameInputs,
+	state: ^PipelineState,
+	bind_point: vk.PipelineBindPoint,
+	push_constants: $T,
+) {
+	runtime.assert(state != nil, "pipeline state must be valid inside bind")
+	runtime.assert(state.pipeline != {}, "pipeline must be created before binding")
+	runtime.assert(state.layout != {}, "pipeline layout must be created before binding")
+	runtime.assert(state.descriptor_set != {}, "descriptor set must be allocated before binding")
+
+	bind_pipeline(frame.cmd, bind_point, state)
+	bind_descriptor_set(frame.cmd, bind_point, state)
+
+	if push_constants == nil {
+		return
+	}
+
+	when T == ^ComputePushConstants {
+		push_compute_constants(frame.cmd, state.layout, push_constants)
+	} else when T == ^PostProcessPushConstants {
+		push_post_process_constants(frame.cmd, state.layout, push_constants)
+	} else {
+		runtime.assert(false, "unsupported push constant type passed to bind")
+	}
+}
+
 
 init_barriers :: proc(buffer: vk.Buffer, size: vk.DeviceSize) {
 	transfer_to_compute_barrier = vk.BufferMemoryBarrier {
