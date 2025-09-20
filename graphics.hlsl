@@ -37,7 +37,6 @@ VertexOutput vs_main(uint vid:SV_VertexID) {
 
 static const float COLOR_SCALE = 4096.0f;
 
-
 float4 fs_main(VertexOutput input) : SV_Target {
     uint w = push_constants.screen_width;
     uint h = push_constants.screen_height;
@@ -47,12 +46,12 @@ float4 fs_main(VertexOutput input) : SV_Target {
     uint2 p = uint2(uv * float2(w,h));
     p = min(p, uint2(w-1,h-1));
 
-    // Box filter radius (2 → 5x5 kernel, 3 → 7x7, etc.)
-    const int R = 2;
+    // Sprite footprint radius in pixels (R=16 → 32×32 sprite kernel)
+    const int R = 16;
 
-    float3 col     = 0.0;
-    float density  = 0.0;
-    int count      = 0;
+    float3 col    = 0.0;
+    float density = 0.0;
+    float weightSum = 0.0;
 
     for (int dy = -R; dy <= R; ++dy) {
         for (int dx = -R; dx <= R; ++dx) {
@@ -61,29 +60,40 @@ float4 fs_main(VertexOutput input) : SV_Target {
                 continue;
             }
 
-            uint base = (q.y * w + q.x) * 4u;
-            uint r = accum_buffer[base+0];
-            uint g = accum_buffer[base+1];
-            uint b = accum_buffer[base+2];
-            uint a = accum_buffer[base+3];
+            // Compute sprite UV in [0,1]
+            float2 spriteUV = (float2(dx,dy) / float(R*2) + 0.5);
 
-            col    += float3(r,g,b) / COLOR_SCALE;
-            density += (float)a / COLOR_SCALE;
-            count++;
+            // Sample sprite texture
+            float4 spriteSample = sprite_texture.Sample(sprite_sampler, spriteUV);
+
+            if (spriteSample.a < 1e-6f) {
+                continue; // outside sprite footprint
+            }
+
+            // Accum buffer fetch
+            uint base = (q.y * w + q.x) * 4u;
+            float3 accumCol = float3(accum_buffer[base+0],
+                                     accum_buffer[base+1],
+                                     accum_buffer[base+2]) / COLOR_SCALE;
+            float accumDensity = (float)accum_buffer[base+3] / COLOR_SCALE;
+
+            // Weight by sprite
+            col     += accumCol    * spriteSample.rgb;
+            density += accumDensity * spriteSample.a;
+            weightSum += spriteSample.a;
         }
     }
 
-    // Average to smooth out the footprint
-    if (count > 0) {
-        col     /= count;
-        density /= count;
+    if (weightSum > 0.0) {
+        col     /= weightSum;
+        density /= weightSum;
     }
 
     if (density < 1e-6f) {
-        // nothing in this neighborhood
         return float4(0,0,0,1);
     }
-    float3 finalCol   = col ;
+
+    float3 finalCol   = col;
     float  finalAlpha = density;
 
     return float4(finalCol, finalAlpha);
