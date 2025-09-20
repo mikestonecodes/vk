@@ -1,8 +1,7 @@
 package main
 
-import "core:time"
 import "core:os"
-import "core:fmt"
+import "core:time"
 import "vendor:glfw"
 
 main :: proc() {

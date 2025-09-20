@@ -11,6 +11,35 @@ import "vendor:glfw"
 import vk "vendor:vulkan"
 
 
+// Global Vulkan state
+ENABLE_VALIDATION := true
+instance: vk.Instance
+debug_messenger: vk.DebugUtilsMessengerEXT
+vulkan_surface: vk.SurfaceKHR
+phys_device: vk.PhysicalDevice
+device: vk.Device
+queue_family_index: c.uint32_t
+queue: vk.Queue
+command_pool: vk.CommandPool
+swapchain: vk.SwapchainKHR
+render_pass: vk.RenderPass
+elements: [^]SwapchainElement
+format: vk.Format = vk.Format.UNDEFINED
+width: c.uint32_t = 800
+height: c.uint32_t = 600
+image_index: c.uint32_t = 0
+image_count: c.uint32_t = 0
+// Timeline semaphore for render synchronization
+timeline_semaphore: vk.Semaphore
+timeline_value: c.uint64_t = 0
+
+MAX_FRAMES_IN_FLIGHT :: c.uint32_t(3)
+
+image_available: [MAX_FRAMES_IN_FLIGHT]vk.Semaphore
+render_finished: [MAX_FRAMES_IN_FLIGHT]vk.Semaphore
+frames_in_flight: c.uint32_t = 0
+current_frame: c.uint32_t = 0
+
 // ============================================
 // Single-object create wrapper
 // ============================================
@@ -158,8 +187,51 @@ vkw :: proc {
 	vkw_create_pipelines,
 }
 
+//----//
 
-submit_commands :: proc(element: ^SwapchainElement) {
+
+wait_for_timeline :: proc(value: c.uint64_t) {
+	if value == 0 {
+		return
+	}
+
+	current: c.uint64_t
+	if vk.GetSemaphoreCounterValue(device, timeline_semaphore, &current) == vk.Result.SUCCESS &&
+	   current >= value {
+		return
+	}
+
+	wait_value := value
+	wait_info := vk.SemaphoreWaitInfo {
+		sType          = vk.StructureType.SEMAPHORE_WAIT_INFO,
+		semaphoreCount = 1,
+		pSemaphores    = &timeline_semaphore,
+		pValues        = &wait_value,
+	}
+
+	vk.WaitSemaphores(device, &wait_info, max(u64))
+}
+
+acquire_next_image :: proc(frame_index: c.uint32_t) -> bool {
+	result := vk.AcquireNextImageKHR(
+		device,
+		swapchain,
+		max(u64),
+		image_available[frame_index],
+		{},
+		&image_index,
+	)
+
+	if result == vk.Result.ERROR_OUT_OF_DATE_KHR || result == vk.Result.SUBOPTIMAL_KHR {
+		destroy_swapchain()
+		create_swapchain() or_return
+		return false
+	}
+
+	return result == vk.Result.SUCCESS
+}
+
+submit_commands :: proc(element: ^SwapchainElement, frame_index: c.uint32_t) {
 	// Increment timeline value for this frame
 	timeline_value += 1
 
@@ -167,72 +239,85 @@ submit_commands :: proc(element: ^SwapchainElement) {
 		vk.PipelineStageFlags{vk.PipelineStageFlag.COLOR_ATTACHMENT_OUTPUT},
 	}
 
+	timeline_values := [2]c.uint64_t{c.uint64_t(0), timeline_value}
+
 	timeline_submit_info := vk.TimelineSemaphoreSubmitInfo {
 		sType                     = vk.StructureType.TIMELINE_SEMAPHORE_SUBMIT_INFO,
-		signalSemaphoreValueCount = 1,
-		pSignalSemaphoreValues    = &timeline_value,
+		waitSemaphoreValueCount   = 0,
+		pWaitSemaphoreValues      = nil,
+		signalSemaphoreValueCount = cast(u32)len(timeline_values),
+		pSignalSemaphoreValues    = raw_data(timeline_values[:]),
 	}
+
+	wait_semaphores := [1]vk.Semaphore{image_available[frame_index]}
+
+	signal_semaphores := [2]vk.Semaphore{render_finished[frame_index], timeline_semaphore}
 
 	submit_info := vk.SubmitInfo {
 		sType                = vk.StructureType.SUBMIT_INFO,
 		pNext                = &timeline_submit_info,
-		waitSemaphoreCount   = 1,
-		pWaitSemaphores      = &image_available_semaphore,
+		waitSemaphoreCount   = cast(u32)len(wait_semaphores),
+		pWaitSemaphores      = raw_data(wait_semaphores[:]),
 		pWaitDstStageMask    = raw_data(wait_stages[:]),
 		commandBufferCount   = 1,
 		pCommandBuffers      = &element.commandBuffer,
-		signalSemaphoreCount = 1,
-		pSignalSemaphores    = &timeline_semaphore,
+		signalSemaphoreCount = cast(u32)len(signal_semaphores),
+		pSignalSemaphores    = raw_data(signal_semaphores[:]),
 	}
 
-	vk.QueueSubmit(queue, 1, &submit_info, element.fence)
+	vk.QueueSubmit(queue, 1, &submit_info, {})
+	element.last_value = timeline_value
 }
 
-present_frame :: proc() {
-	// Wait for current frame to complete before present
-	wait_info := vk.SemaphoreWaitInfo {
-		sType          = vk.StructureType.SEMAPHORE_WAIT_INFO,
-		semaphoreCount = 1,
-		pSemaphores    = &timeline_semaphore,
-		pValues        = &timeline_value,
-	}
-	vk.WaitSemaphores(device, &wait_info, max(u64))
+present_frame :: proc(frame_index: c.uint32_t) -> bool {
+	wait_semaphores := [1]vk.Semaphore{render_finished[frame_index]}
 
-	// Simple present without semaphore wait
 	present_info := vk.PresentInfoKHR {
-		sType          = vk.StructureType.PRESENT_INFO_KHR,
-		swapchainCount = 1,
-		pSwapchains    = &swapchain,
-		pImageIndices  = &image_index,
+		sType              = vk.StructureType.PRESENT_INFO_KHR,
+		waitSemaphoreCount = cast(u32)len(wait_semaphores),
+		pWaitSemaphores    = raw_data(wait_semaphores[:]),
+		swapchainCount     = 1,
+		pSwapchains        = &swapchain,
+		pImageIndices      = &image_index,
 	}
 
 	result := vk.QueuePresentKHR(queue, &present_info)
 	if result == vk.Result.ERROR_OUT_OF_DATE_KHR || result == vk.Result.SUBOPTIMAL_KHR {
 		destroy_swapchain()
-		create_swapchain()
+		create_swapchain() or_return
+		return false
 	}
+	return true
 }
 
+render_frame :: proc(start_time: time.Time) -> bool {
+	if frames_in_flight == 0 || elements == nil {
+		return false
+	}
 
-render_frame :: proc(start_time: time.Time) {
-	// 1. Get next swapchain image
-	if !acquire_next_image() do return
+	frame_index := current_frame % frames_in_flight
 
-	// 2. Wait for this frame's fence instead of all GPU work
+	// 1. Acquire swapchain image for this frame slot
+	acquire_next_image(frame_index) or_return
+
+	// 2. Wait for the image's previous work to finish before reusing resources
 	element := &elements[image_index]
-	vk.WaitForFences(device, 1, &element.fence, true, ~u64(0))
-	vk.ResetFences(device, 1, &element.fence)
+	wait_for_timeline(element.last_value)
 
-
+	// 3. Record rendering commands targeting the acquired image
 	encoder, frame := begin_frame_commands(element, start_time)
-
-	// 3. Record draw commands
 	record_commands(element, frame)
-
 	finish_encoding(&encoder)
-	// 4. Submit to GPU and present
-	submit_commands(element)
-	present_frame()
+
+	// 4. Submit draw work, signaling both the render-finished semaphore and timeline
+	submit_commands(element, frame_index)
+
+	// 5. Present once rendering completes
+	present_frame(frame_index) or_return
+
+	current_frame = (frame_index + 1) % frames_in_flight
+
+	return true
 }
 
 // Update window size from Wayland
@@ -253,12 +338,14 @@ handle_resize :: proc() {
 		cleanup_render_resources()
 		destroy_render_pipeline_state(render_pipeline_states[:])
 
+		pipelines_ready = false
 		destroy_swapchain()
-		create_swapchain()
+		if !create_swapchain() {
+			return
+		}
 
 		if width == 0 || height == 0 {
 			runtime.assert(false, "width and height must be greater than 0")
-			pipelines_ready = false
 			return
 		}
 		// Recreate offscreen resources with new dimensions (handled by render init)
@@ -278,32 +365,12 @@ vulkan_init :: proc() -> (ok: bool) {
 	fmt.println("DEBUG: Initializing Vulkan")
 	if !init_vulkan() do return false
 	fmt.println("DEBUG: Creating swapchain")
-	create_swapchain()
+	create_swapchain() or_return
 	fmt.println("DEBUG: Initializing resources")
 	if !init_vulkan_resources() do return false
 	fmt.println("DEBUG: Vulkan init complete")
 	return true
 }
-
-acquire_next_image :: proc() -> bool {
-	result := vk.AcquireNextImageKHR(
-		device,
-		swapchain,
-		max(u64),
-		image_available_semaphore,
-		{},
-		&image_index,
-	)
-
-	if result == vk.Result.ERROR_OUT_OF_DATE_KHR || result == vk.Result.SUBOPTIMAL_KHR {
-		destroy_swapchain()
-		create_swapchain()
-		return false
-	}
-
-	return result == vk.Result.SUCCESS
-}
-
 
 ShaderInfo :: struct {
 	source_path:   string,
@@ -356,6 +423,22 @@ discover_shaders :: proc() {
 	fmt.println()
 }
 
+// Extension and layer names
+get_instance_extensions :: proc() -> []cstring {
+	// Get required extensions from GLFW
+	glfw_extensions := glfw.GetRequiredInstanceExtensions()
+	extensions := make([]cstring, len(glfw_extensions) + 1)
+	for i in 0 ..< len(glfw_extensions) {
+		extensions[i] = glfw_extensions[i]
+	}
+	extensions[len(glfw_extensions)] = "VK_EXT_debug_utils"
+	return extensions
+}
+layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
+device_extension_names := [?]cstring{"VK_KHR_swapchain"}
+
+
+//RELOAD
 check_shader_reload :: proc() -> bool {
 	if !shader_watch_initialized {
 		init_shader_times()
@@ -429,51 +512,14 @@ SwapchainElement :: struct {
 	image:         vk.Image,
 	imageView:     vk.ImageView,
 	framebuffer:   vk.Framebuffer,
-	fence:         vk.Fence,
+	last_value:    c.uint64_t,
 }
-
-// Extension and layer names
-get_instance_extensions :: proc() -> []cstring {
-	// Get required extensions from GLFW
-	glfw_extensions := glfw.GetRequiredInstanceExtensions()
-	extensions := make([]cstring, len(glfw_extensions) + 1)
-	for i in 0 ..< len(glfw_extensions) {
-		extensions[i] = glfw_extensions[i]
-	}
-	extensions[len(glfw_extensions)] = "VK_EXT_debug_utils"
-	return extensions
-}
-layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
-device_extension_names := [?]cstring{"VK_KHR_swapchain"}
-
-
-// Global Vulkan state
-ENABLE_VALIDATION := true
-instance: vk.Instance
-debug_messenger: vk.DebugUtilsMessengerEXT
-vulkan_surface: vk.SurfaceKHR
-phys_device: vk.PhysicalDevice
-device: vk.Device
-queue_family_index: c.uint32_t
-queue: vk.Queue
-command_pool: vk.CommandPool
-swapchain: vk.SwapchainKHR
-render_pass: vk.RenderPass
-elements: [^]SwapchainElement
-format: vk.Format = vk.Format.UNDEFINED
-width: c.uint32_t = 800
-height: c.uint32_t = 600
-image_index: c.uint32_t = 0
-image_count: c.uint32_t = 0
-// Timeline semaphore for render synchronization + binary for acquire
-timeline_semaphore: vk.Semaphore
-timeline_value: c.uint64_t = 0
-image_available_semaphore: vk.Semaphore
 
 
 // =============================================================================
 // BORING INITIALIZATION CODE - Surface, Device, Swapchain setup
 // =============================================================================
+
 
 debug_callback :: proc "system" (
 	messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
@@ -508,72 +554,61 @@ load_shader_spirv :: proc(filename: string) -> ([]c.uint32_t, bool) {
 	return spirv_data, true
 }
 
-create_swapchain :: proc() {
-	result: vk.Result
-
+create_swapchain :: proc() -> bool {
 	capabilities: vk.SurfaceCapabilitiesKHR
-	result = vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(phys_device, vulkan_surface, &capabilities)
-	if result != vk.Result.SUCCESS {
-		fmt.printf("Error getting surface capabilities: %d\n", result)
-		return
+	if vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(phys_device, vulkan_surface, &capabilities) !=
+	   vk.Result.SUCCESS {
+		fmt.println("Failed to query surface capabilities")
+		return false
 	}
 
-	format_count: c.uint32_t
-	result = vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &format_count, nil)
-	if result != vk.Result.SUCCESS {
-		fmt.printf("Error getting surface format count: %d\n", result)
-		return
-	}
-
-	formats := make([^]vk.SurfaceFormatKHR, format_count)
-	defer free(formats)
-	result = vk.GetPhysicalDeviceSurfaceFormatsKHR(
+	formats, ok := vkw_enumerate_surface(
+		vk.GetPhysicalDeviceSurfaceFormatsKHR,
 		phys_device,
 		vulkan_surface,
-		&format_count,
-		formats,
+		"surface formats",
+		vk.SurfaceFormatKHR,
 	)
-	if result != vk.Result.SUCCESS {
-		fmt.printf("Error getting surface formats: %d\n", result)
-		return
+	if !ok {
+		return false
 	}
+	defer delete(formats)
 
 	chosen_format := formats[0]
-	for i in 0 ..< format_count {
-		if formats[i].format == vk.Format.B8G8R8A8_UNORM {
-			chosen_format = formats[i]
+	for fmt_idx in 0 ..< len(formats) {
+		if formats[fmt_idx].format == vk.Format.B8G8R8A8_UNORM {
+			chosen_format = formats[fmt_idx]
 			break
 		}
 	}
 	format = chosen_format.format
 
-	image_count = capabilities.minImageCount + 1
-	if capabilities.maxImageCount > 0 && image_count > capabilities.maxImageCount {
-		image_count = capabilities.minImageCount
+	desired_images := capabilities.minImageCount + 1
+	if capabilities.maxImageCount > 0 && desired_images > capabilities.maxImageCount {
+		desired_images = capabilities.maxImageCount
 	}
 
-	create_info := vk.SwapchainCreateInfoKHR {
-		sType            = vk.StructureType.SWAPCHAIN_CREATE_INFO_KHR,
-		surface          = vulkan_surface,
-		minImageCount    = image_count,
-		imageFormat      = chosen_format.format,
-		imageColorSpace  = chosen_format.colorSpace,
-		imageExtent      = {width, height},
-		imageArrayLayers = 1,
-		imageUsage       = {vk.ImageUsageFlag.COLOR_ATTACHMENT},
-		imageSharingMode = vk.SharingMode.EXCLUSIVE,
-		preTransform     = capabilities.currentTransform,
-		compositeAlpha   = {vk.CompositeAlphaFlagKHR.OPAQUE},
-		presentMode      = vk.PresentModeKHR.FIFO,
-		clipped          = true,
-		oldSwapchain     = {},
-	}
-
-	result = vk.CreateSwapchainKHR(device, &create_info, nil, &swapchain)
-	if result != vk.Result.SUCCESS {
-		fmt.printf("Error creating swapchain: %d\n", result)
-		return
-	}
+	new_swapchain := vkw(
+		vk.CreateSwapchainKHR,
+		device,
+		&vk.SwapchainCreateInfoKHR {
+			sType = vk.StructureType.SWAPCHAIN_CREATE_INFO_KHR,
+			surface = vulkan_surface,
+			minImageCount = desired_images,
+			imageFormat = chosen_format.format,
+			imageColorSpace = chosen_format.colorSpace,
+			imageExtent = {width, height},
+			imageArrayLayers = 1,
+			imageUsage = {vk.ImageUsageFlag.COLOR_ATTACHMENT},
+			imageSharingMode = vk.SharingMode.EXCLUSIVE,
+			preTransform = capabilities.currentTransform,
+			compositeAlpha = {vk.CompositeAlphaFlagKHR.OPAQUE},
+			presentMode = vk.PresentModeKHR.FIFO,
+			clipped = true,
+		},
+		"swapchain",
+		vk.SwapchainKHR,
+	) or_return
 
 	attachment := vk.AttachmentDescription {
 		format         = format,
@@ -597,112 +632,165 @@ create_swapchain :: proc() {
 		pColorAttachments    = &attachment_ref,
 	}
 
-	render_pass_info := vk.RenderPassCreateInfo {
-		sType           = vk.StructureType.RENDER_PASS_CREATE_INFO,
-		attachmentCount = 1,
-		pAttachments    = &attachment,
-		subpassCount    = 1,
-		pSubpasses      = &subpass,
-	}
-
-	result = vk.CreateRenderPass(device, &render_pass_info, nil, &render_pass)
-	if result != vk.Result.SUCCESS {
-		fmt.printf("Error creating render pass: %d\n", result)
-		return
-	}
-
-	result = vk.GetSwapchainImagesKHR(device, swapchain, &image_count, nil)
-	if result != vk.Result.SUCCESS {
-		fmt.printf("Error getting swapchain image count: %d\n", result)
-		return
-	}
-
-	images := make([^]vk.Image, image_count)
-	defer free(images)
-	result = vk.GetSwapchainImagesKHR(device, swapchain, &image_count, images)
-	if result != vk.Result.SUCCESS {
-		fmt.printf("Error getting swapchain images: %d\n", result)
-		return
-	}
-
-	elements = make([^]SwapchainElement, image_count)
-
-	for i in 0 ..< image_count {
-		alloc_info := vk.CommandBufferAllocateInfo {
-			sType              = vk.StructureType.COMMAND_BUFFER_ALLOCATE_INFO,
-			commandPool        = command_pool,
-			commandBufferCount = 1,
-			level              = vk.CommandBufferLevel.PRIMARY,
-		}
-		vk.AllocateCommandBuffers(device, &alloc_info, &elements[i].commandBuffer)
-
-		// Create fence for tracking frame completion
-		fence_info := vk.FenceCreateInfo {
-			sType = vk.StructureType.FENCE_CREATE_INFO,
-			flags = {.SIGNALED}, // Start signaled so first frame doesn't wait
-		}
-		vk.CreateFence(device, &fence_info, nil, &elements[i].fence)
-
-		elements[i].image = images[i]
-
-		view_info := vk.ImageViewCreateInfo {
-			sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
-			viewType = vk.ImageViewType.D2,
-			components = {
-				vk.ComponentSwizzle.IDENTITY,
-				vk.ComponentSwizzle.IDENTITY,
-				vk.ComponentSwizzle.IDENTITY,
-				vk.ComponentSwizzle.IDENTITY,
-			},
-			subresourceRange = {
-				aspectMask = {vk.ImageAspectFlag.COLOR},
-				baseMipLevel = 0,
-				levelCount = 1,
-				baseArrayLayer = 0,
-				layerCount = 1,
-			},
-			image = elements[i].image,
-			format = format,
-		}
-		result = vk.CreateImageView(device, &view_info, nil, &elements[i].imageView)
-		if result != vk.Result.SUCCESS {
-			fmt.printf("Error creating image view: %d\n", result)
-			return
-		}
-
-		fb_info := vk.FramebufferCreateInfo {
-			sType           = vk.StructureType.FRAMEBUFFER_CREATE_INFO,
-			renderPass      = render_pass,
+	new_render_pass := vkw(
+		vk.CreateRenderPass,
+		device,
+		&vk.RenderPassCreateInfo {
+			sType = vk.StructureType.RENDER_PASS_CREATE_INFO,
 			attachmentCount = 1,
-			pAttachments    = &elements[i].imageView,
-			width           = width,
-			height          = height,
-			layers          = 1,
-		}
-		result = vk.CreateFramebuffer(device, &fb_info, nil, &elements[i].framebuffer)
-		if result != vk.Result.SUCCESS {
-			fmt.printf("Error creating framebuffer: %d\n", result)
-			return
-		}
+			pAttachments = &attachment,
+			subpassCount = 1,
+			pSubpasses = &subpass,
+		},
+		"render pass",
+		vk.RenderPass,
+	) or_return
 
-		// Note: synchronization objects are created in init_vulkan()
+	actual_image_count := desired_images
+	if vk.GetSwapchainImagesKHR(device, new_swapchain, &actual_image_count, nil) !=
+	   vk.Result.SUCCESS {
+		fmt.println("Failed to query swapchain images")
+		vk.DestroyRenderPass(device, new_render_pass, nil)
+		vk.DestroySwapchainKHR(device, new_swapchain, nil)
+		return false
 	}
+
+	images := make([^]vk.Image, actual_image_count)
+	defer free(images)
+	if vk.GetSwapchainImagesKHR(device, new_swapchain, &actual_image_count, images) !=
+	   vk.Result.SUCCESS {
+		fmt.println("Failed to fetch swapchain images")
+		vk.DestroyRenderPass(device, new_render_pass, nil)
+		vk.DestroySwapchainKHR(device, new_swapchain, nil)
+		return false
+	}
+
+	new_elements := make([^]SwapchainElement, actual_image_count)
+	success := false
+	defer {
+		if !success {
+			for i in 0 ..< actual_image_count {
+				if new_elements[i].framebuffer != {} {
+					vk.DestroyFramebuffer(device, new_elements[i].framebuffer, nil)
+				}
+				if new_elements[i].imageView != {} {
+					vk.DestroyImageView(device, new_elements[i].imageView, nil)
+				}
+				if new_elements[i].commandBuffer != {} {
+					vk.ResetCommandBuffer(new_elements[i].commandBuffer, {})
+				}
+			}
+			free(new_elements)
+			vk.DestroyRenderPass(device, new_render_pass, nil)
+			vk.DestroySwapchainKHR(device, new_swapchain, nil)
+		}
+	}
+
+	for i in 0 ..< actual_image_count {
+		vk.AllocateCommandBuffers(
+			device,
+			&vk.CommandBufferAllocateInfo {
+				sType = vk.StructureType.COMMAND_BUFFER_ALLOCATE_INFO,
+				commandPool = command_pool,
+				commandBufferCount = 1,
+				level = vk.CommandBufferLevel.PRIMARY,
+			},
+			&new_elements[i].commandBuffer,
+		)
+		new_elements[i].image = images[i]
+		new_elements[i].last_value = 0
+
+		new_elements[i].imageView = vkw(
+			vk.CreateImageView,
+			device,
+			&vk.ImageViewCreateInfo {
+				sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
+				viewType = vk.ImageViewType.D2,
+				components = {
+					vk.ComponentSwizzle.IDENTITY,
+					vk.ComponentSwizzle.IDENTITY,
+					vk.ComponentSwizzle.IDENTITY,
+					vk.ComponentSwizzle.IDENTITY,
+				},
+				subresourceRange = {
+					aspectMask = {vk.ImageAspectFlag.COLOR},
+					baseMipLevel = 0,
+					levelCount = 1,
+					baseArrayLayer = 0,
+					layerCount = 1,
+				},
+				image = new_elements[i].image,
+				format = format,
+			},
+			"image view",
+			vk.ImageView,
+		) or_return
+
+		new_elements[i].framebuffer = vkw(
+			vk.CreateFramebuffer,
+			device,
+			&vk.FramebufferCreateInfo {
+				sType = vk.StructureType.FRAMEBUFFER_CREATE_INFO,
+				renderPass = new_render_pass,
+				attachmentCount = 1,
+				pAttachments = &new_elements[i].imageView,
+				width = width,
+				height = height,
+				layers = 1,
+			},
+			"framebuffer",
+			vk.Framebuffer,
+		) or_return
+	}
+
+	frames_in_flight = actual_image_count
+	if frames_in_flight > MAX_FRAMES_IN_FLIGHT {
+		frames_in_flight = MAX_FRAMES_IN_FLIGHT
+	}
+	if frames_in_flight == 0 {
+		frames_in_flight = 1
+	}
+	current_frame = 0
+
+	if elements != nil {
+		free(elements)
+	}
+
+	swapchain = new_swapchain
+	render_pass = new_render_pass
+	elements = new_elements
+	image_count = actual_image_count
+	success = true
+	return true
 }
 
 destroy_swapchain :: proc() {
-	for i in 0 ..< image_count {
-		vk.DestroyFramebuffer(device, elements[i].framebuffer, nil)
-		vk.DestroyImageView(device, elements[i].imageView, nil)
-		vk.DestroyFence(device, elements[i].fence, nil)
-		// Reset command buffer instead of freeing for better performance
-		if elements[i].commandBuffer != {} {
-			vk.ResetCommandBuffer(elements[i].commandBuffer, {})
+	if elements != nil {
+		for i in 0 ..< image_count {
+			if elements[i].framebuffer != {} {
+				vk.DestroyFramebuffer(device, elements[i].framebuffer, nil)
+			}
+			if elements[i].imageView != {} {
+				vk.DestroyImageView(device, elements[i].imageView, nil)
+			}
+			if elements[i].commandBuffer != {} {
+				vk.ResetCommandBuffer(elements[i].commandBuffer, {})
+			}
 		}
+		free(elements)
+		elements = nil
 	}
-
-	free(elements)
-	vk.DestroyRenderPass(device, render_pass, nil)
-	vk.DestroySwapchainKHR(device, swapchain, nil)
+	image_count = 0
+	frames_in_flight = 0
+	current_frame = 0
+	if render_pass != {} {
+		vk.DestroyRenderPass(device, render_pass, nil)
+		render_pass = {}
+	}
+	if swapchain != {} {
+		vk.DestroySwapchainKHR(device, swapchain, nil)
+		swapchain = {}
+	}
 }
 
 init_vulkan :: proc() -> bool {
@@ -828,15 +916,25 @@ init_vulkan :: proc() -> bool {
 		return false
 	}
 
-	// Create binary semaphore for image acquisition only
 	binary_sem_info := vk.SemaphoreCreateInfo {
 		sType = vk.StructureType.SEMAPHORE_CREATE_INFO,
 	}
 
-	result = vk.CreateSemaphore(device, &binary_sem_info, nil, &image_available_semaphore)
-	if result != vk.Result.SUCCESS {
-		fmt.printf("Failed to create image available semaphore: %d\n", result)
-		return false
+	for i in 0 ..< len(image_available) {
+		image_available[i] = vkw(
+			vk.CreateSemaphore,
+			device,
+			&binary_sem_info,
+			"image available semaphore",
+			vk.Semaphore,
+		) or_return
+		render_finished[i] = vkw(
+			vk.CreateSemaphore,
+			device,
+			&binary_sem_info,
+			"render finished semaphore",
+			vk.Semaphore,
+		) or_return
 	}
 
 	return true
@@ -1168,7 +1266,16 @@ vulkan_cleanup :: proc() {
 
 	// Cleanup remaining vulkan resources
 	vk.DestroySemaphore(device, timeline_semaphore, nil)
-	vk.DestroySemaphore(device, image_available_semaphore, nil)
+	for i in 0 ..< len(image_available) {
+		if image_available[i] != {} {
+			vk.DestroySemaphore(device, image_available[i], nil)
+			image_available[i] = {}
+		}
+		if render_finished[i] != {} {
+			vk.DestroySemaphore(device, render_finished[i], nil)
+			render_finished[i] = {}
+		}
+	}
 	vk.DestroyCommandPool(device, command_pool, nil)
 	vk.DestroyDevice(device, nil)
 	vk.DestroySurfaceKHR(instance, vulkan_surface, nil)
