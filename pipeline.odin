@@ -486,6 +486,7 @@ make_graphics_pipeline :: proc(
 	defer vk.DestroyShaderModule(device, vsh, nil)
 	defer vk.DestroyShaderModule(device, fsh, nil)
 
+
 	result := vk.CreateGraphicsPipelines(
 		device,
 		vk.PipelineCache{},
@@ -507,9 +508,9 @@ make_graphics_pipeline :: proc(
 			pViewportState = &vk.PipelineViewportStateCreateInfo {
 				sType = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
 				viewportCount = 1,
-				pViewports = &vk.Viewport{x = 0, y = 0, width = f32(width), height = f32(height), minDepth = 0, maxDepth = 1},
+				pViewports = &vk.Viewport{x = 0, y = 0, width = f32(window_width), height = f32(window_height), minDepth = 0, maxDepth = 1},
 				scissorCount = 1,
-				pScissors = &vk.Rect2D{offset = {0, 0}, extent = {u32(width), u32(height)}},
+				pScissors = &vk.Rect2D{offset = {0, 0}, extent = {u32(window_width), u32(window_height)}},
 			},
 			pRasterizationState = &vk.PipelineRasterizationStateCreateInfo {
 				sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,

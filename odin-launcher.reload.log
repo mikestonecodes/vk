@@ -9,25 +9,25 @@ Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: Removing driver /usr/lib/libvulkan_intel.so due to not having any physical devices
 Validation layer: Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
@@ -49,7 +49,15 @@ Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver:
 DEBUG: Creating swapchain
 DEBUG: Initializing resources
 DEBUG: Vulkan init complete
-Discovered 3 shaders: compute.hlsl graphics.hlsl post_process.hlsl 
+Discovered 3 shaders: graphics.hlsl compute.hlsl post_process.hlsl
+Window resized to 1866x1026
+Window resized to 3736x2056
+Window resized to 1866x1026
+Window resized to 3736x2056
+Window resized to 1866x1026
+Window resized to 3736x2056
+Window resized to 1866x1026
+Window resized to 3736x2056
 Window resized to 1866x1026
 Window resized to 3736x2056
 Window resized to 1866x1026
