@@ -13,6 +13,8 @@ struct PushConstants {
 
 // Screen-sized RGBA32U buffer: 4x uint per pixel
 [[vk::binding(0, 0)]] RWStructuredBuffer<uint> accum_buffer;
+[[vk::binding(1, 0)]] Texture2D<float4> sprite_texture;
+[[vk::binding(2, 0)]] SamplerState sprite_sampler;
 
 static const float COLOR_SCALE = 4096.0f;
 
@@ -27,11 +29,41 @@ float hash11(uint n) {
 
 // Soft circular falloff 0..1
 float soft_disk(float2 p, float r) {
-    float d = length(p);
-    float t = 1.0 - saturate(d / r);
-    return t * t; // quadratic falloff
+    float2 uv = (p / r) * 0.5 + 0.5; // normalize to 0..1 UV space
+    if (any(uv < 0.0) || any(uv > 1.0)) return 0.0; // outside texture bounds
+    return sprite_texture.SampleLevel(sprite_sampler, uv, 0).r; // sample red channel
 }
 
+// Saturating atomic add: clamps value to max_val
+void InterlockedAddSaturate(RWStructuredBuffer<uint> buf, uint idx, uint add, uint max_val)
+{
+    uint oldVal, newVal;
+    for (;;)
+    {
+        // Read the current value (atomic read)
+        InterlockedAdd(buf[idx], 0, oldVal);
+
+        if (oldVal >= max_val) {
+            // Already saturated — nothing to add
+            return;
+        }
+
+        // Clamp so we don’t overshoot
+        uint delta = min(add, max_val - oldVal);
+        newVal = oldVal + delta;
+
+        // Try to commit if still at oldVal
+        uint prev;
+        InterlockedCompareExchange(buf[idx], oldVal, newVal, prev);
+
+        if (prev == oldVal) {
+            // Success — we wrote our value
+            return;
+        }
+
+        // Else: someone else updated — retry
+    }
+}
 [numthreads(128,1,1)]
 void main(uint3 tid : SV_DispatchThreadID) {
     uint id = tid.x;
@@ -43,7 +75,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     // --- Fake particle state (replace with your state buffers later) ---
     // Unique angle & angular speed per particle
     float base  = (float)id * 0.61803398875;        // golden ratio step
-    float speed = lerp(0.2, 1.2, hash11(id * 911)); // 0.2..1.2 rad/s
+    float speed = 0.002; // 0.2..1.2 rad/s
     float ang   = base * 6.28318 + push_constants.time * speed;
 
     // Radius as fraction of min dimension
@@ -54,7 +86,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     float2 center = normCenter * float2(W, H);
 
     // Particle footprint (radius in pixels)
-    float R = max(1.0, push_constants.spread); // safety clamp
+    float R = max(8.0, push_constants.spread); // safety clamp
 
     // Bounding box of the disk (clamped to screen)
     int x0 = max(0, int(center.x - R));
@@ -69,26 +101,18 @@ void main(uint3 tid : SV_DispatchThreadID) {
         0.6 + 0.4 * sin(base * 41.0 + 4.0)
     ) * push_constants.brightness;
 
-    // Write into the screen-sized accumulation buffer with additive blending
-    for (int y = y0; y <= y1; ++y) {
-        for (int x = x0; x <= x1; ++x) {
-            float2 p = float2(x + 0.5, y + 0.5) - center;
-            float w = soft_disk(p, R); // 0..1
+        float w = soft_disk(0, R); // 0..1
 
-            if (w > 0.0) {
-                uint baseIdx = (uint(y) * W + uint(x)) * 4u;
+uint2 pix = uint2(center.xy); // nearest pixel
+uint idx  = (pix.y * W + pix.x) * 4u;
 
-                // Scale to integer domain
-                uint addR = (uint)(saturate(baseCol.r * w) * COLOR_SCALE);
-                uint addG = (uint)(saturate(baseCol.g * w) * COLOR_SCALE);
-                uint addB = (uint)(saturate(baseCol.b * w) * COLOR_SCALE);
-                uint addA = (uint)(COLOR_SCALE); // treat alpha as weight, optional
+uint addR = (uint)(saturate(baseCol.r) * COLOR_SCALE);
+uint addG = (uint)(saturate(baseCol.g) * COLOR_SCALE);
+uint addB = (uint)(saturate(baseCol.b) * COLOR_SCALE);
+uint addA = (uint)(COLOR_SCALE);
 
-                InterlockedAdd(accum_buffer[baseIdx + 0], addR);
-                InterlockedAdd(accum_buffer[baseIdx + 1], addG);
-                InterlockedAdd(accum_buffer[baseIdx + 2], addB);
-                InterlockedAdd(accum_buffer[baseIdx + 3], addA);
-            }
-        }
-    }
+InterlockedAdd(accum_buffer[idx + 0], addR);
+InterlockedAdd(accum_buffer[idx + 1], addG);
+InterlockedAdd(accum_buffer[idx + 2], addB);
+InterlockedAdd(accum_buffer[idx + 3], addA);
 }

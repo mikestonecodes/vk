@@ -9,25 +9,25 @@ Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 Validation layer: Copying old device 0 into new device 0
 Validation layer: Removing driver /usr/lib/libvulkan_intel.so due to not having any physical devices
 Validation layer: Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
@@ -49,25 +49,72 @@ Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver:
 DEBUG: Creating swapchain
 DEBUG: Initializing resources
 DEBUG: Vulkan init complete
-Discovered 3 shaders: graphics.hlsl compute.hlsl post_process.hlsl
+Discovered 3 shaders: graphics.hlsl post_process.hlsl compute.hlsl 
 Window resized to 1866x1026
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+compute.hlsl:119:17: error: no matching function for call to 'InterlockedAddSaturate'
+                InterlockedAddSaturate(accum_buffer[baseIdx + 0], addR);
+                ^~~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:38:6: note: candidate function not viable: requires 4 arguments, but 2 were provided
+void InterlockedAddSaturate(RWStructuredBuffer<uint> buf, uint idx, uint add, uint max_val)
+     ^
+compute.hlsl:120:17: error: no matching function for call to 'InterlockedAddSaturate'
+                InterlockedAddSaturate(accum_buffer[baseIdx + 1], addG);
+                ^~~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:38:6: note: candidate function not viable: requires 4 arguments, but 2 were provided
+void InterlockedAddSaturate(RWStructuredBuffer<uint> buf, uint idx, uint add, uint max_val)
+     ^
+compute.hlsl:121:17: error: no matching function for call to 'InterlockedAddSaturate'
+                InterlockedAddSaturate(accum_buffer[baseIdx + 2], addB);
+                ^~~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:38:6: note: candidate function not viable: requires 4 arguments, but 2 were provided
+void InterlockedAddSaturate(RWStructuredBuffer<uint> buf, uint idx, uint add, uint max_val)
+     ^
+compute.hlsl:122:17: error: no matching function for call to 'InterlockedAddSaturate'
+                InterlockedAddSaturate(accum_buffer[baseIdx + 3], addA);
+                ^~~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:38:6: note: candidate function not viable: requires 4 arguments, but 2 were provided
+void InterlockedAddSaturate(RWStructuredBuffer<uint> buf, uint idx, uint add, uint max_val)
+     ^
+
+Failed to compile compute.hlsl
 Window resized to 3736x2056
 Window resized to 1866x1026
 Window resized to 3736x2056
 Window resized to 1866x1026
-Window resized to 3736x2056
-Window resized to 1866x1026
-Window resized to 3736x2056
-Window resized to 1866x1026
-Window resized to 3736x2056
-Window resized to 1866x1026
-Window resized to 3736x2056
-Window resized to 1866x1026
-Window resized to 3736x2056
-Window resized to 1866x1026
-Window resized to 3736x2056
-Window resized to 1866x1026
-Window resized to 3736x2056
-Window resized to 1866x1026
-Window resized to 3736x2056
-Window resized to 1866x1026
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+compute.hlsl:104:29: error: use of undeclared identifier 'p'
+        float w = soft_disk(p, R); // 0..1
+                            ^
+
+Failed to compile compute.hlsl
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
+Recompiling 1 shaders...
+Compiling shader compute.hlsl
