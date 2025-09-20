@@ -48,73 +48,8 @@ Validation layer:    <Device>
 Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "libGLX_nvidia.so.0"
 DEBUG: Creating swapchain
 DEBUG: Initializing resources
-DEBUG: Vulkan init complete
-Discovered 3 shaders: graphics.hlsl post_process.hlsl compute.hlsl 
-Window resized to 1866x1026
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
-compute.hlsl:119:17: error: no matching function for call to 'InterlockedAddSaturate'
-                InterlockedAddSaturate(accum_buffer[baseIdx + 0], addR);
-                ^~~~~~~~~~~~~~~~~~~~~~
-compute.hlsl:38:6: note: candidate function not viable: requires 4 arguments, but 2 were provided
-void InterlockedAddSaturate(RWStructuredBuffer<uint> buf, uint idx, uint add, uint max_val)
-     ^
-compute.hlsl:120:17: error: no matching function for call to 'InterlockedAddSaturate'
-                InterlockedAddSaturate(accum_buffer[baseIdx + 1], addG);
-                ^~~~~~~~~~~~~~~~~~~~~~
-compute.hlsl:38:6: note: candidate function not viable: requires 4 arguments, but 2 were provided
-void InterlockedAddSaturate(RWStructuredBuffer<uint> buf, uint idx, uint add, uint max_val)
-     ^
-compute.hlsl:121:17: error: no matching function for call to 'InterlockedAddSaturate'
-                InterlockedAddSaturate(accum_buffer[baseIdx + 2], addB);
-                ^~~~~~~~~~~~~~~~~~~~~~
-compute.hlsl:38:6: note: candidate function not viable: requires 4 arguments, but 2 were provided
-void InterlockedAddSaturate(RWStructuredBuffer<uint> buf, uint idx, uint add, uint max_val)
-     ^
-compute.hlsl:122:17: error: no matching function for call to 'InterlockedAddSaturate'
-                InterlockedAddSaturate(accum_buffer[baseIdx + 3], addA);
-                ^~~~~~~~~~~~~~~~~~~~~~
-compute.hlsl:38:6: note: candidate function not viable: requires 4 arguments, but 2 were provided
-void InterlockedAddSaturate(RWStructuredBuffer<uint> buf, uint idx, uint add, uint max_val)
-     ^
-
-Failed to compile compute.hlsl
-Window resized to 3736x2056
-Window resized to 1866x1026
-Window resized to 3736x2056
-Window resized to 1866x1026
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
-compute.hlsl:104:29: error: use of undeclared identifier 'p'
-        float w = soft_disk(p, R); // 0..1
-                            ^
-
-Failed to compile compute.hlsl
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
-Recompiling 1 shaders...
-Compiling shader compute.hlsl
+Validation layer: vkCreateComputePipelines(): pCreateInfos[0].stage SPIR-V (VK_SHADER_STAGE_COMPUTE_BIT) uses descriptor [Set 0, Binding 3, variable "blur_sampler"] (type VK_DESCRIPTOR_TYPE_SAMPLER or VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) but was not declared in the pipeline layout.
+The Vulkan spec states: If a resource variable is declared in a shader, the corresponding descriptor set in layout must match the shader stage (https://docs.vulkan.org/spec/latest/chapters/pipelines.html#VUID-VkComputePipelineCreateInfo-layout-07988)
+Sampler descriptor missing sampler resource
+Render pipelines failed to initialize
+Cleaning up GLFW...

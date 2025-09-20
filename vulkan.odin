@@ -1361,6 +1361,80 @@ create_texture_from_png :: proc(path: string) -> (TextureResource, bool) {
 	return tex, true
 }
 
+// Create a storage texture for compute shader read/write access
+create_storage_texture :: proc(width, height: u32, format: vk.Format) -> (TextureResource, bool) {
+	tex: TextureResource
+
+	// Create image
+	ci := vk.ImageCreateInfo {
+		sType = vk.StructureType.IMAGE_CREATE_INFO,
+		imageType = vk.ImageType.D2,
+		format = format,
+		extent = {width = width, height = height, depth = 1},
+		mipLevels = 1,
+		arrayLayers = 1,
+		samples = {vk.SampleCountFlag._1},
+		tiling = vk.ImageTiling.OPTIMAL,
+		usage = {vk.ImageUsageFlag.STORAGE, vk.ImageUsageFlag.SAMPLED, vk.ImageUsageFlag.TRANSFER_DST},
+		sharingMode = vk.SharingMode.EXCLUSIVE,
+		initialLayout = vk.ImageLayout.UNDEFINED,
+	}
+	tex.image, _ = vkw(vk.CreateImage, device, &ci, "storage texture image", vk.Image)
+
+	// Allocate memory
+	mem_req: vk.MemoryRequirements
+	vk.GetImageMemoryRequirements(device, tex.image, &mem_req)
+
+	alloc := vk.MemoryAllocateInfo {
+		sType = vk.StructureType.MEMORY_ALLOCATE_INFO,
+		allocationSize = mem_req.size,
+		memoryTypeIndex = find_memory_type(mem_req.memoryTypeBits, {vk.MemoryPropertyFlag.DEVICE_LOCAL}),
+	}
+	vk.AllocateMemory(device, &alloc, nil, &tex.memory)
+	vk.BindImageMemory(device, tex.image, tex.memory, 0)
+
+	// Transition to general layout for storage use
+	if !execute_single_time_commands(proc(cmd: vk.CommandBuffer, user_data: rawptr) -> bool {
+		tex := (^TextureResource)(user_data)
+		return transition_image_layout(cmd, tex.image, vk.ImageLayout.UNDEFINED, vk.ImageLayout.GENERAL)
+	}, &tex) {
+		return tex, false
+	}
+
+	// Set metadata
+	tex.width = width
+	tex.height = height
+	tex.format = format
+	tex.layout = vk.ImageLayout.GENERAL
+
+	// Create image view
+	vi := vk.ImageViewCreateInfo {
+		sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
+		image = tex.image,
+		viewType = vk.ImageViewType.D2,
+		format = format,
+		subresourceRange = {
+			aspectMask = {vk.ImageAspectFlag.COLOR},
+			levelCount = 1,
+			layerCount = 1,
+		},
+	}
+	tex.view, _ = vkw(vk.CreateImageView, device, &vi, "storage texture view", vk.ImageView)
+
+	// Create sampler for blur passes
+	si := vk.SamplerCreateInfo {
+		sType = vk.StructureType.SAMPLER_CREATE_INFO,
+		magFilter = vk.Filter.LINEAR,
+		minFilter = vk.Filter.LINEAR,
+		addressModeU = vk.SamplerAddressMode.CLAMP_TO_EDGE,
+		addressModeV = vk.SamplerAddressMode.CLAMP_TO_EDGE,
+		addressModeW = vk.SamplerAddressMode.CLAMP_TO_EDGE,
+	}
+	tex.sampler, _ = vkw(vk.CreateSampler, device, &si, "storage texture sampler", vk.Sampler)
+
+	return tex, true
+}
+
 
 foreign import libc "system:c"
 foreign libc {

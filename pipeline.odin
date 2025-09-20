@@ -233,6 +233,11 @@ transition_image_layout :: proc(
 		barrier.dstAccessMask = {vk.AccessFlag.SHADER_READ}
 		src_stage = {vk.PipelineStageFlag.HOST}
 		dst_stage = {vk.PipelineStageFlag.FRAGMENT_SHADER, vk.PipelineStageFlag.COMPUTE_SHADER}
+	} else if old_layout == vk.ImageLayout.UNDEFINED && new_layout == vk.ImageLayout.GENERAL {
+		barrier.srcAccessMask = {}
+		barrier.dstAccessMask = {vk.AccessFlag.SHADER_READ, vk.AccessFlag.SHADER_WRITE}
+		src_stage = {vk.PipelineStageFlag.TOP_OF_PIPE}
+		dst_stage = {vk.PipelineStageFlag.COMPUTE_SHADER}
 	} else {
 		fmt.println("Unsupported image layout transition")
 		return false
@@ -381,9 +386,10 @@ build_pipelines :: proc(specs: []PipelineSpec, states: []PipelineState) -> bool 
 	assert(len(specs) == len(states), "pipeline spec/state length mismatch")
 	if len(specs) == 0 do return true
 	pool_sizes := []vk.DescriptorPoolSize{
-		{type = .STORAGE_BUFFER, descriptorCount = 1},
-		{type = .SAMPLED_IMAGE, descriptorCount = 1},
-		{type = .SAMPLER, descriptorCount = 1},
+		{type = .STORAGE_BUFFER, descriptorCount = 10},
+		{type = .SAMPLED_IMAGE, descriptorCount = 10},
+		{type = .SAMPLER, descriptorCount = 10},
+		{type = .STORAGE_IMAGE, descriptorCount = 10},
 	}
 	create_descriptor_pool(pool_sizes, len(specs)) or_return
 	for idx in 0 ..< len(specs) {
@@ -690,7 +696,9 @@ compile_shader :: proc(shader_file: string) -> bool {
 	base, _ := strings.replace(shader_file, ".hlsl", "", 1)
 	defer delete(base)
 
-	if strings.contains(shader_file, "compute") {
+	// Check if this is a compute shader by filename patterns
+	if strings.contains(shader_file, "compute") ||
+	   strings.contains(shader_file, "mega_splat") {
 		return compile_hlsl(shader_file, "cs_6_0", "main", fmt.aprintf("%s.spv", base))
 	}
 
