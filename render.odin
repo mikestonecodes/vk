@@ -1,6 +1,11 @@
 package main
 
 import "base:runtime"
+import "core:bytes"
+import "core:fmt"
+import image "core:image"
+import png "core:image/png"
+
 import vk "vendor:vulkan"
 
 PARTICLE_COUNT :: u32(980_000)
@@ -9,6 +14,16 @@ PIPELINE_COUNT :: 2
 
 accumulation_buffer: BufferResource
 accumulation_barriers: BufferBarriers
+sprite_texture: TextureResource
+sprite_texture_width: u32
+sprite_texture_height: u32
+
+TextureUploadContext :: struct {
+	texture: ^TextureResource,
+	staging: ^BufferResource,
+	width:   u32,
+	height:  u32,
+}
 
 PostProcessPushConstants :: struct {
 	time:              f32,
@@ -31,6 +46,8 @@ ComputePushConstants :: struct {
 	texture_height: u32,
 	spread:         f32,
 	brightness:     f32,
+	sprite_width:   u32,
+	sprite_height:  u32,
 }
 
 compute_push_constants: ComputePushConstants
@@ -40,6 +57,9 @@ init_render_resources :: proc() {
 
 	destroy_buffer(&accumulation_buffer)
 	reset_buffer_barriers(&accumulation_barriers)
+	destroy_texture(&sprite_texture)
+	sprite_texture_width = 0
+	sprite_texture_height = 0
 
 	create_buffer(
 		&accumulation_buffer,
@@ -48,6 +68,8 @@ init_render_resources :: proc() {
 	)
 
 	init_buffer_barriers(&accumulation_barriers, &accumulation_buffer)
+
+	create_texture_from_png(&sprite_texture, "test3.png")
 
 	render_pipeline_specs[0] = make_compute_pipeline_spec(
 		{
@@ -58,12 +80,27 @@ init_render_resources :: proc() {
 				{vk.ShaderStageFlag.COMPUTE},
 				u32(size_of(ComputePushConstants)),
 			),
-			descriptor = storage_buffer_binding(
-				"accumulation-buffer",
-				{vk.ShaderStageFlag.COMPUTE},
-			),
 		},
 	)
+	render_pipeline_specs[0].descriptors[0] = storage_buffer_binding(
+		"accumulation-buffer",
+		{vk.ShaderStageFlag.COMPUTE},
+		0,
+		&accumulation_buffer,
+	)
+	render_pipeline_specs[0].descriptors[1] = sampled_image_binding(
+		"sprite-texture",
+		{vk.ShaderStageFlag.COMPUTE},
+		1,
+		&sprite_texture,
+	)
+	render_pipeline_specs[0].descriptors[2] = sampler_binding(
+		"sprite-sampler",
+		{vk.ShaderStageFlag.COMPUTE},
+		2,
+		&sprite_texture.sampler,
+	)
+	render_pipeline_specs[0].descriptor_count = 3
 
 	render_pipeline_specs[1] = make_graphics_pipeline_spec(
 		{
@@ -75,12 +112,15 @@ init_render_resources :: proc() {
 				{vk.ShaderStageFlag.FRAGMENT},
 				u32(size_of(PostProcessPushConstants)),
 			),
-			descriptor = storage_buffer_binding(
-				"accumulation-buffer",
-				{vk.ShaderStageFlag.FRAGMENT},
-			),
 		},
 	)
+	render_pipeline_specs[1].descriptors[0] = storage_buffer_binding(
+		"accumulation-buffer",
+		{vk.ShaderStageFlag.FRAGMENT},
+		0,
+		&accumulation_buffer,
+	)
+	render_pipeline_specs[1].descriptor_count = 1
 
 
 	compute_push_constants = ComputePushConstants {
@@ -89,6 +129,8 @@ init_render_resources :: proc() {
 		particle_count = PARTICLE_COUNT,
 		spread         = 1.0,
 		brightness     = 1.0,
+		sprite_width   = 999,
+		sprite_height  = 999,
 	}
 
 	post_process_push_constants = PostProcessPushConstants {
@@ -115,6 +157,8 @@ simulate_particles :: proc(frame: FrameInputs) {
 
 	compute_push_constants.time = frame.time
 	compute_push_constants.delta_time = frame.delta_time
+	compute_push_constants.sprite_width = sprite_texture_width
+	compute_push_constants.sprite_height = sprite_texture_height
 	bind(frame, &render_pipeline_states[0], .COMPUTE, &compute_push_constants)
 
 	vk.CmdDispatch(frame.cmd, (PARTICLE_COUNT + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE, 1, 1)
@@ -133,4 +177,5 @@ composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) 
 cleanup_render_resources :: proc() {
 	destroy_buffer(&accumulation_buffer)
 	reset_buffer_barriers(&accumulation_barriers)
+	destroy_texture(&sprite_texture)
 }

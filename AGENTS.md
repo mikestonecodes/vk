@@ -6,5 +6,9 @@ the changes you did worked. you can ignore this for tools directory
 - unless you are working on something, try to undo changes that didn't work and keep codebase clean
 - make small code changes if you can
 
+- NO NEED TO RUN vk , odin run .  , odin build. , dxc or compile shaders  . dont ever do that. i am running another process that auto
+compiles everything . Just read odin-launcher.reload.log . assume its alwasy working. it clears the log every time it
+rebuilds automaticly from file change
+
 
 

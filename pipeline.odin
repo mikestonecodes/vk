@@ -24,6 +24,8 @@ PipelineState :: struct {
 	push_stage:        vk.ShaderStageFlags,
 }
 
+MAX_DESCRIPTOR_BINDINGS :: u32(4)
+
 PipelineKind :: enum {
 	Compute,
 	Post,
@@ -39,12 +41,16 @@ DescriptorBindingInfo :: struct {
 	binding:        u32,
 	descriptorType: vk.DescriptorType,
 	stage:          vk.ShaderStageFlags,
+	buffer:         ^BufferResource,
+	texture:        ^TextureResource,
+	sampler:        ^vk.Sampler,
 }
 
 PipelineSpec :: struct {
 	name:            string,
 	push:            PushConstantInfo,
-	descriptor:      DescriptorBindingInfo,
+	descriptors:     [MAX_DESCRIPTOR_BINDINGS]DescriptorBindingInfo,
+	descriptor_count: u32,
 	compute_module:  string,
 	vertex_module:   string,
 	fragment_module: string,
@@ -54,7 +60,6 @@ ComputePipelineConfig :: struct {
 	name:       string,
 	shader:     string,
 	push:       PushConstantInfo,
-	descriptor: DescriptorBindingInfo,
 }
 
 GraphicsPipelineConfig :: struct {
@@ -62,7 +67,6 @@ GraphicsPipelineConfig :: struct {
 	vertex:     string,
 	fragment:   string,
 	push:       PushConstantInfo,
-	descriptor: DescriptorBindingInfo,
 }
 
 last_frame_time: f32
@@ -93,7 +97,6 @@ make_compute_pipeline_spec :: proc(config: ComputePipelineConfig) -> PipelineSpe
 	return PipelineSpec {
 		name = config.name,
 		push = config.push,
-		descriptor = config.descriptor,
 		compute_module = config.shader,
 	}
 }
@@ -102,7 +105,6 @@ make_graphics_pipeline_spec :: proc(config: GraphicsPipelineConfig) -> PipelineS
 	return PipelineSpec {
 		name = config.name,
 		push = config.push,
-		descriptor = config.descriptor,
 		vertex_module = config.vertex,
 		fragment_module = config.fragment,
 	}
@@ -121,15 +123,46 @@ storage_buffer_binding :: proc(
 	label: string,
 	stage: vk.ShaderStageFlags,
 	binding: u32 = 0,
+	resource: ^BufferResource = nil,
 ) -> DescriptorBindingInfo {
 	return DescriptorBindingInfo {
 		label = label,
 		binding = binding,
 		descriptorType = vk.DescriptorType.STORAGE_BUFFER,
 		stage = stage,
+		buffer = resource,
 	}
 }
 
+sampled_image_binding :: proc(
+	label: string,
+	stage: vk.ShaderStageFlags,
+	binding: u32 = 0,
+	texture: ^TextureResource = nil,
+) -> DescriptorBindingInfo {
+	return DescriptorBindingInfo {
+		label = label,
+		binding = binding,
+		descriptorType = vk.DescriptorType.SAMPLED_IMAGE,
+		stage = stage,
+		texture = texture,
+	}
+}
+
+sampler_binding :: proc(
+	label: string,
+	stage: vk.ShaderStageFlags,
+	binding: u32 = 0,
+	sampl: ^vk.Sampler = nil,
+) -> DescriptorBindingInfo {
+	return DescriptorBindingInfo {
+		label = label,
+		binding = binding,
+		descriptorType = vk.DescriptorType.SAMPLER,
+		stage = stage,
+		sampler = sampl,
+	}
+}
 
 begin_frame_commands :: proc(
 	element: ^SwapchainElement,
@@ -247,15 +280,18 @@ init_render_pipeline_state :: proc(specs: []PipelineSpec, states: []PipelineStat
 	return true
 }
 
-create_descriptor_pool :: proc(count: int) -> bool {
-	pool_sizes := [1]vk.DescriptorPoolSize{{type = .STORAGE_BUFFER, descriptorCount = u32(count)}}
+create_descriptor_pool :: proc(pool_sizes: []vk.DescriptorPoolSize, set_count: int) -> bool {
+	if len(pool_sizes) == 0 {
+		fmt.println("Descriptor pool requires at least one size entry")
+		return false
+	}
 
 	pool_info := vk.DescriptorPoolCreateInfo {
 		sType         = vk.StructureType.DESCRIPTOR_POOL_CREATE_INFO,
 		flags         = {vk.DescriptorPoolCreateFlag.FREE_DESCRIPTOR_SET},
 		poolSizeCount = u32(len(pool_sizes)),
-		pPoolSizes    = raw_data(pool_sizes[:]),
-		maxSets       = u32(count),
+		pPoolSizes    = &pool_sizes[0],
+		maxSets       = u32(set_count),
 	}
 
 	descriptor_pool = vkw(
@@ -271,7 +307,38 @@ create_descriptor_pool :: proc(count: int) -> bool {
 build_pipelines :: proc(specs: []PipelineSpec, states: []PipelineState) -> bool {
 	runtime.assert(len(specs) == len(states), "pipeline spec/state length mismatch")
 	if len(specs) == 0 do return true
-	create_descriptor_pool(len(specs)) or_return
+	pool_size_entries := [8]vk.DescriptorPoolSize{}
+	pool_size_len := 0
+	for spec in specs {
+		for idx in 0 ..< int(spec.descriptor_count) {
+			desc_type := spec.descriptors[idx].descriptorType
+			found := false
+			for bi in 0 ..< pool_size_len {
+				if pool_size_entries[bi].type == desc_type {
+					pool_size_entries[bi].descriptorCount += 1
+					found = true
+					break
+				}
+			}
+			if !found {
+				runtime.assert(pool_size_len < len(pool_size_entries), "Descriptor pool size array exhausted")
+				pool_size_entries[pool_size_len] = vk.DescriptorPoolSize {
+					type = desc_type,
+					descriptorCount = 1,
+				}
+				pool_size_len += 1
+			}
+		}
+	}
+	if pool_size_len == 0 {
+		pool_size_entries[0] = vk.DescriptorPoolSize {
+			type = vk.DescriptorType.STORAGE_BUFFER,
+			descriptorCount = 1,
+		}
+		pool_size_len = 1
+	}
+	pool_sizes := pool_size_entries[:pool_size_len]
+	create_descriptor_pool(pool_sizes, len(specs)) or_return
 	for idx in 0 ..< len(specs) {
 		if !build_pipeline(&specs[idx], &states[idx]) do return false
 	}
@@ -292,13 +359,18 @@ make_stage :: proc(
 }
 
 build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
-	bindings := []vk.DescriptorSetLayoutBinding {
-		{
-			binding = spec.descriptor.binding,
-			descriptorType = spec.descriptor.descriptorType,
+	binding_count := int(spec.descriptor_count)
+	bindings_storage: [MAX_DESCRIPTOR_BINDINGS]vk.DescriptorSetLayoutBinding
+	bindings := bindings_storage[:binding_count]
+	for idx in 0 ..< binding_count {
+		info := spec.descriptors[idx]
+		fmt.printf("[pipeline] descriptor binding %v type %v stage %v\n", info.binding, info.descriptorType, info.stage)
+		bindings[idx] = vk.DescriptorSetLayoutBinding {
+			binding = info.binding,
+			descriptorType = info.descriptorType,
 			descriptorCount = 1,
-			stageFlags = spec.descriptor.stage,
-		},
+			stageFlags = info.stage,
+		}
 	}
 
 	// Create descriptor set layout
@@ -453,23 +525,89 @@ build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 	) or_return
 	defer vk.FreeDescriptorSets(device, descriptor_pool, 1, &desc_set)
 
-	vk.UpdateDescriptorSets(
-		device,
-		1,
-		&vk.WriteDescriptorSet {
-			sType = vk.StructureType.WRITE_DESCRIPTOR_SET,
-			dstSet = desc_set,
-			dstBinding = spec.descriptor.binding,
-			descriptorType = spec.descriptor.descriptorType,
-			descriptorCount = 1,
-			pBufferInfo = &vk.DescriptorBufferInfo {
-				buffer = accumulation_buffer.buffer,
-				range = vk.DeviceSize(vk.WHOLE_SIZE),
-			},
-		},
-		0,
-		nil,
-	)
+	if binding_count > 0 {
+		buffer_infos_storage: [MAX_DESCRIPTOR_BINDINGS]vk.DescriptorBufferInfo
+		image_infos_storage: [MAX_DESCRIPTOR_BINDINGS]vk.DescriptorImageInfo
+		writes_storage: [MAX_DESCRIPTOR_BINDINGS]vk.WriteDescriptorSet
+		buffer_infos := buffer_infos_storage[:binding_count]
+		image_infos := image_infos_storage[:binding_count]
+		writes := writes_storage[:binding_count]
+		for idx in 0 ..< binding_count {
+			info := spec.descriptors[idx]
+			write := &writes[idx]
+			write.sType = vk.StructureType.WRITE_DESCRIPTOR_SET
+			write.dstSet = desc_set
+			write.dstBinding = info.binding
+			write.descriptorType = info.descriptorType
+			write.descriptorCount = 1
+			write.pBufferInfo = nil
+			write.pImageInfo = nil
+
+			#partial switch info.descriptorType {
+			case vk.DescriptorType.STORAGE_BUFFER, vk.DescriptorType.UNIFORM_BUFFER, vk.DescriptorType.STORAGE_BUFFER_DYNAMIC, vk.DescriptorType.UNIFORM_BUFFER_DYNAMIC:
+				if info.buffer == nil || info.buffer.buffer == {} {
+					fmt.println("Descriptor binding missing buffer resource")
+					return false
+				}
+				buffer_infos[idx] = vk.DescriptorBufferInfo {
+					buffer = info.buffer.buffer,
+					range = vk.DeviceSize(vk.WHOLE_SIZE),
+				}
+				write.pBufferInfo = &buffer_infos[idx]
+			case vk.DescriptorType.SAMPLED_IMAGE, vk.DescriptorType.STORAGE_IMAGE:
+				if info.texture == nil || info.texture.view == {} {
+					fmt.println("Descriptor binding missing texture resource")
+					return false
+				}
+				layout := info.texture.layout
+				if layout == {} {
+					layout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
+				}
+				image_infos[idx] = vk.DescriptorImageInfo {
+					sampler = vk.Sampler{},
+					imageView = info.texture.view,
+					imageLayout = layout,
+				}
+				write.pImageInfo = &image_infos[idx]
+			case vk.DescriptorType.COMBINED_IMAGE_SAMPLER:
+				if info.texture == nil || info.texture.view == {} || info.texture.sampler == {} {
+					fmt.println("Combined image sampler missing texture or sampler")
+					return false
+				}
+				layout := info.texture.layout
+				if layout == {} {
+					layout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL
+				}
+				image_infos[idx] = vk.DescriptorImageInfo {
+					sampler = info.texture.sampler,
+					imageView = info.texture.view,
+					imageLayout = layout,
+				}
+				write.pImageInfo = &image_infos[idx]
+			case vk.DescriptorType.SAMPLER:
+				if info.sampler == nil || info.sampler^ == {} {
+					fmt.println("Sampler descriptor missing sampler resource")
+					return false
+				}
+				image_infos[idx] = vk.DescriptorImageInfo {
+					sampler = info.sampler^,
+					imageLayout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
+				}
+				write.pImageInfo = &image_infos[idx]
+			case:
+				fmt.printf("Unsupported descriptor type: %v\n", info.descriptorType)
+				return false
+			}
+		}
+
+		vk.UpdateDescriptorSets(
+			device,
+			u32(len(writes)),
+			&writes[0],
+			0,
+			nil,
+		)
+	}
 
 	state^ = PipelineState {
 		pipeline          = pipe,

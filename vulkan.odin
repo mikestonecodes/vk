@@ -1,8 +1,11 @@
 package main
 
 import "base:runtime"
+import "core:bytes"
 import "core:c"
 import "core:fmt"
+import image "core:image"
+import png "core:image/png"
 import "core:os"
 import "core:strings"
 import "core:time"
@@ -1036,6 +1039,17 @@ BufferResource :: struct {
 	size:   vk.DeviceSize,
 }
 
+TextureResource :: struct {
+	image:   vk.Image,
+	memory:  vk.DeviceMemory,
+	view:    vk.ImageView,
+	sampler: vk.Sampler,
+	width:   u32,
+	height:  u32,
+	format:  vk.Format,
+	layout:  vk.ImageLayout,
+}
+
 create_buffer :: proc(
 	resource: ^BufferResource,
 	size: vk.DeviceSize,
@@ -1062,6 +1076,22 @@ destroy_buffer :: proc(resource: ^BufferResource) {
 		vk.FreeMemory(device, resource.memory, nil)
 	}
 	resource^ = BufferResource{}
+}
+
+destroy_texture :: proc(resource: ^TextureResource) {
+	if resource.view != {} {
+		vk.DestroyImageView(device, resource.view, nil)
+	}
+	if resource.image != {} {
+		vk.DestroyImage(device, resource.image, nil)
+	}
+	if resource.memory != {} {
+		vk.FreeMemory(device, resource.memory, nil)
+	}
+	if resource.sampler != {} {
+		vk.DestroySampler(device, resource.sampler, nil)
+	}
+	resource^ = TextureResource{}
 }
 
 BufferBarriers :: struct {
@@ -1142,6 +1172,63 @@ apply_compute_to_fragment_barrier :: proc(cmd: vk.CommandBuffer, barriers: ^Buff
 }
 
 
+execute_single_time_commands :: proc(
+	record: proc(cmd: vk.CommandBuffer, user_data: rawptr) -> bool,
+	user_data: rawptr,
+) -> bool {
+	cmd: vk.CommandBuffer
+	if vk.AllocateCommandBuffers(
+		   device,
+		   &vk.CommandBufferAllocateInfo {
+			   sType = vk.StructureType.COMMAND_BUFFER_ALLOCATE_INFO,
+			   commandPool = command_pool,
+			   level = vk.CommandBufferLevel.PRIMARY,
+			   commandBufferCount = 1,
+		   },
+		   &cmd,
+	   ) !=
+	   vk.Result.SUCCESS {
+		fmt.println("Failed to allocate single-time command buffer")
+		return false
+	}
+	defer vk.FreeCommandBuffers(device, command_pool, 1, &cmd)
+
+	begin_info := vk.CommandBufferBeginInfo {
+		sType = vk.StructureType.COMMAND_BUFFER_BEGIN_INFO,
+		flags = {vk.CommandBufferUsageFlag.ONE_TIME_SUBMIT},
+	}
+
+	if vk.BeginCommandBuffer(cmd, &begin_info) != vk.Result.SUCCESS {
+		fmt.println("Failed to begin single-time command buffer")
+		return false
+	}
+
+	if !record(cmd, user_data) {
+		vk.EndCommandBuffer(cmd)
+		return false
+	}
+
+	if vk.EndCommandBuffer(cmd) != vk.Result.SUCCESS {
+		fmt.println("Failed to end single-time command buffer")
+		return false
+	}
+
+	submit := vk.SubmitInfo {
+		sType              = vk.StructureType.SUBMIT_INFO,
+		commandBufferCount = 1,
+		pCommandBuffers    = &cmd,
+	}
+
+	if vk.QueueSubmit(queue, 1, &submit, vk.Fence{}) != vk.Result.SUCCESS {
+		fmt.println("Failed to submit single-time commands")
+		return false
+	}
+
+	vk.QueueWaitIdle(queue)
+	return true
+}
+
+
 vulkan_cleanup :: proc() {
 	vk.DeviceWaitIdle(device)
 
@@ -1173,6 +1260,148 @@ vulkan_cleanup :: proc() {
 	}
 	vk.DestroyInstance(instance, nil)
 }
+
+
+//images
+
+
+transition_image_layout :: proc(
+	cmd: vk.CommandBuffer,
+	image: vk.Image,
+	old_layout, new_layout: vk.ImageLayout,
+) -> bool {
+	barrier := vk.ImageMemoryBarrier {
+		sType = vk.StructureType.IMAGE_MEMORY_BARRIER,
+		oldLayout = old_layout,
+		newLayout = new_layout,
+		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		image = image,
+		subresourceRange = {
+			aspectMask = {vk.ImageAspectFlag.COLOR},
+			levelCount = 1,
+			layerCount = 1,
+		},
+	}
+
+	src_stage: vk.PipelineStageFlags
+	dst_stage: vk.PipelineStageFlags
+
+	if old_layout == vk.ImageLayout.UNDEFINED &&
+	   new_layout == vk.ImageLayout.TRANSFER_DST_OPTIMAL {
+		barrier.srcAccessMask = {}
+		barrier.dstAccessMask = {vk.AccessFlag.TRANSFER_WRITE}
+		src_stage = {vk.PipelineStageFlag.TOP_OF_PIPE}
+		dst_stage = {vk.PipelineStageFlag.TRANSFER}
+	} else if old_layout == vk.ImageLayout.TRANSFER_DST_OPTIMAL &&
+	   new_layout == vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL {
+		barrier.srcAccessMask = {vk.AccessFlag.TRANSFER_WRITE}
+		barrier.dstAccessMask = {vk.AccessFlag.SHADER_READ}
+		src_stage = {vk.PipelineStageFlag.TRANSFER}
+		dst_stage = {vk.PipelineStageFlag.FRAGMENT_SHADER, vk.PipelineStageFlag.COMPUTE_SHADER}
+	} else {
+		fmt.println("Unsupported image layout transition")
+		return false
+	}
+
+	vk.CmdPipelineBarrier(cmd, src_stage, dst_stage, {}, 0, nil, 0, nil, 1, &barrier)
+	return true
+}
+
+// Single path: decode -> allocate -> copy -> view -> sampler
+
+create_texture_from_png :: proc(texture: ^TextureResource, path: string) -> bool {
+	img, err := png.load_from_file(path, {.alpha_add_if_missing})
+	if err != nil || img == nil {
+		return false
+	}
+	defer png.destroy(img)
+
+	required := img.width * img.height * 4
+	src := bytes.buffer_to_bytes(&img.pixels)
+	pixels := make([]u8, required)
+	defer delete(pixels)
+
+	copy(pixels, src[:required])
+	destroy_texture(texture)
+
+	// Image
+	ci := vk.ImageCreateInfo {
+		sType = vk.StructureType.IMAGE_CREATE_INFO,
+		imageType = vk.ImageType.D2,
+		format = vk.Format.R8G8B8A8_UNORM,
+		extent = {width = u32(img.width), height = u32(img.height), depth = 1},
+		mipLevels = 1,
+		arrayLayers = 1,
+		samples = {vk.SampleCountFlag._1},
+		tiling = vk.ImageTiling.LINEAR,
+		usage = {vk.ImageUsageFlag.SAMPLED},
+		sharingMode = vk.SharingMode.EXCLUSIVE,
+		initialLayout = vk.ImageLayout.PREINITIALIZED,
+	}
+	texture.image, _ = vkw(vk.CreateImage, device, &ci, "texture image", vk.Image)
+
+	mem_req: vk.MemoryRequirements
+	vk.GetImageMemoryRequirements(device, texture.image, &mem_req)
+
+	texture.memory, _ = vkw(
+		vk.AllocateMemory,
+		device,
+		&vk.MemoryAllocateInfo {
+			sType = vk.StructureType.MEMORY_ALLOCATE_INFO,
+			allocationSize = mem_req.size,
+			memoryTypeIndex = find_memory_type(
+				mem_req.memoryTypeBits,
+				{vk.MemoryPropertyFlag.HOST_VISIBLE, vk.MemoryPropertyFlag.HOST_COHERENT},
+			),
+		},
+		"texture memory",
+		vk.DeviceMemory,
+	)
+
+	vk.BindImageMemory(device, texture.image, texture.memory, 0)
+
+	// Copy pixels
+	data: rawptr
+	vk.MapMemory(device, texture.memory, 0, mem_req.size, {}, &data)
+	runtime.mem_copy_non_overlapping(data, raw_data(pixels), len(pixels))
+	vk.UnmapMemory(device, texture.memory)
+
+	// Metadata
+	texture.width = u32(img.width)
+	texture.height = u32(img.height)
+	texture.format = vk.Format.R8G8B8A8_UNORM
+	texture.layout = vk.ImageLayout.GENERAL
+
+	// View
+	vi := vk.ImageViewCreateInfo {
+		sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
+		image = texture.image,
+		viewType = vk.ImageViewType.D2,
+		format = texture.format,
+		subresourceRange = {
+			aspectMask = {vk.ImageAspectFlag.COLOR},
+			levelCount = 1,
+			layerCount = 1,
+		},
+	}
+	texture.view, _ = vkw(vk.CreateImageView, device, &vi, "texture view", vk.ImageView)
+
+	// Sampler
+	si := vk.SamplerCreateInfo {
+		sType        = vk.StructureType.SAMPLER_CREATE_INFO,
+		magFilter    = vk.Filter.LINEAR,
+		minFilter    = vk.Filter.LINEAR,
+		addressModeU = vk.SamplerAddressMode.CLAMP_TO_EDGE,
+		addressModeV = vk.SamplerAddressMode.CLAMP_TO_EDGE,
+		addressModeW = vk.SamplerAddressMode.CLAMP_TO_EDGE,
+		borderColor  = vk.BorderColor.FLOAT_OPAQUE_WHITE,
+	}
+	texture.sampler, _ = vkw(vk.CreateSampler, device, &si, "sampler", vk.Sampler)
+
+	return true
+}
+
 
 foreign import libc "system:c"
 foreign libc {
