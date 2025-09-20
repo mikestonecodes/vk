@@ -197,6 +197,12 @@ transition_image_layout :: proc(
 		barrier.dstAccessMask = {vk.AccessFlag.SHADER_READ}
 		src_stage = {vk.PipelineStageFlag.TRANSFER}
 		dst_stage = {vk.PipelineStageFlag.FRAGMENT_SHADER, vk.PipelineStageFlag.COMPUTE_SHADER}
+	} else if old_layout == vk.ImageLayout.PREINITIALIZED &&
+	   new_layout == vk.ImageLayout.GENERAL {
+		barrier.srcAccessMask = {vk.AccessFlag.HOST_WRITE}
+		barrier.dstAccessMask = {vk.AccessFlag.SHADER_READ}
+		src_stage = {vk.PipelineStageFlag.HOST}
+		dst_stage = {vk.PipelineStageFlag.FRAGMENT_SHADER, vk.PipelineStageFlag.COMPUTE_SHADER}
 	} else {
 		fmt.println("Unsupported image layout transition")
 		return false
@@ -368,7 +374,14 @@ build_pipelines :: proc(specs: []PipelineSpec, states: []PipelineState) -> bool 
 	pool_size_len := 0
 	for spec in specs {
 		for idx in 0 ..< int(spec.descriptor_count) {
-			desc_type := spec.descriptors[idx].descriptorType
+			desc_type: vk.DescriptorType
+			switch d in spec.descriptors {
+			case [MAX_DESCRIPTOR_BINDINGS]DescriptorBindingInfo:
+				desc_type = d[idx].descriptorType
+			case []^BufferResource, []^TextureResource, []ResourceBinding:
+				// These cases don't have descriptorType, skip for now
+				continue
+			}
 			found := false
 			for bi in 0 ..< pool_size_len {
 				if pool_size_entries[bi].type == desc_type {
@@ -420,7 +433,14 @@ build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 	bindings_storage: [MAX_DESCRIPTOR_BINDINGS]vk.DescriptorSetLayoutBinding
 	bindings := bindings_storage[:binding_count]
 	for idx in 0 ..< binding_count {
-		info := spec.descriptors[idx]
+		info: DescriptorBindingInfo
+		switch d in spec.descriptors {
+		case [MAX_DESCRIPTOR_BINDINGS]DescriptorBindingInfo:
+			info = d[idx]
+		case []^BufferResource, []^TextureResource, []ResourceBinding:
+			// These cases don't have the same structure, skip for now
+			continue
+		}
 		fmt.printf("[pipeline] descriptor binding %v type %v stage %v\n", info.binding, info.descriptorType, info.stage)
 		bindings[idx] = vk.DescriptorSetLayoutBinding {
 			binding = info.binding,
@@ -445,8 +465,13 @@ build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 	defer vk.DestroyDescriptorSetLayout(device, desc_layout, nil)
 
 	push_ranges: []vk.PushConstantRange
-	if spec.push.size > 0 {
-		push_ranges = []vk.PushConstantRange{{stageFlags = spec.push.stage, size = spec.push.size}}
+	switch p in spec.push {
+	case PushConstantInfo:
+		if p.size > 0 {
+			push_ranges = []vk.PushConstantRange{{stageFlags = p.stage, size = p.size}}
+		}
+	case typeid:
+		// No push constants
 	}
 	layouts := []vk.DescriptorSetLayout{desc_layout}
 
@@ -590,7 +615,14 @@ build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 		image_infos := image_infos_storage[:binding_count]
 		writes := writes_storage[:binding_count]
 		for idx in 0 ..< binding_count {
-			info := spec.descriptors[idx]
+			info: DescriptorBindingInfo
+			switch d in spec.descriptors {
+			case [MAX_DESCRIPTOR_BINDINGS]DescriptorBindingInfo:
+				info = d[idx]
+			case []^BufferResource, []^TextureResource, []ResourceBinding:
+				// These cases don't have the same structure, skip for now
+				continue
+			}
 			write := &writes[idx]
 			write.sType = vk.StructureType.WRITE_DESCRIPTOR_SET
 			write.dstSet = desc_set
@@ -666,12 +698,20 @@ build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 		)
 	}
 
+	push_stage: vk.ShaderStageFlags
+	switch p in spec.push {
+	case PushConstantInfo:
+		push_stage = p.stage
+	case typeid:
+		push_stage = {}
+	}
+
 	state^ = PipelineState {
 		pipeline          = pipe,
 		layout            = pipe_layout,
 		descriptor_layout = desc_layout,
 		descriptor_set    = desc_set,
-		push_stage        = spec.push.stage,
+		push_stage        = push_stage,
 	}
 
 	// transfer ownership to state

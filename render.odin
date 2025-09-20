@@ -69,25 +69,51 @@ init_render_resources :: proc() -> bool {
 
 	init_buffer_barriers(&accumulation_barriers, &accumulation_buffer)
 	sprite_texture = create_texture_from_png("test3.png") or_return
-
-
 	render_pipeline_specs[0] = {
 		name = "particles",
 		compute_module = "compute.spv",
-		push = ComputePushConstants,
-		descriptors = [accumulation_buffer, sprite_texture],
+		push = PushConstantInfo {
+			label = "ComputePushConstants",
+			stage = {vk.ShaderStageFlag.COMPUTE},
+			size = u32(size_of(ComputePushConstants)),
+		},
+		descriptors = [4]DescriptorBindingInfo {
+			{
+				label = "accumulation-buffer",
+				descriptorType = .STORAGE_BUFFER,
+				stage = {vk.ShaderStageFlag.COMPUTE},
+				binding = 0,
+				buffer = &accumulation_buffer,
+			},
+			{
+				label = "sprite-texture",
+				descriptorType = .SAMPLED_IMAGE,
+				stage = {vk.ShaderStageFlag.COMPUTE},
+				binding = 1,
+				texture = &sprite_texture,
+			},
+			{
+				label = "sprite-sampler",
+				descriptorType = .SAMPLER,
+				stage = {vk.ShaderStageFlag.COMPUTE},
+				binding = 2,
+				sampler = &sprite_texture.sampler,
+			},
+			{},
+		},
+		descriptor_count = 3,
 	}
 
-	render_pipeline_specs[1] = {
+	render_pipeline_specs[1] =  {
 		name = "tone-map",
 		vertex_module = "post_process_vs.spv",
 		fragment_module = "post_process_fs.spv",
-		push = {
+		push = PushConstantInfo {
 			label = "PostProcessPushConstants",
 			stage = {vk.ShaderStageFlag.FRAGMENT},
 			size = u32(size_of(PostProcessPushConstants)),
 		},
-		descriptors = {
+		descriptors = [4]DescriptorBindingInfo {
 			{
 				label = "accumulation-buffer",
 				descriptorType = .STORAGE_BUFFER,
@@ -101,7 +127,6 @@ init_render_resources :: proc() -> bool {
 		},
 		descriptor_count = 1,
 	}
-
 	compute_push_constants = ComputePushConstants {
 		texture_width  = u32(width),
 		texture_height = u32(height),

@@ -1,12 +1,61 @@
 
-/home/mike/Source/vk/render.odin(78:37) Syntax Error: Expected ']', got ',' 
-	descriptors = [accumulation_buffer, sprite_texture], 
-	                                  ^ 
-/home/mike/Source/vk/render.odin(78:53) Syntax Error: Expected '}', got ']' 
-	descriptors = [accumulation_buffer, sprite_texture], 
-	                                                  ^ 
-/home/mike/Source/vk/render.odin(79:2) Syntax Error: Expected an operand 
-	} 
-	^ 
 
-Build failed. See errors above.
+Build succeeded, launching vk...
+DEBUG: Initializing GLFW platform
+DEBUG: GLFW platform setup complete
+DEBUG: Getting window size
+DEBUG: Initializing Vulkan
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:      Sorted order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:      Sorted order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:      Sorted order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: linux_read_sorted_physical_devices:
+Validation layer:      Original order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:      Sorted order:
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer: Copying old device 0 into new device 0
+Validation layer: Removing driver /usr/lib/libvulkan_intel.so due to not having any physical devices
+Validation layer: Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
+Validation layer: Inserted device layer "VK_LAYER_KHRONOS_validation" (libVkLayer_khronos_validation.so)
+Validation layer: Failed to find vkGetDeviceProcAddr in layer "libVkLayer_MESA_device_select.so"
+Validation layer: vkCreateDevice layer callstack setup to:
+Validation layer:    <Application>
+Validation layer:      ||
+Validation layer:    <Loader>
+Validation layer:      ||
+Validation layer:    VK_LAYER_KHRONOS_validation
+Validation layer:            Type: Explicit
+Validation layer:            Enabled By: By the Application
+Validation layer:            Manifest: /usr/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json
+Validation layer:            Library:  libVkLayer_khronos_validation.so
+Validation layer:      ||
+Validation layer:    <Device>
+Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "libGLX_nvidia.so.0"
+DEBUG: Creating swapchain
+DEBUG: Initializing resources
+[pipeline] descriptor binding 0 type STORAGE_BUFFER stage ShaderStageFlags{COMPUTE}
+[pipeline] descriptor binding 1 type SAMPLED_IMAGE stage ShaderStageFlags{COMPUTE}
+[pipeline] descriptor binding 2 type SAMPLER stage ShaderStageFlags{COMPUTE}
+[pipeline] descriptor binding 0 type STORAGE_BUFFER stage ShaderStageFlags{FRAGMENT}
+DEBUG: Vulkan init complete
+Discovered 3 shaders: graphics.hlsl post_process.hlsl compute.hlsl 
+Window resized to 1866x1026
+[pipeline] descriptor binding 0 type STORAGE_BUFFER stage ShaderStageFlags{COMPUTE}
+[pipeline] descriptor binding 1 type SAMPLED_IMAGE stage ShaderStageFlags{COMPUTE}
+[pipeline] descriptor binding 2 type SAMPLER stage ShaderStageFlags{COMPUTE}
+[pipeline] descriptor binding 0 type STORAGE_BUFFER stage ShaderStageFlags{FRAGMENT}

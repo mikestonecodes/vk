@@ -1318,6 +1318,14 @@ create_texture_from_png :: proc(path: string) -> (TextureResource, bool) {
 	runtime.mem_copy_non_overlapping(data, raw_data(pixels), len(pixels))
 	vk.UnmapMemory(device, tex.memory)
 
+	// --- Transition layout from PREINITIALIZED to GENERAL
+	if !execute_single_time_commands(proc(cmd: vk.CommandBuffer, user_data: rawptr) -> bool {
+		tex := (^TextureResource)(user_data)
+		return transition_image_layout(cmd, tex.image, vk.ImageLayout.PREINITIALIZED, vk.ImageLayout.GENERAL)
+	}, &tex) {
+		return tex, false
+	}
+
 	// --- Metadata
 	tex.width = u32(img.width)
 	tex.height = u32(img.height)
