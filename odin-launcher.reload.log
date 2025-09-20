@@ -48,31 +48,18 @@ Validation layer:    <Device>
 Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "libGLX_nvidia.so.0"
 DEBUG: Creating swapchain
 DEBUG: Initializing resources
-Validation layer: vkAllocateDescriptorSets(): pAllocateInfo->pSetLayouts[0] binding 1 was created with VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE but VkDescriptorPool 0x1c000000001c was not created with any VkDescriptorPoolSize::type with VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE (Some implementations will not VK_ERROR_OUT_OF_POOL_MEMORY as they should with VK_KHR_maintenance1).
 DEBUG: Vulkan init complete
-Discovered 3 shaders: post_process.hlsl compute.hlsl graphics.hlsl 
+Discovered 3 shaders: compute.hlsl graphics.hlsl post_process.hlsl 
 Window resized to 1866x1026
-Validation layer: vkDestroyPipeline(): pipeline Invalid VkPipeline Object 0x200000000020.
-The Vulkan spec states: If pipeline is not VK_NULL_HANDLE, pipeline must be a valid VkPipeline handle (https://docs.vulkan.org/spec/latest/chapters/pipelines.html#VUID-vkDestroyPipeline-pipeline-parameter)
-Validation layer: vkDestroyPipeline(): Couldn't find VkPipeline Object 0x200000000020. This should not happen and may indicate a bug in the application.
-Validation layer: vkDestroyPipeline(): Couldn't find VkPipeline Object 0x200000000020. This should not happen and may indicate a bug in the application.
-Validation layer: vkDestroyPipelineLayout(): pipelineLayout Invalid VkPipelineLayout Object 0x1e000000001e.
-The Vulkan spec states: If pipelineLayout is not VK_NULL_HANDLE, pipelineLayout must be a valid VkPipelineLayout handle (https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#VUID-vkDestroyPipelineLayout-pipelineLayout-parameter)
-Validation layer: vkDestroyPipelineLayout(): Couldn't find VkPipelineLayout Object 0x1e000000001e. This should not happen and may indicate a bug in the application.
-Validation layer: vkDestroyPipelineLayout(): Couldn't find VkPipelineLayout Object 0x1e000000001e. This should not happen and may indicate a bug in the application.
-Validation layer: vkDestroyDescriptorSetLayout(): descriptorSetLayout Invalid VkDescriptorSetLayout Object 0x1d000000001d.
-The Vulkan spec states: If descriptorSetLayout is not VK_NULL_HANDLE, descriptorSetLayout must be a valid VkDescriptorSetLayout handle (https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#VUID-vkDestroyDescriptorSetLayout-descriptorSetLayout-parameter)
-Validation layer: vkDestroyDescriptorSetLayout(): Couldn't find VkDescriptorSetLayout Object 0x1d000000001d. This should not happen and may indicate a bug in the application.
-Validation layer: vkDestroyDescriptorSetLayout(): Couldn't find VkDescriptorSetLayout Object 0x1d000000001d. This should not happen and may indicate a bug in the application.
-Validation layer: vkDestroyPipeline(): pipeline Invalid VkPipeline Object 0x260000000026.
-The Vulkan spec states: If pipeline is not VK_NULL_HANDLE, pipeline must be a valid VkPipeline handle (https://docs.vulkan.org/spec/latest/chapters/pipelines.html#VUID-vkDestroyPipeline-pipeline-parameter)
-Validation layer: vkDestroyPipeline(): Couldn't find VkPipeline Object 0x260000000026. This should not happen and may indicate a bug in the application.
-Validation layer: vkDestroyPipeline(): Couldn't find VkPipeline Object 0x260000000026. This should not happen and may indicate a bug in the application.
-Validation layer: vkDestroyPipelineLayout(): pipelineLayout Invalid VkPipelineLayout Object 0x230000000023.
-The Vulkan spec states: If pipelineLayout is not VK_NULL_HANDLE, pipelineLayout must be a valid VkPipelineLayout handle (https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#VUID-vkDestroyPipelineLayout-pipelineLayout-parameter)
-Validation layer: vkDestroyPipelineLayout(): Couldn't find VkPipelineLayout Object 0x230000000023. This should not happen and may indicate a bug in the application.
-Validation layer: (Warning - This VUID has now been reported 10 times, which is the duplicated_message_limit value, this will be the last time reporting it).
-vkDestroyPipelineLayout(): Couldn't find VkPipelineLayout Object 0x230000000023. This should not happen and may indicate a bug in the application.
-Validation layer: vkDestroyDescriptorSetLayout(): descriptorSetLayout Invalid VkDescriptorSetLayout Object 0x220000000022.
-The Vulkan spec states: If descriptorSetLayout is not VK_NULL_HANDLE, descriptorSetLayout must be a valid VkDescriptorSetLayout handle (https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#VUID-vkDestroyDescriptorSetLayout-descriptorSetLayout-parameter)
-Validation layer: vkAllocateDescriptorSets(): pAllocateInfo->pSetLayouts[0] binding 1 was created with VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE but VkDescriptorPool 0x3f000000003f was not created with any VkDescriptorPoolSize::type with VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE (Some implementations will not VK_ERROR_OUT_OF_POOL_MEMORY as they should with VK_KHR_maintenance1).
+Window resized to 3736x2056
+Window resized to 1866x1026
+Window resized to 3736x2056
+Window resized to 1866x1026
+Window resized to 3736x2056
+Window resized to 1866x1026
+Window resized to 3736x2056
+Window resized to 1866x1026
+Window resized to 3736x2056
+Window resized to 1866x1026
+Window resized to 3736x2056
+Window resized to 1866x1026

@@ -380,7 +380,11 @@ create_descriptor_pool :: proc(pool_sizes: []vk.DescriptorPoolSize, set_count: i
 build_pipelines :: proc(specs: []PipelineSpec, states: []PipelineState) -> bool {
 	assert(len(specs) == len(states), "pipeline spec/state length mismatch")
 	if len(specs) == 0 do return true
-	pool_sizes := []vk.DescriptorPoolSize{{type = .STORAGE_BUFFER, descriptorCount = 1}}
+	pool_sizes := []vk.DescriptorPoolSize{
+		{type = .STORAGE_BUFFER, descriptorCount = 1},
+		{type = .SAMPLED_IMAGE, descriptorCount = 1},
+		{type = .SAMPLER, descriptorCount = 1},
+	}
 	create_descriptor_pool(pool_sizes, len(specs)) or_return
 	for idx in 0 ..< len(specs) {
 		if !build_pipeline(&specs[idx], &states[idx]) do return false
@@ -628,9 +632,18 @@ build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 	return true
 }
 reset_pipeline_state :: proc(state: ^PipelineState) {
-	vk.DestroyPipeline(device, state.pipeline, nil)
-	vk.DestroyPipelineLayout(device, state.layout, nil)
-	vk.DestroyDescriptorSetLayout(device, state.descriptor_layout, nil)
+	if state.pipeline != {} {
+		vk.DestroyPipeline(device, state.pipeline, nil)
+		state.pipeline = {}
+	}
+	if state.layout != {} {
+		vk.DestroyPipelineLayout(device, state.layout, nil)
+		state.layout = {}
+	}
+	if state.descriptor_layout != {} {
+		vk.DestroyDescriptorSetLayout(device, state.descriptor_layout, nil)
+		state.descriptor_layout = {}
+	}
 	state.descriptor_set = {}
 	state.push_stage = {}
 }
