@@ -5,18 +5,6 @@ DEBUG: Initializing GLFW platform
 DEBUG: GLFW platform setup complete
 DEBUG: Getting window size
 DEBUG: Initializing Vulkan
-DEBUG: Loading Vulkan library
-DEBUG: Loading global Vulkan procedures
-DEBUG: Creating application info
-DEBUG: Application info created
-DEBUG: About to create Vulkan instance
-DEBUG: Validation layers enabled: true
-DEBUG: Extension count: 3
-DEBUG: Layer count: 1
-DEBUG: CreateInstance returned: SUCCESS
-DEBUG: Instance created successfully
-DEBUG: Loading instance procedures
-DEBUG: Creating Vulkan surface
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
@@ -58,9 +46,8 @@ Validation layer:            Library:  libVkLayer_khronos_validation.so
 Validation layer:      ||
 Validation layer:    <Device>
 Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "libGLX_nvidia.so.0"
-DEBUG: Loading device procedures
 DEBUG: Creating swapchain
 DEBUG: Initializing resources
 DEBUG: Vulkan init complete
-Discovered 3 shaders: graphics.hlsl post_process.hlsl compute.hlsl 
-Window resized to 1866x666
+Discovered 3 shaders: post_process.hlsl compute.hlsl graphics.hlsl 
+Window resized to 1866x1026

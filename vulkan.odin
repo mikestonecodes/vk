@@ -2,7 +2,6 @@ package main
 
 import "base:runtime"
 import "core:c"
-import "core:dynlib"
 import "core:fmt"
 import "core:os"
 import "core:strings"
@@ -23,7 +22,6 @@ queue: vk.Queue
 command_pool: vk.CommandPool
 swapchain: vk.SwapchainKHR
 render_pass: vk.RenderPass
-elements: [^]SwapchainElement
 format: vk.Format = vk.Format.UNDEFINED
 width: c.uint32_t = 800
 height: c.uint32_t = 600
@@ -34,10 +32,14 @@ timeline_semaphore: vk.Semaphore
 timeline_value: c.uint64_t = 0
 
 MAX_FRAMES_IN_FLIGHT :: c.uint32_t(3)
+MAX_SWAPCHAIN_IMAGES :: c.uint32_t(8) // 8 is plenty; most drivers use 2–4
+//image_available: [MAX_FRAMES_IN_FLIGHT]vk.Semaphore
 
 image_available: [MAX_FRAMES_IN_FLIGHT]vk.Semaphore
-image_render_finished: [^]vk.Semaphore
-frame_timeline_values: [MAX_FRAMES_IN_FLIGHT]c.uint64_t
+elements: [MAX_SWAPCHAIN_IMAGES]SwapchainElement
+image_render_finished: [MAX_SWAPCHAIN_IMAGES]vk.Semaphore
+
+//frame_timeline_values: [MAX_FRAMES_IN_FLIGHT]c.uint64_t
 frames_in_flight: c.uint32_t = 0
 current_frame: c.uint32_t = 0
 
@@ -214,6 +216,8 @@ wait_for_timeline :: proc(value: c.uint64_t) {
 }
 
 acquire_next_image :: proc(frame_index: c.uint32_t) -> bool {
+
+	wait_for_timeline(elements[image_index].last_value)
 	result := vk.AcquireNextImageKHR(
 		device,
 		swapchain,
@@ -268,7 +272,7 @@ submit_commands :: proc(element: ^SwapchainElement, frame_index: c.uint32_t) {
 
 	vk.QueueSubmit(queue, 1, &submit_info, {})
 	element.last_value = timeline_value
-	frame_timeline_values[frame_index] = timeline_value
+	//frame_timeline_values[frame_index] = timeline_value
 }
 
 present_frame :: proc(image_index: c.uint32_t) -> bool {
@@ -295,12 +299,12 @@ present_frame :: proc(image_index: c.uint32_t) -> bool {
 
 render_frame :: proc(start_time: time.Time) -> bool {
 
-	if frames_in_flight == 0 || elements == nil {
+	if frames_in_flight == 0 {
 		return false
 	}
 
 	frame_index := current_frame % frames_in_flight
-	wait_for_timeline(frame_timeline_values[frame_index])
+	//wait_for_timeline(frame_timeline_values[frame_index])
 
 	// 1. Acquire swapchain image for this frame slot
 	acquire_next_image(frame_index) or_return
@@ -334,6 +338,7 @@ update_window_size :: proc() {
 // Handle window resize
 handle_resize :: proc() {
 	if glfw_resize_needed() != 0 {
+
 		update_window_size()
 
 		// Wait only for queue idle instead of full device
@@ -358,6 +363,7 @@ handle_resize :: proc() {
 
 		destroy_render_pipeline_state(render_pipeline_states[:])
 		pipelines_ready = build_pipelines(render_pipeline_specs[:], render_pipeline_states[:])
+
 
 	}
 }
@@ -560,13 +566,15 @@ load_shader_spirv :: proc(filename: string) -> ([]c.uint32_t, bool) {
 }
 
 create_swapchain :: proc() -> bool {
-	capabilities: vk.SurfaceCapabilitiesKHR
-	if vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(phys_device, vulkan_surface, &capabilities) !=
+	// Query caps
+	caps: vk.SurfaceCapabilitiesKHR
+	if vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(phys_device, vulkan_surface, &caps) !=
 	   vk.Result.SUCCESS {
-		fmt.println("Failed to query surface capabilities")
+		fmt.println("Failed to query surface caps")
 		return false
 	}
 
+	// Pick format
 	formats, ok := vkw_enumerate_surface(
 		vk.GetPhysicalDeviceSurfaceFormatsKHR,
 		phys_device,
@@ -574,129 +582,122 @@ create_swapchain :: proc() -> bool {
 		"surface formats",
 		vk.SurfaceFormatKHR,
 	)
-	if !ok {
-		return false
-	}
+	if !ok do return false
 	defer delete(formats)
 
-	chosen_format := formats[0]
-	for fmt_idx in 0 ..< len(formats) {
-		if formats[fmt_idx].format == vk.Format.B8G8R8A8_UNORM {
-			chosen_format = formats[fmt_idx]
-			break
-		}
+	chosen := formats[0]
+	for f in formats {
+		if f.format == vk.Format.B8G8R8A8_UNORM {chosen = f;break}
 	}
-	format = chosen_format.format
+	format = chosen.format
 
-	desired_images := capabilities.minImageCount + 1
-	if capabilities.maxImageCount > 0 && desired_images > capabilities.maxImageCount {
-		desired_images = capabilities.maxImageCount
+	// Pick image count
+	desired := caps.minImageCount + 1
+	if caps.maxImageCount > 0 && desired > caps.maxImageCount {
+		desired = caps.maxImageCount
 	}
 
-	new_swapchain := vkw(
+	// Create swapchain
+	swapchain = vkw(
 		vk.CreateSwapchainKHR,
 		device,
 		&vk.SwapchainCreateInfoKHR {
 			sType = vk.StructureType.SWAPCHAIN_CREATE_INFO_KHR,
 			surface = vulkan_surface,
-			minImageCount = desired_images,
-			imageFormat = chosen_format.format,
-			imageColorSpace = chosen_format.colorSpace,
+			minImageCount = desired,
+			imageFormat = chosen.format,
+			imageColorSpace = chosen.colorSpace,
 			imageExtent = {width, height},
 			imageArrayLayers = 1,
 			imageUsage = {vk.ImageUsageFlag.COLOR_ATTACHMENT},
 			imageSharingMode = vk.SharingMode.EXCLUSIVE,
-			preTransform = capabilities.currentTransform,
+			preTransform = caps.currentTransform,
 			compositeAlpha = {vk.CompositeAlphaFlagKHR.OPAQUE},
-			presentMode = vk.PresentModeKHR.FIFO,
+			presentMode = vk.PresentModeKHR.IMMEDIATE,
 			clipped = true,
 		},
 		"swapchain",
 		vk.SwapchainKHR,
 	) or_return
 
-	attachment := vk.AttachmentDescription {
-		format         = format,
-		samples        = {vk.SampleCountFlag._1},
-		loadOp         = vk.AttachmentLoadOp.CLEAR,
-		storeOp        = vk.AttachmentStoreOp.STORE,
-		stencilLoadOp  = vk.AttachmentLoadOp.DONT_CARE,
-		stencilStoreOp = vk.AttachmentStoreOp.DONT_CARE,
-		initialLayout  = vk.ImageLayout.UNDEFINED,
-		finalLayout    = vk.ImageLayout.PRESENT_SRC_KHR,
-	}
-
-	attachment_ref := vk.AttachmentReference {
-		attachment = 0,
-		layout     = vk.ImageLayout.COLOR_ATTACHMENT_OPTIMAL,
-	}
-
-	subpass := vk.SubpassDescription {
-		pipelineBindPoint    = vk.PipelineBindPoint.GRAPHICS,
-		colorAttachmentCount = 1,
-		pColorAttachments    = &attachment_ref,
-	}
-
-	new_render_pass := vkw(
+	// Create render pass
+	render_pass = vkw(
 		vk.CreateRenderPass,
 		device,
 		&vk.RenderPassCreateInfo {
 			sType = vk.StructureType.RENDER_PASS_CREATE_INFO,
 			attachmentCount = 1,
-			pAttachments = &attachment,
+			pAttachments = &vk.AttachmentDescription {
+				format = format,
+				samples = {vk.SampleCountFlag._1},
+				loadOp = vk.AttachmentLoadOp.CLEAR,
+				storeOp = vk.AttachmentStoreOp.STORE,
+				initialLayout = vk.ImageLayout.UNDEFINED,
+				finalLayout = vk.ImageLayout.PRESENT_SRC_KHR,
+			},
 			subpassCount = 1,
-			pSubpasses = &subpass,
+			pSubpasses = &vk.SubpassDescription {
+				pipelineBindPoint = vk.PipelineBindPoint.GRAPHICS,
+				colorAttachmentCount = 1,
+				pColorAttachments = &vk.AttachmentReference {
+					attachment = 0,
+					layout = vk.ImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+				},
+			},
 		},
 		"render pass",
 		vk.RenderPass,
 	) or_return
 
-	actual_image_count := desired_images
-	if vk.GetSwapchainImagesKHR(device, new_swapchain, &actual_image_count, nil) !=
-	   vk.Result.SUCCESS {
+	// Get swapchain images
+	image_count = desired
+	if vk.GetSwapchainImagesKHR(device, swapchain, &image_count, nil) != vk.Result.SUCCESS {
 		fmt.println("Failed to query swapchain images")
-		vk.DestroyRenderPass(device, new_render_pass, nil)
-		vk.DestroySwapchainKHR(device, new_swapchain, nil)
 		return false
 	}
+	imgs := make([^]vk.Image, image_count)
+	defer free(imgs)
+	vk.GetSwapchainImagesKHR(device, swapchain, &image_count, imgs)
 
-	images := make([^]vk.Image, actual_image_count)
-	defer free(images)
-	if vk.GetSwapchainImagesKHR(device, new_swapchain, &actual_image_count, images) !=
-	   vk.Result.SUCCESS {
-		fmt.println("Failed to fetch swapchain images")
-		vk.DestroyRenderPass(device, new_render_pass, nil)
-		vk.DestroySwapchainKHR(device, new_swapchain, nil)
-		return false
-	}
+	// Allocate elements + semaphores
+	for i in 0 ..< image_count {
+		elements[i].image = imgs[i]
+		elements[i].last_value = 0
 
-	new_elements := make([^]SwapchainElement, actual_image_count)
-	new_image_render_finished := make([^]vk.Semaphore, actual_image_count)
-	success := false
-	defer {
-		if !success {
-			for i in 0 ..< actual_image_count {
-				if new_elements[i].framebuffer != {} {
-					vk.DestroyFramebuffer(device, new_elements[i].framebuffer, nil)
-				}
-				if new_elements[i].imageView != {} {
-					vk.DestroyImageView(device, new_elements[i].imageView, nil)
-				}
-				if new_elements[i].commandBuffer != {} {
-					vk.ResetCommandBuffer(new_elements[i].commandBuffer, {})
-				}
-				if new_image_render_finished[i] != {} {
-					vk.DestroySemaphore(device, new_image_render_finished[i], nil)
-				}
-			}
-			free(new_elements)
-			free(new_image_render_finished)
-			vk.DestroyRenderPass(device, new_render_pass, nil)
-			vk.DestroySwapchainKHR(device, new_swapchain, nil)
-		}
-	}
+		elements[i].imageView = vkw(
+			vk.CreateImageView,
+			device,
+			&vk.ImageViewCreateInfo {
+				sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
+				viewType = vk.ImageViewType.D2,
+				format = format,
+				subresourceRange = {
+					aspectMask = {vk.ImageAspectFlag.COLOR},
+					levelCount = 1,
+					layerCount = 1,
+				},
+				image = imgs[i],
+			},
+			"image view",
+			vk.ImageView,
+		) or_return
 
-	for i in 0 ..< actual_image_count {
+		elements[i].framebuffer = vkw(
+			vk.CreateFramebuffer,
+			device,
+			&vk.FramebufferCreateInfo {
+				sType = vk.StructureType.FRAMEBUFFER_CREATE_INFO,
+				renderPass = render_pass,
+				attachmentCount = 1,
+				pAttachments = &elements[i].imageView,
+				width = width,
+				height = height,
+				layers = 1,
+			},
+			"framebuffer",
+			vk.Framebuffer,
+		) or_return
+
 		vk.AllocateCommandBuffers(
 			device,
 			&vk.CommandBufferAllocateInfo {
@@ -705,164 +706,66 @@ create_swapchain :: proc() -> bool {
 				commandBufferCount = 1,
 				level = vk.CommandBufferLevel.PRIMARY,
 			},
-			&new_elements[i].commandBuffer,
+			&elements[i].commandBuffer,
 		)
-		new_elements[i].image = images[i]
-		new_elements[i].last_value = 0
 
-		new_elements[i].imageView = vkw(
-			vk.CreateImageView,
-			device,
-			&vk.ImageViewCreateInfo {
-				sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
-				viewType = vk.ImageViewType.D2,
-				components = {
-					vk.ComponentSwizzle.IDENTITY,
-					vk.ComponentSwizzle.IDENTITY,
-					vk.ComponentSwizzle.IDENTITY,
-					vk.ComponentSwizzle.IDENTITY,
-				},
-				subresourceRange = {
-					aspectMask = {vk.ImageAspectFlag.COLOR},
-					baseMipLevel = 0,
-					levelCount = 1,
-					baseArrayLayer = 0,
-					layerCount = 1,
-				},
-				image = new_elements[i].image,
-				format = format,
-			},
-			"image view",
-			vk.ImageView,
-		) or_return
-
-		new_elements[i].framebuffer = vkw(
-			vk.CreateFramebuffer,
-			device,
-			&vk.FramebufferCreateInfo {
-				sType = vk.StructureType.FRAMEBUFFER_CREATE_INFO,
-				renderPass = new_render_pass,
-				attachmentCount = 1,
-				pAttachments = &new_elements[i].imageView,
-				width = width,
-				height = height,
-				layers = 1,
-			},
-			"framebuffer",
-			vk.Framebuffer,
-		) or_return
-	}
-
-	frames_in_flight = actual_image_count
-	if frames_in_flight > MAX_FRAMES_IN_FLIGHT {
-		frames_in_flight = MAX_FRAMES_IN_FLIGHT
-	}
-	if frames_in_flight == 0 {
-		frames_in_flight = 1
-	}
-	current_frame = 0
-	for i in 0 ..< len(frame_timeline_values) {
-		frame_timeline_values[i] = 0
-	}
-
-	if image_render_finished != nil {
-		for i in 0 ..< image_count {
-			if image_render_finished[i] != {} {
-				vk.DestroySemaphore(device, image_render_finished[i], nil)
-			}
-		}
-		free(image_render_finished)
-	}
-
-	for i in 0 ..< actual_image_count {
-		new_image_render_finished[i] = vkw(
+		image_render_finished[i] = vkw(
 			vk.CreateSemaphore,
 			device,
-			&vk.SemaphoreCreateInfo {sType = vk.StructureType.SEMAPHORE_CREATE_INFO},
+			&vk.SemaphoreCreateInfo{sType = vk.StructureType.SEMAPHORE_CREATE_INFO},
 			"render finished semaphore",
 			vk.Semaphore,
 		) or_return
 	}
 
-	if elements != nil {
-		free(elements)
+
+	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		image_available[i] = vkw(
+			vk.CreateSemaphore,
+			device,
+			&vk.SemaphoreCreateInfo{sType = vk.StructureType.SEMAPHORE_CREATE_INFO},
+			"image available semaphore",
+			vk.Semaphore,
+		) or_return
 	}
 
-	swapchain = new_swapchain
-	render_pass = new_render_pass
-	elements = new_elements
-	image_render_finished = new_image_render_finished
-	image_count = actual_image_count
-	success = true
+
+	frames_in_flight = min(image_count, MAX_FRAMES_IN_FLIGHT)
+	if frames_in_flight == 0 do frames_in_flight = 1
+	current_frame = 0
+	//	for i in 0 ..< len(frame_timeline_values) do frame_timeline_values[i] = 0
+
 	return true
 }
 
 destroy_swapchain :: proc() {
-	if elements != nil {
-		for i in 0 ..< image_count {
-			if elements[i].framebuffer != {} {
-				vk.DestroyFramebuffer(device, elements[i].framebuffer, nil)
-			}
-			if elements[i].imageView != {} {
-				vk.DestroyImageView(device, elements[i].imageView, nil)
-			}
-			if elements[i].commandBuffer != {} {
-				vk.ResetCommandBuffer(elements[i].commandBuffer, {})
-			}
-		}
-		free(elements)
-		elements = nil
-	}
-	if image_render_finished != nil {
-		for i in 0 ..< image_count {
-			if image_render_finished[i] != {} {
-				vk.DestroySemaphore(device, image_render_finished[i], nil)
-			}
-		}
-		free(image_render_finished)
-		image_render_finished = nil
+
+	for i in 0 ..< image_count {
+		if elements[i].framebuffer != {} do vk.DestroyFramebuffer(device, elements[i].framebuffer, nil)
+		if elements[i].imageView != {} do vk.DestroyImageView(device, elements[i].imageView, nil)
+		if elements[i].commandBuffer != {} do vk.ResetCommandBuffer(elements[i].commandBuffer, {})
+		if image_render_finished[i] != {} do vk.DestroySemaphore(device, image_render_finished[i], nil)
+
+		// zero-out the slots (optional but tidy)
+		elements[i] = SwapchainElement{}
+		image_render_finished[i] = {}
 	}
 	image_count = 0
 	frames_in_flight = 0
 	current_frame = 0
-	for i in 0 ..< len(frame_timeline_values) {
-		frame_timeline_values[i] = 0
-	}
-	if render_pass != {} {
-		vk.DestroyRenderPass(device, render_pass, nil)
-		render_pass = {}
-	}
-	if swapchain != {} {
-		vk.DestroySwapchainKHR(device, swapchain, nil)
-		swapchain = {}
-	}
+
+	vk.DestroyRenderPass(device, render_pass, nil)
+	vk.DestroySwapchainKHR(device, swapchain, nil)
 }
 
 init_vulkan :: proc() -> bool {
-	result: vk.Result
+	// Load global function pointers (this uses the loader already provided by the system)
+	vk.load_proc_addresses_global(rawptr(glfw.GetInstanceProcAddress))
 
-	fmt.println("DEBUG: Loading Vulkan library")
-	vulkan_lib, lib_ok := dynlib.load_library("libvulkan.so.1")
-	if !lib_ok {
-		fmt.println("Failed to load Vulkan library")
-		return false
-	}
+	// --- Create instance ---
+	instance_extensions := get_instance_extensions()
+	defer delete(instance_extensions)
 
-	vk_get_instance_proc_addr, proc_ok := dynlib.symbol_address(
-		vulkan_lib,
-		"vkGetInstanceProcAddr",
-	)
-	if !proc_ok {
-		fmt.println("Failed to get vkGetInstanceProcAddr")
-		return false
-	}
-
-	fmt.println("DEBUG: Loading global Vulkan procedures")
-	vk.load_proc_addresses_global(vk_get_instance_proc_addr)
-
-	fmt.println("DEBUG: Creating application info")
-
-	// Create Vulkan instance - try minimal setup first
 	app_info := vk.ApplicationInfo {
 		sType              = vk.StructureType.APPLICATION_INFO,
 		pApplicationName   = "Wayland Vulkan Example",
@@ -871,109 +774,78 @@ init_vulkan :: proc() -> bool {
 		engineVersion      = vk.MAKE_VERSION(1, 0, 0),
 		apiVersion         = vk.API_VERSION_1_3,
 	}
-	fmt.println("DEBUG: Application info created")
 
-	instance_extensions := get_instance_extensions()
-	defer delete(instance_extensions)
-
-	create_info := vk.InstanceCreateInfo {
-		sType                   = vk.StructureType.INSTANCE_CREATE_INFO,
-		pApplicationInfo        = &app_info,
-		enabledLayerCount       = ENABLE_VALIDATION ? len(layer_names) : 0,
-		ppEnabledLayerNames     = ENABLE_VALIDATION ? raw_data(layer_names[:]) : nil,
-		enabledExtensionCount   = u32(len(instance_extensions)),
-		ppEnabledExtensionNames = raw_data(instance_extensions[:]),
-	}
-
-	fmt.println("DEBUG: About to create Vulkan instance")
-	fmt.printf("DEBUG: Validation layers enabled: %v\n", ENABLE_VALIDATION)
-	fmt.printf("DEBUG: Extension count: %d\n", len(instance_extensions))
-	fmt.printf("DEBUG: Layer count: %d\n", ENABLE_VALIDATION ? len(layer_names) : 0)
-	// Try with cast to make sure types are correct
-	result = vk.CreateInstance(&create_info, nil, &instance)
-	fmt.printf("DEBUG: CreateInstance returned: %v\n", result)
-	if result != vk.Result.SUCCESS {
-		fmt.printf("Failed to create instance: %d\n", result)
+	if vk.CreateInstance(
+		   &vk.InstanceCreateInfo {
+			   sType = vk.StructureType.INSTANCE_CREATE_INFO,
+			   pApplicationInfo = &app_info,
+			   enabledLayerCount = ENABLE_VALIDATION ? len(layer_names) : 0,
+			   ppEnabledLayerNames = ENABLE_VALIDATION ? raw_data(layer_names[:]) : nil,
+			   enabledExtensionCount = u32(len(instance_extensions)),
+			   ppEnabledExtensionNames = raw_data(instance_extensions),
+		   },
+		   nil,
+		   &instance,
+	   ) !=
+	   vk.Result.SUCCESS {
+		fmt.println("Failed to create instance")
 		return false
 	}
-	fmt.println("DEBUG: Instance created successfully")
 
-	// Load instance-specific procedure addresses
-	fmt.println("DEBUG: Loading instance procedures")
+	// Load instance-level functions
 	vk.load_proc_addresses_instance(instance)
 
-	// Setup debug messenger
 	if ENABLE_VALIDATION && !setup_debug_messenger() {
 		return false
 	}
 
-	// Create surface using GLFW
-	fmt.println("DEBUG: Creating Vulkan surface")
-	window := get_glfw_window()
-	result = cast(vk.Result)glfw.CreateWindowSurface(instance, window, nil, &vulkan_surface)
-	if result != vk.Result.SUCCESS {
-		fmt.printf("Failed to create surface: %d\n", result)
+	// Create window surface (GLFW provides helper)
+	if cast(vk.Result)glfw.CreateWindowSurface(
+		   instance,
+		   get_glfw_window(),
+		   nil,
+		   &vulkan_surface,
+	   ) !=
+	   vk.Result.SUCCESS {
+		fmt.println("Failed to create surface")
 		return false
 	}
 
-	// Setup physical device
-	if !setup_physical_device() {
-		return false
-	}
+	// Pick physical + logical device
+	setup_physical_device() or_return
+	create_logical_device() or_return
 
-	// Create logical device
-	if !create_logical_device() {
-		return false
-	}
-
-	// Load device-specific procedure addresses
-	fmt.println("DEBUG: Loading device procedures")
+	// Load device-level functions
 	vk.load_proc_addresses_device(device)
 
-	// Create command pool
-	pool_info := vk.CommandPoolCreateInfo {
+	// Command pool
+	cmd_pool_info := vk.CommandPoolCreateInfo {
 		sType            = vk.StructureType.COMMAND_POOL_CREATE_INFO,
 		queueFamilyIndex = queue_family_index,
 		flags            = {vk.CommandPoolCreateFlag.RESET_COMMAND_BUFFER},
 	}
-
-	result = vk.CreateCommandPool(device, &pool_info, nil, &command_pool)
-	if result != vk.Result.SUCCESS {
-		fmt.printf("Failed to create command pool: %d\n", result)
+	if vk.CreateCommandPool(device, &cmd_pool_info, nil, &command_pool) != vk.Result.SUCCESS {
+		fmt.println("Failed to create command pool")
 		return false
 	}
 
-	// Create timeline semaphore
-	timeline_type_info := vk.SemaphoreTypeCreateInfo {
+	// Timeline semaphore
+	timeline_info := vk.SemaphoreTypeCreateInfo {
 		sType         = vk.StructureType.SEMAPHORE_TYPE_CREATE_INFO,
 		semaphoreType = vk.SemaphoreType.TIMELINE,
 		initialValue  = 0,
 	}
-
 	sem_info := vk.SemaphoreCreateInfo {
 		sType = vk.StructureType.SEMAPHORE_CREATE_INFO,
-		pNext = &timeline_type_info,
+		pNext = &timeline_info,
 	}
 
-	result = vk.CreateSemaphore(device, &sem_info, nil, &timeline_semaphore)
-	if result != vk.Result.SUCCESS {
-		fmt.printf("Failed to create timeline semaphore: %d\n", result)
+
+	if vk.CreateSemaphore(device, &sem_info, nil, &timeline_semaphore) != vk.Result.SUCCESS {
+		fmt.println("Failed to create timeline semaphore")
 		return false
 	}
 
-	binary_sem_info := vk.SemaphoreCreateInfo {
-		sType = vk.StructureType.SEMAPHORE_CREATE_INFO,
-	}
-
-	for i in 0 ..< len(image_available) {
-		image_available[i] = vkw(
-			vk.CreateSemaphore,
-			device,
-			&binary_sem_info,
-			"image available semaphore",
-			vk.Semaphore,
-		) or_return
-	}
 
 	return true
 }
@@ -1302,14 +1174,12 @@ vulkan_cleanup :: proc() {
 
 	destroy_render_pipeline_state(render_pipeline_states[:])
 
+	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		if image_available[i] != {} do vk.DestroySemaphore(device, image_available[i], nil)
+	}
 	// Cleanup remaining vulkan resources
 	vk.DestroySemaphore(device, timeline_semaphore, nil)
-	for i in 0 ..< len(image_available) {
-		if image_available[i] != {} {
-			vk.DestroySemaphore(device, image_available[i], nil)
-			image_available[i] = {}
-		}
-	}
+
 	vk.DestroyCommandPool(device, command_pool, nil)
 	vk.DestroyDevice(device, nil)
 	vk.DestroySurfaceKHR(instance, vulkan_surface, nil)
