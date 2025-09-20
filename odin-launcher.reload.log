@@ -51,3 +51,5 @@ DEBUG: Initializing resources
 DEBUG: Vulkan init complete
 Discovered 3 shaders: post_process.hlsl compute.hlsl graphics.hlsl 
 Window resized to 1866x1026
+Window resized to 3736x2056
+Window resized to 1866x1026

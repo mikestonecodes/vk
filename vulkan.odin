@@ -43,6 +43,8 @@ image_render_finished: [MAX_SWAPCHAIN_IMAGES]vk.Semaphore
 frames_in_flight: c.uint32_t = 0
 current_frame: c.uint32_t = 0
 
+frame_slot_values: [MAX_FRAMES_IN_FLIGHT]c.uint64_t
+
 // ============================================
 // Single-object create wrapper
 // ============================================
@@ -217,7 +219,6 @@ wait_for_timeline :: proc(value: c.uint64_t) {
 
 acquire_next_image :: proc(frame_index: c.uint32_t) -> bool {
 
-	wait_for_timeline(elements[image_index].last_value)
 	result := vk.AcquireNextImageKHR(
 		device,
 		swapchain,
@@ -236,43 +237,44 @@ acquire_next_image :: proc(frame_index: c.uint32_t) -> bool {
 	return result == vk.Result.SUCCESS
 }
 
-submit_commands :: proc(element: ^SwapchainElement, frame_index: c.uint32_t) {
-	// Increment timeline value for this frame
+submit_commands :: proc(element: ^SwapchainElement, frame_index: u32) {
 	timeline_value += 1
+	new_value := timeline_value
+	old_value := element.last_value
 
-	wait_stages := [1]vk.PipelineStageFlags {
-		vk.PipelineStageFlags{vk.PipelineStageFlag.COLOR_ATTACHMENT_OUTPUT},
+	wait_values := [2]u64{0, old_value}
+	signal_values := [2]u64{0, new_value}
+
+	wait_semaphores := [2]vk.Semaphore{image_available[frame_index], timeline_semaphore}
+	wait_stages := [2]vk.PipelineStageFlags {
+		{vk.PipelineStageFlag.COLOR_ATTACHMENT_OUTPUT},
+		{vk.PipelineStageFlag.TOP_OF_PIPE},
 	}
-
-	timeline_values := [2]c.uint64_t{c.uint64_t(0), timeline_value}
+	signal_semaphores := [2]vk.Semaphore{image_render_finished[image_index], timeline_semaphore}
 
 	timeline_submit_info := vk.TimelineSemaphoreSubmitInfo {
 		sType                     = vk.StructureType.TIMELINE_SEMAPHORE_SUBMIT_INFO,
-		waitSemaphoreValueCount   = 0,
-		pWaitSemaphoreValues      = nil,
-		signalSemaphoreValueCount = cast(u32)len(timeline_values),
-		pSignalSemaphoreValues    = raw_data(timeline_values[:]),
+		waitSemaphoreValueCount   = 2,
+		pWaitSemaphoreValues      = raw_data(wait_values[:]),
+		signalSemaphoreValueCount = 2,
+		pSignalSemaphoreValues    = raw_data(signal_values[:]),
 	}
-
-	wait_semaphores := [1]vk.Semaphore{image_available[frame_index]}
-
-	signal_semaphores := [2]vk.Semaphore{image_render_finished[image_index], timeline_semaphore}
 
 	submit_info := vk.SubmitInfo {
 		sType                = vk.StructureType.SUBMIT_INFO,
 		pNext                = &timeline_submit_info,
-		waitSemaphoreCount   = cast(u32)len(wait_semaphores),
+		waitSemaphoreCount   = 2,
 		pWaitSemaphores      = raw_data(wait_semaphores[:]),
 		pWaitDstStageMask    = raw_data(wait_stages[:]),
 		commandBufferCount   = 1,
 		pCommandBuffers      = &element.commandBuffer,
-		signalSemaphoreCount = cast(u32)len(signal_semaphores),
+		signalSemaphoreCount = 2,
 		pSignalSemaphores    = raw_data(signal_semaphores[:]),
 	}
 
 	vk.QueueSubmit(queue, 1, &submit_info, {})
-	element.last_value = timeline_value
-	//frame_timeline_values[frame_index] = timeline_value
+	element.last_value = new_value
+	frame_slot_values[frame_index] = new_value // 🔑 track per-frame slot too
 }
 
 present_frame :: proc(image_index: c.uint32_t) -> bool {
@@ -298,34 +300,30 @@ present_frame :: proc(image_index: c.uint32_t) -> bool {
 }
 
 render_frame :: proc(start_time: time.Time) -> bool {
-
 	if frames_in_flight == 0 {
 		return false
 	}
 
 	frame_index := current_frame % frames_in_flight
-	//wait_for_timeline(frame_timeline_values[frame_index])
 
-	// 1. Acquire swapchain image for this frame slot
+	wait_for_timeline(frame_slot_values[frame_index])
 	acquire_next_image(frame_index) or_return
 
-	// 2. Wait for the image's previous work to finish before reusing resources
 	element := &elements[image_index]
 	wait_for_timeline(element.last_value)
 
-	// 3. Record rendering commands targeting the acquired image
+	// 4. Record rendering commands
 	encoder, frame := begin_frame_commands(element, start_time)
 	record_commands(element, frame)
 	finish_encoding(&encoder)
 
-	// 4. Submit draw work, signaling both the render-finished semaphore and timeline
+	// 5. Submit draw work
 	submit_commands(element, frame_index)
 
-	// 5. Present once rendering completes
+	// 6. Present once rendering completes
 	present_frame(image_index) or_return
 
 	current_frame = (frame_index + 1) % frames_in_flight
-
 	return true
 }
 
