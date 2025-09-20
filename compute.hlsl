@@ -6,19 +6,18 @@ struct PushConstants {
     uint  _pad0;
     uint  screen_width;
     uint  screen_height;
-    float spread;       // e.g. particle radius in pixels (use 1..8)
+    float spread;       // unused here (for future)
     float brightness;   // scalar multiplier for color
 };
 [[vk::push_constant]] PushConstants push_constants;
 
-// Screen-sized RGBA32U buffer: 4x uint per pixel
+// Screen-sized RGBA32U buffer: 4x uint per pixel (linear)
 [[vk::binding(0, 0)]] RWStructuredBuffer<uint> accum_buffer;
-[[vk::binding(1, 0)]] Texture2D<float4> sprite_texture;
-[[vk::binding(2, 0)]] SamplerState sprite_sampler;
 
 static const float COLOR_SCALE = 4096.0f;
+static const float TWO_PI      = 6.28318530718f;
 
-// Simple hash to decorrelate particle params
+// Hash helpers
 float hash11(uint n) {
     n ^= n * 0x27d4eb2d;
     n ^= n >> 15;
@@ -27,92 +26,65 @@ float hash11(uint n) {
     return (n & 0x00FFFFFF) / 16777215.0; // 0..1
 }
 
-// Soft circular falloff 0..1
-float soft_disk(float2 p, float r) {
-    float2 uv = (p / r) * 0.5 + 0.5; // normalize to 0..1 UV space
-    if (any(uv < 0.0) || any(uv > 1.0)) return 0.0; // outside texture bounds
-    return sprite_texture.SampleLevel(sprite_sampler, uv, 0).r; // sample red channel
+float2 rand2(uint n) {
+    n ^= n * 0x27d4eb2d;
+    n ^= n >> 15;
+    n *= 0x85ebca6b;
+    n ^= n >> 13;
+    return float2(
+        (n & 0xFFFF) * (1.0f/65535.0f),
+        ((n >> 16) & 0xFFFF) * (1.0f/65535.0f)
+    );
 }
 
-// Saturating atomic add: clamps value to max_val
-void InterlockedAddSaturate(RWStructuredBuffer<uint> buf, uint idx, uint add, uint max_val)
-{
-    uint oldVal, newVal;
-    for (;;)
-    {
-        // Read the current value (atomic read)
-        InterlockedAdd(buf[idx], 0, oldVal);
-
-        if (oldVal >= max_val) {
-            // Already saturated — nothing to add
-            return;
-        }
-
-        // Clamp so we don’t overshoot
-        uint delta = min(add, max_val - oldVal);
-        newVal = oldVal + delta;
-
-        // Try to commit if still at oldVal
-        uint prev;
-        InterlockedCompareExchange(buf[idx], oldVal, newVal, prev);
-
-        if (prev == oldVal) {
-            // Success — we wrote our value
-            return;
-        }
-
-        // Else: someone else updated — retry
-    }
-}
 [numthreads(128,1,1)]
-void main(uint3 tid : SV_DispatchThreadID) {
+void main(uint3 tid : SV_DispatchThreadID)
+{
     uint id = tid.x;
     if (id >= push_constants.particle_count) return;
 
-    uint W = push_constants.screen_width;
-    uint H = push_constants.screen_height;
+    const uint W = push_constants.screen_width;
+    const uint H = push_constants.screen_height;
 
-    // --- Fake particle state (replace with your state buffers later) ---
-    // Unique angle & angular speed per particle
-    float base  = (float)id * 0.61803398875;        // golden ratio step
-    float speed = 0.002; // 0.2..1.2 rad/s
-    float ang   = base * 6.28318 + push_constants.time * speed;
+    // ---- Swirling cluster logic ----
+    // Cluster center (same for ~256 particles)
+    float2 clusterSeed = rand2((id / 256u) + 999u);
+    float2 basePos     = clusterSeed * float2(W, H);
 
-    // Radius as fraction of min dimension
-    float rFrac = lerp(0.15, 0.45, hash11(id * 131)); // ring radius
-    float2 normCenter = float2(0.5, 0.5) + rFrac * float2(cos(ang), sin(ang));
+    // Particle-specific orbit
+    float phase  = hash11(id) * TWO_PI;
+    float radius = 10.0 + 40.0 * hash11(id * 77u);
+    float speed  = 0.5  +  0.2 * hash11(id * 31337u);
 
-    // Screen-space center
-    float2 center = normCenter * float2(W, H);
+    float2 offset = float2(
+        cos(push_constants.time * speed + phase),
+        sin(push_constants.time * speed + phase)
+    ) * radius;
 
-    // Particle footprint (radius in pixels)
-    float R = max(8.0, push_constants.spread); // safety clamp
+    float2 center = basePos + offset;
 
-    // Bounding box of the disk (clamped to screen)
-    int x0 = max(0, int(center.x - R));
-    int x1 = min(int(W) - 1, int(center.x + R));
-    int y0 = max(0, int(center.y - R));
-    int y1 = min(int(H) - 1, int(center.y + R));
+    // ---- Robust pixel address: check range BEFORE casting to uint ----
+    // (Casting a negative float to uint would wrap to a huge value)
+    int2 ip = int2(floor(center + 0.5)); // round-to-nearest pixel
+    if (ip.x < 0 || ip.x >= int(W) || ip.y < 0 || ip.y >= int(H)) return;
 
-    // Color per particle (simple hash palette)
-    float3 baseCol = float3(
-        0.6 + 0.4 * sin(base * 17.0),
-        0.6 + 0.4 * sin(base * 29.0 + 2.0),
-        0.6 + 0.4 * sin(base * 41.0 + 4.0)
-    ) * push_constants.brightness;
+    uint2 pix = uint2(ip);
+    uint  baseIdx = (pix.y * W + pix.x) * 4u;
 
-        float w = soft_disk(0, R); // 0..1
+    // ---- Dirt color (brownish), premultiplied by brightness ----
+    float dirtHue  = 0.1 + 0.1 * sin(id * 0.37);
+    float3 baseCol = float3(0.35 + dirtHue, 0.25 + dirtHue*0.5, 0.15);
+    baseCol *= (0.7 + 0.6 * hash11(id * 771u)) * max(push_constants.brightness, 0.0);
 
-uint2 pix = uint2(center.xy); // nearest pixel
-uint idx  = (pix.y * W + pix.x) * 4u;
+    // Clamp & scale to integer domain
+    uint addR = (uint)(saturate(baseCol.r) * COLOR_SCALE);
+    uint addG = (uint)(saturate(baseCol.g) * COLOR_SCALE);
+    uint addB = (uint)(saturate(baseCol.b) * COLOR_SCALE);
+    uint addA = (uint)(COLOR_SCALE); // treat alpha as weight/count
 
-uint addR = (uint)(saturate(baseCol.r) * COLOR_SCALE);
-uint addG = (uint)(saturate(baseCol.g) * COLOR_SCALE);
-uint addB = (uint)(saturate(baseCol.b) * COLOR_SCALE);
-uint addA = (uint)(COLOR_SCALE);
-
-InterlockedAdd(accum_buffer[idx + 0], addR);
-InterlockedAdd(accum_buffer[idx + 1], addG);
-InterlockedAdd(accum_buffer[idx + 2], addB);
-InterlockedAdd(accum_buffer[idx + 3], addA);
+    // ---- Atomic adds ----
+    InterlockedAdd(accum_buffer[baseIdx + 0], addR);
+    InterlockedAdd(accum_buffer[baseIdx + 1], addG);
+    InterlockedAdd(accum_buffer[baseIdx + 2], addB);
+    InterlockedAdd(accum_buffer[baseIdx + 3], addA);
 }

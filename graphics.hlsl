@@ -1,107 +1,91 @@
 struct PushConstants {
-    int screen_width;
-    int screen_height;
+    float time;
+    float exposure;
+    float gamma;
+    float contrast;
+    uint  screen_width;
+    uint  screen_height;
+    float vignette_strength;
+    float _pad0;
+    uint  _pad1;
+    uint  _pad2;
 };
-
 [[vk::push_constant]] PushConstants push_constants;
 
-struct Quad {
-    float2 position;
-    float2 size;
-    float4 color;
-    float rotation;
-    float depth;
-    float2 _padding; // Align to 16-byte boundary
+[[vk::binding(0, 0)]] StructuredBuffer<uint> accum_buffer;
+[[vk::binding(1, 0)]] Texture2D<float4> sprite_texture;
+[[vk::binding(2, 0)]] SamplerState sprite_sampler;
+
+
+static const float2 POSITIONS[3] = {
+    float2(-1,-1), float2(3,-1), float2(-1,3)
+};
+static const float2 UVS[3] = {
+    float2(0,0), float2(2,0), float2(0,2)
 };
 
-StructuredBuffer<Quad> visible_quads : register(t0);
+struct VertexOutput { float4 clip_position:SV_POSITION; float2 uv:TEXCOORD0; };
 
-// Quad vertices (two triangles forming a square)
-static float2 positions[6] = {
-    float2(-0.5, -0.5),  // Bottom left
-    float2(0.5, -0.5),   // Bottom right
-    float2(-0.5, 0.5),   // Top left
-    float2(0.5, -0.5),   // Bottom right
-    float2(0.5, 0.5),    // Top right
-    float2(-0.5, 0.5)    // Top left
-};
-
-// Texture coordinates for the quad
-static float2 tex_coords[6] = {
-    float2(0.0, 1.0),  // Bottom left
-    float2(1.0, 1.0),  // Bottom right
-    float2(0.0, 0.0),  // Top left
-    float2(1.0, 1.0),  // Bottom right
-    float2(1.0, 0.0),  // Top right
-    float2(0.0, 0.0)   // Top left
-};
-
-struct VertexOutput {
-    float4 clip_position : SV_POSITION;
-    float4 color : COLOR0;
-    float2 tex_coord : TEXCOORD0;
-    float2 world_pos : TEXCOORD1;
-};
-
-VertexOutput vs_main(uint vertex_index : SV_VertexID, uint instance_index : SV_InstanceID) {
-    VertexOutput output;
-
-    // Get quad data from visible buffer - all quads here are guaranteed to be visible
-    Quad quad = visible_quads[instance_index];
-
-    // Get the base quad vertex (-0.5 to 0.5)
-    float2 vertex_pos = positions[vertex_index];
-
-    // Scale the vertex by the quad's size
-    float2 scaled_vertex = vertex_pos * quad.size;
-
-    // Apply rotation around the quad center
-    float cos_rot = cos(quad.rotation);
-    float sin_rot = sin(quad.rotation);
-    float2 rotated_vertex = float2(
-        scaled_vertex.x * cos_rot - scaled_vertex.y * sin_rot,
-        scaled_vertex.x * sin_rot + scaled_vertex.y * cos_rot
-    );
-
-    // Final position = quad center + rotated scaled vertex offset
-    float2 final_pos = quad.position + rotated_vertex;
-
-    // Apply aspect ratio correction to keep quads square
-    float aspect_ratio = (float)push_constants.screen_width / (float)push_constants.screen_height;
-    float2 corrected_pos = float2(final_pos.x / aspect_ratio, final_pos.y);
-
-    // Use computed depth for proper Z-buffering and overdraw elimination
-    float normalized_depth = clamp(quad.depth, 0.0, 1.0);
-    output.clip_position = float4(corrected_pos.x, corrected_pos.y, normalized_depth, 1.0);
-    output.color = quad.color;
-    output.tex_coord = tex_coords[vertex_index];
-    output.world_pos = quad.position;
-    return output;
+VertexOutput vs_main(uint vid:SV_VertexID) {
+    VertexOutput o;
+    o.clip_position = float4(POSITIONS[vid],0,1);
+    o.uv = UVS[vid];
+    return o;
 }
 
-SamplerState texture_sampler : register(s1);
-Texture2D texture_image : register(t2);
 
-// Early depth testing to discard hidden pixels before expensive operations
-[earlydepthstencil]
+
+static const float COLOR_SCALE = 4096.0f;
+
+
 float4 fs_main(VertexOutput input) : SV_Target {
-    float4 tex_color = texture_image.Sample(texture_sampler, input.tex_coord);
+    uint w = push_constants.screen_width;
+    uint h = push_constants.screen_height;
 
-    // Enhanced depth perception through multiple visual cues
-    float depth_from_z = input.clip_position.z;
+    // Map UV to pixel coords
+    float2 uv = saturate(input.uv * 0.5f);
+    uint2 p = uint2(uv * float2(w,h));
+    p = min(p, uint2(w-1,h-1));
 
-    // Distance from center creates natural depth falloff
-    float center_distance = length(input.tex_coord - float2(0.5, 0.5)) * 2.0;
-    float world_distance = length(input.world_pos) * 0.1;
+    // Box filter radius (2 → 5x5 kernel, 3 → 7x7, etc.)
+    const int R = 2;
 
-    // Multiple depth factors for stronger perception
-    float depth_darkness = 1.0 - clamp(depth_from_z * 1.5 + world_distance, 0.0, 0.6);
-    float edge_fade = 1.0 - clamp(center_distance * 0.3, 0.0, 0.2);
-    float combined_depth_factor = depth_darkness * edge_fade;
+    float3 col     = 0.0;
+    float density  = 0.0;
+    int count      = 0;
 
-    // Blend texture color with quad color and apply all depth effects
-    float3 final_color = tex_color.rgb * input.color.rgb * combined_depth_factor;
-    // Preserve transparency from texture and vertex color
-    float final_alpha = tex_color.a * input.color.a;
-    return float4(final_color, final_alpha);
+    for (int dy = -R; dy <= R; ++dy) {
+        for (int dx = -R; dx <= R; ++dx) {
+            int2 q = int2(p) + int2(dx, dy);
+            if (q.x < 0 || q.x >= int(w) || q.y < 0 || q.y >= int(h)) {
+                continue;
+            }
+
+            uint base = (q.y * w + q.x) * 4u;
+            uint r = accum_buffer[base+0];
+            uint g = accum_buffer[base+1];
+            uint b = accum_buffer[base+2];
+            uint a = accum_buffer[base+3];
+
+            col    += float3(r,g,b) / COLOR_SCALE;
+            density += (float)a / COLOR_SCALE;
+            count++;
+        }
+    }
+
+    // Average to smooth out the footprint
+    if (count > 0) {
+        col     /= count;
+        density /= count;
+    }
+
+    if (density < 1e-6f) {
+        // nothing in this neighborhood
+        return float4(0,0,0,1);
+    }
+    float3 finalCol   = col ;
+    float  finalAlpha = density;
+
+    return float4(finalCol, finalAlpha);
 }
+

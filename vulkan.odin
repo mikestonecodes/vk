@@ -48,6 +48,15 @@ current_frame: c.uint32_t = 0
 
 frame_slot_values: [MAX_FRAMES_IN_FLIGHT]c.uint64_t
 
+
+SwapchainElement :: struct {
+	commandBuffer: vk.CommandBuffer,
+	image:         vk.Image,
+	imageView:     vk.ImageView,
+	framebuffer:   vk.Framebuffer,
+	last_value:    c.uint64_t,
+}
+
 // ============================================
 // Single-object create wrapper
 // ============================================
@@ -384,8 +393,27 @@ vulkan_init :: proc() -> (ok: bool) {
 	return true
 }
 
+// Extension and layer names
+get_instance_extensions :: proc() -> []cstring {
+	// Get required extensions from GLFW
+	glfw_extensions := glfw.GetRequiredInstanceExtensions()
+	extensions := make([]cstring, len(glfw_extensions) + 1)
+	for i in 0 ..< len(glfw_extensions) {
+		extensions[i] = glfw_extensions[i]
+	}
+	extensions[len(glfw_extensions)] = "VK_EXT_debug_utils"
+	return extensions
+}
+layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
+device_extension_names := [?]cstring{"VK_KHR_swapchain"}
+
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Shader registry (canonical: .hlsl)
+// ──────────────────────────────────────────────────────────────────────────────
+
 ShaderInfo :: struct {
-	source_path:   string,
+	source_path:   string, // e.g. "sprite.hlsl"
 	last_modified: time.Time,
 }
 
@@ -398,12 +426,11 @@ init_shader_times :: proc() {
 }
 
 discover_shaders :: proc() {
-	if shader_registry == nil {
-		shader_registry = make(map[string]ShaderInfo)
-	} else {
+	// Recreate registry
+	if shader_registry != nil {
 		delete(shader_registry)
-		shader_registry = make(map[string]ShaderInfo)
 	}
+	shader_registry = make(map[string]ShaderInfo)
 
 	handle, err := os.open(".")
 	if err != nil {
@@ -421,8 +448,9 @@ discover_shaders :: proc() {
 
 	for file in files {
 		if strings.has_suffix(file.name, ".hlsl") {
-			shader_registry[strings.clone(file.name)] = ShaderInfo {
-				source_path   = strings.clone(file.name),
+			// Keep source name as-is; use .hlsl as canonical
+			shader_registry[file.name] = ShaderInfo {
+				source_path   = file.name,
 				last_modified = file.modification_time,
 			}
 		}
@@ -435,80 +463,186 @@ discover_shaders :: proc() {
 	fmt.println()
 }
 
-// Extension and layer names
-get_instance_extensions :: proc() -> []cstring {
-	// Get required extensions from GLFW
-	glfw_extensions := glfw.GetRequiredInstanceExtensions()
-	extensions := make([]cstring, len(glfw_extensions) + 1)
-	for i in 0 ..< len(glfw_extensions) {
-		extensions[i] = glfw_extensions[i]
+// ──────────────────────────────────────────────────────────────────────────────
+// Filename helpers
+// ──────────────────────────────────────────────────────────────────────────────
+
+// From a pipeline .spv output, get the canonical .hlsl source.
+// Accepts: "foo.spv", "foo_vs.spv", "bar_fs.spv"
+
+spv_to_hlsl :: proc(spv: string) -> string {
+	if strings.has_suffix(spv, "_vs.spv") {
+		return fmt.aprintf("%s.hlsl", strings.trim_suffix(spv, "_vs.spv"))
 	}
-	extensions[len(glfw_extensions)] = "VK_EXT_debug_utils"
-	return extensions
+	if strings.has_suffix(spv, "_fs.spv") {
+		return fmt.aprintf("%s.hlsl", strings.trim_suffix(spv, "_fs.spv"))
+	}
+	if strings.has_suffix(spv, ".spv") {
+		return fmt.aprintf("%s.hlsl", strings.trim_suffix(spv, ".spv"))
+	}
+	return spv // fallback
 }
-layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
-device_extension_names := [?]cstring{"VK_KHR_swapchain"}
+
+hlsl_outputs :: proc(hlsl: string) -> (is_compute: bool, out0, out1: string) {
+	base := strings.trim_suffix(hlsl, ".hlsl")
+	if strings.contains(hlsl, "compute") {
+		return true, fmt.aprintf("%s.spv", base), ""
+	}
+	return false, fmt.aprintf("%s_vs.spv", base), fmt.aprintf("%s_fs.spv", base)
+}
 
 
-//RELOAD
+// ──────────────────────────────────────────────────────────────────────────────
+compile_hlsl :: proc(hlsl_file, profile, entry, output: string) -> bool {
+
+	cmd := fmt.aprintf(
+		"dxc -spirv -fvk-use-gl-layout -fspv-target-env=vulkan1.3 -T %s -E %s -Fo %s %s",
+		profile,
+		entry,
+		output,
+		hlsl_file,
+	)
+
+	return system(strings.clone_to_cstring(cmd, context.temp_allocator)) == 0
+}
+
+compile_shader :: proc(hlsl_file: string) -> bool {
+
+	fmt.println("compiling shader:")
+	is_compute, out0, out1 := hlsl_outputs(hlsl_file)
+	if is_compute {
+		return compile_hlsl(hlsl_file, "cs_6_0", "main", out0)
+	}
+	vs_ok := compile_hlsl(hlsl_file, "vs_6_0", "vs_main", out0)
+	fs_ok := compile_hlsl(hlsl_file, "ps_6_0", "fs_main", out1)
+	return vs_ok && fs_ok
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Pipeline init: specs refer to compiled outputs; we map back to .hlsl and compile.
+// ──────────────────────────────────────────────────────────────────────────────
+
+init_render_pipeline_state :: proc(specs: []PipelineSpec, states: []PipelineState) -> bool {
+	for spec in specs {
+		if spec.compute_module != "" do compile_shader(spv_to_hlsl(spec.compute_module))
+		if spec.vertex_module != "" do compile_shader(spv_to_hlsl(spec.vertex_module))
+		if spec.fragment_module != "" do compile_shader(spv_to_hlsl(spec.fragment_module))
+	}
+	return true
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+load_shader_spirv :: proc(path: string) -> ([]u32, bool) {
+	data, ok := os.read_entire_file(path)
+	if !ok || len(data) % 4 != 0 {
+		return nil, false
+	}
+	words := make([]u32, len(data) / 4)
+	for i in 0 ..< len(words) {
+		idx := i * 4
+		words[i] =
+			u32(data[idx + 0]) |
+			(u32(data[idx + 1]) << 8) |
+			(u32(data[idx + 2]) << 16) |
+			(u32(data[idx + 3]) << 24)
+	}
+
+	// Optional: sanity check SPIR-V magic 0x07230203
+	if len(words) > 0 && words[0] != u32(0x07230203) {
+		fmt.printf("WARN: %s does not look like SPIR-V (magic=%#x)\n", path, words[0])
+	}
+	return words, true
+}
+
+load_shader_module :: proc(path: string) -> (shader: vk.ShaderModule, ok: bool) {
+
+	// Try to compile matching .hlsl if it exists
+	hlsl := spv_to_hlsl(path)
+	if os.exists(hlsl) {
+		if !compile_shader(hlsl) {
+			fmt.printf("Shader compilation failed: %s\n", hlsl)
+			return {}, false
+		}
+	}
+
+	code := load_shader_spirv(path) or_return
+	return vkw(
+		vk.CreateShaderModule,
+		device,
+		&vk.ShaderModuleCreateInfo {
+			sType = vk.StructureType.SHADER_MODULE_CREATE_INFO,
+			codeSize = len(code) * size_of(u32),
+			pCode = raw_data(code),
+		},
+		"Failed to create shader module",
+		vk.ShaderModule,
+	)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Hot-reload: detect changed .hlsl, recompile, rebuild pipelines.
+// ──────────────────────────────────────────────────────────────────────────────
+
+compile_changed_shaders :: proc(changed_hlsl: []string) -> bool {
+	ok_all := true
+	for hlsl in changed_hlsl {
+		info, present := shader_registry[hlsl]
+		if !present {
+			fmt.printf("Warning: %s not in registry\n", hlsl)
+			ok_all = false
+			continue
+		}
+		fmt.printf("Recompiling %s\n", info.source_path)
+		if !compile_shader(info.source_path) {
+			fmt.printf("Failed: %s\n", info.source_path)
+			ok_all = false
+		}
+	}
+	return ok_all
+}
+
 check_shader_reload :: proc() -> bool {
 	if !shader_watch_initialized {
 		init_shader_times()
 		return false
 	}
 
-	changed: [dynamic]string
-	defer delete(changed)
-
+	changed := make([dynamic]string, 0)
 	for name, &info in shader_registry {
-		if file_info, err := os.stat(info.source_path);
-		   err == nil && file_info.modification_time != info.last_modified {
-			info.last_modified = file_info.modification_time
+		st, err := os.stat(info.source_path)
+		if err != nil {
+			// File missing → drop it from registry
+			fmt.printf("Shader source missing: %s\n", info.source_path)
+			delete_key(&shader_registry, name) // correct form
+			append(&changed, name) // trigger rebuild
+			continue
+		}
+
+		if st.modification_time != info.last_modified {
+			info.last_modified = st.modification_time
 			append(&changed, name)
 		}
 	}
 
-	if len(changed) > 0 && compile_changed_shaders(changed[:]) {
-		vk.QueueWaitIdle(queue) // 🔒 make sure old pipelines are done
-		destroy_render_pipeline_state(render_pipeline_states[:])
-		if !init_render_pipeline_state(render_pipeline_specs[:], render_pipeline_states[:]) {
-			return false
-		}
-		pipelines_ready = build_pipelines(render_pipeline_specs[:], render_pipeline_states[:])
+	if len(changed) == 0 {
+		return pipelines_ready
+	}
+	if !compile_changed_shaders(changed[:]) {
+		return pipelines_ready // keep old pipelines if rebuild fails
 	}
 
+	// Full rebuild
+	vk.QueueWaitIdle(queue)
+	destroy_render_pipeline_state(render_pipeline_states[:])
+
+	if !init_render_pipeline_state(render_pipeline_specs[:], render_pipeline_states[:]) {
+		fmt.println("Shader reload failed during init")
+		return false
+	}
+
+	pipelines_ready = build_pipelines(render_pipeline_specs[:], render_pipeline_states[:])
 	return pipelines_ready
 }
-
-compile_changed_shaders :: proc(changed_shaders: []string) -> bool {
-	fmt.printf("Recompiling %d shaders...\n", len(changed_shaders))
-	success := true
-
-	for shader_name in changed_shaders {
-		info, ok := shader_registry[shader_name]
-		if !ok {
-			fmt.printf("Warning: shader %s not found in registry\n", shader_name)
-			continue
-		}
-
-		fmt.printf("Compiling shader %s\n", info.source_path)
-		if !compile_shader(info.source_path) {
-			fmt.printf("Failed to compile %s\n", info.source_path)
-			success = false
-		}
-	}
-
-	return success
-}
-
-SwapchainElement :: struct {
-	commandBuffer: vk.CommandBuffer,
-	image:         vk.Image,
-	imageView:     vk.ImageView,
-	framebuffer:   vk.Framebuffer,
-	last_value:    c.uint64_t,
-}
-
 
 // =============================================================================
 // BORING INITIALIZATION CODE - Surface, Device, Swapchain setup
@@ -526,27 +660,6 @@ debug_callback :: proc "system" (
 	return false
 }
 
-load_shader_spirv :: proc(filename: string) -> ([]c.uint32_t, bool) {
-	data, ok := os.read_entire_file(filename)
-	if !ok do return nil, false
-	defer delete(data)
-
-	if len(data) % 4 != 0 do return nil, false
-
-	word_count := len(data) / 4
-	spirv_data := make([]c.uint32_t, word_count)
-
-	for i in 0 ..< word_count {
-		byte_offset := i * 4
-		spirv_data[i] =
-			c.uint32_t(data[byte_offset]) |
-			(c.uint32_t(data[byte_offset + 1]) << 8) |
-			(c.uint32_t(data[byte_offset + 2]) << 16) |
-			(c.uint32_t(data[byte_offset + 3]) << 24)
-	}
-
-	return spirv_data, true
-}
 
 create_swapchain :: proc() -> bool {
 	// Query caps
@@ -1320,9 +1433,14 @@ create_texture_from_png :: proc(path: string) -> (TextureResource, bool) {
 
 	// --- Transition layout from PREINITIALIZED to GENERAL
 	if !execute_single_time_commands(proc(cmd: vk.CommandBuffer, user_data: rawptr) -> bool {
-		tex := (^TextureResource)(user_data)
-		return transition_image_layout(cmd, tex.image, vk.ImageLayout.PREINITIALIZED, vk.ImageLayout.GENERAL)
-	}, &tex) {
+			tex := (^TextureResource)(user_data)
+			return transition_image_layout(
+				cmd,
+				tex.image,
+				vk.ImageLayout.PREINITIALIZED,
+				vk.ImageLayout.GENERAL,
+			)
+		}, &tex) {
 		return tex, false
 	}
 

@@ -103,29 +103,17 @@ init_render_resources :: proc() -> bool {
 				binding = 0,
 				buffer = &accumulation_buffer,
 			},
-			{
-				label = "sprite-texture",
-				descriptorType = .SAMPLED_IMAGE,
-				stage = {vk.ShaderStageFlag.COMPUTE},
-				binding = 1,
-				texture = &sprite_texture,
-			},
-			{
-				label = "sprite-sampler",
-				descriptorType = .SAMPLER,
-				stage = {vk.ShaderStageFlag.COMPUTE},
-				binding = 2,
-				sampler = &sprite_texture.sampler,
-			},
+			{},
+			{},
 			{},
 		},
-		descriptor_count = 3,
+		descriptor_count = 1,
 	}
 
 	render_pipeline_specs[1] = {
-		name = "tone-map",
-		vertex_module = "post_process_vs.spv",
-		fragment_module = "post_process_fs.spv",
+		name = "graphics",
+		vertex_module = "graphics_vs.spv",
+		fragment_module = "graphics_fs.spv",
 		push = PushConstantInfo {
 			label = "PostProcessPushConstants",
 			stage = {vk.ShaderStageFlag.FRAGMENT},
@@ -139,11 +127,23 @@ init_render_resources :: proc() -> bool {
 				binding = 0,
 				buffer = &accumulation_buffer,
 			},
-			{},
-			{},
+			{
+				label = "sprite-texture",
+				descriptorType = .SAMPLED_IMAGE,
+				stage = {vk.ShaderStageFlag.FRAGMENT},
+				binding = 1,
+				texture = &sprite_texture,
+			},
+			{
+				label = "sprite-sampler",
+				descriptorType = .SAMPLER,
+				stage = {vk.ShaderStageFlag.FRAGMENT},
+				binding = 2,
+				sampler = &sprite_texture.sampler,
+			},
 			{},
 		},
-		descriptor_count = 1,
+		descriptor_count = 3,
 	}
 	compute_push_constants = ComputePushConstants {
 		screen_width   = u32(width),

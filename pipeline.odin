@@ -293,22 +293,6 @@ bind :: proc(
 }
 
 
-load_shader_module :: proc(path: string) -> (shader: vk.ShaderModule, ok: bool) {
-	code := load_shader_spirv(path) or_return
-	defer delete(code)
-	return vkw(
-		vk.CreateShaderModule,
-		device,
-		&vk.ShaderModuleCreateInfo {
-			sType = vk.StructureType.SHADER_MODULE_CREATE_INFO,
-			codeSize = len(code) * size_of(u32),
-			pCode = raw_data(code),
-		},
-		"Failed to create shader module",
-		vk.ShaderModule,
-	)
-}
-
 allocate_descriptor_set :: proc(
 	layout: vk.DescriptorSetLayout,
 	fail_msg: string,
@@ -332,26 +316,6 @@ allocate_descriptor_set :: proc(
 	ok = true
 	return
 }
-
-init_render_pipeline_state :: proc(specs: []PipelineSpec, states: []PipelineState) -> bool {
-	compile_spec_shader :: proc(module_path, suffix: string) {
-		if module_path != "" {
-			shader_name := strings.trim_suffix(module_path, suffix)
-			shader_file := fmt.aprintf("%s.hlsl", shader_name)
-			defer delete(shader_file)
-			compile_shader(shader_file)
-		}
-	}
-
-	for spec in specs {
-		compile_spec_shader(spec.compute_module, ".spv")
-		compile_spec_shader(spec.vertex_module, "_vs.spv")
-		compile_spec_shader(spec.fragment_module, "_fs.spv")
-	}
-
-	return true
-}
-
 create_descriptor_pool :: proc(pool_sizes: []vk.DescriptorPoolSize, set_count: int) -> bool {
 	if len(pool_sizes) == 0 do return false
 	descriptor_pool = vkw(
@@ -380,14 +344,17 @@ create_descriptor_pool :: proc(pool_sizes: []vk.DescriptorPoolSize, set_count: i
 build_pipelines :: proc(specs: []PipelineSpec, states: []PipelineState) -> bool {
 	assert(len(specs) == len(states), "pipeline spec/state length mismatch")
 	if len(specs) == 0 do return true
-	pool_sizes := []vk.DescriptorPoolSize{
+	pool_sizes := []vk.DescriptorPoolSize {
 		{type = .STORAGE_BUFFER, descriptorCount = 1},
 		{type = .SAMPLED_IMAGE, descriptorCount = 1},
 		{type = .SAMPLER, descriptorCount = 1},
 	}
 	create_descriptor_pool(pool_sizes, len(specs)) or_return
 	for idx in 0 ..< len(specs) {
-		if !build_pipeline(&specs[idx], &states[idx]) do return false
+		if !build_pipeline(&specs[idx], &states[idx]) {
+			fmt.println("Failed to build pipeline at index", idx, "name =", specs[idx].name)
+			return false
+		}
 	}
 	return true
 }
@@ -429,7 +396,10 @@ make_pipeline_layout :: proc(
 	ranges: [1]vk.PushConstantRange
 	count: u32 = 0
 	if push, ok2 := spec.push.(PushConstantInfo); ok2 && push.size > 0 {
-		ranges[0] = {stageFlags = push.stage, size = push.size}
+		ranges[0] = {
+			stageFlags = push.stage,
+			size       = push.size,
+		}
 		count = 1
 	}
 
@@ -494,10 +464,22 @@ make_graphics_pipeline :: proc(
 		&vk.GraphicsPipelineCreateInfo {
 			sType = .GRAPHICS_PIPELINE_CREATE_INFO,
 			stageCount = 2,
-			pStages = raw_data([]vk.PipelineShaderStageCreateInfo{
-				{sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {.VERTEX}, module = vsh, pName = "vs_main"},
-				{sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {.FRAGMENT}, module = fsh, pName = "fs_main"},
-			}),
+			pStages = raw_data(
+				[]vk.PipelineShaderStageCreateInfo {
+					{
+						sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
+						stage = {.VERTEX},
+						module = vsh,
+						pName = "vs_main",
+					},
+					{
+						sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
+						stage = {.FRAGMENT},
+						module = fsh,
+						pName = "fs_main",
+					},
+				},
+			),
 			pVertexInputState = &vk.PipelineVertexInputStateCreateInfo {
 				sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 			},
@@ -508,9 +490,19 @@ make_graphics_pipeline :: proc(
 			pViewportState = &vk.PipelineViewportStateCreateInfo {
 				sType = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
 				viewportCount = 1,
-				pViewports = &vk.Viewport{x = 0, y = 0, width = f32(window_width), height = f32(window_height), minDepth = 0, maxDepth = 1},
+				pViewports = &vk.Viewport {
+					x = 0,
+					y = 0,
+					width = f32(window_width),
+					height = f32(window_height),
+					minDepth = 0,
+					maxDepth = 1,
+				},
 				scissorCount = 1,
-				pScissors = &vk.Rect2D{offset = {0, 0}, extent = {u32(window_width), u32(window_height)}},
+				pScissors = &vk.Rect2D {
+					offset = {0, 0},
+					extent = {u32(window_width), u32(window_height)},
+				},
 			},
 			pRasterizationState = &vk.PipelineRasterizationStateCreateInfo {
 				sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -551,15 +543,27 @@ update_descriptors :: proc(spec: ^PipelineSpec, set: vk.DescriptorSet) -> bool {
 		if infos, ok := spec.descriptors.([MAX_DESCRIPTOR_BINDINGS]DescriptorBindingInfo); ok {
 			info := infos[idx]
 			write := &writes[idx]
-			write^ = {sType = .WRITE_DESCRIPTOR_SET, dstSet = set, dstBinding = info.binding, descriptorType = info.descriptorType, descriptorCount = 1}
+			write^ = {
+				sType           = .WRITE_DESCRIPTOR_SET,
+				dstSet          = set,
+				dstBinding      = info.binding,
+				descriptorType  = info.descriptorType,
+				descriptorCount = 1,
+			}
 
 			#partial switch info.descriptorType {
-			case .STORAGE_BUFFER, .UNIFORM_BUFFER, .STORAGE_BUFFER_DYNAMIC, .UNIFORM_BUFFER_DYNAMIC:
+			case .STORAGE_BUFFER,
+			     .UNIFORM_BUFFER,
+			     .STORAGE_BUFFER_DYNAMIC,
+			     .UNIFORM_BUFFER_DYNAMIC:
 				if info.buffer == nil || info.buffer.buffer == {} {
 					fmt.println("Descriptor binding missing buffer resource")
 					return false
 				}
-				buf_infos[idx] = {buffer = info.buffer.buffer, range = vk.DeviceSize(vk.WHOLE_SIZE)}
+				buf_infos[idx] = {
+					buffer = info.buffer.buffer,
+					range  = vk.DeviceSize(vk.WHOLE_SIZE),
+				}
 				write.pBufferInfo = &buf_infos[idx]
 
 			case .SAMPLED_IMAGE, .STORAGE_IMAGE:
@@ -567,8 +571,12 @@ update_descriptors :: proc(spec: ^PipelineSpec, set: vk.DescriptorSet) -> bool {
 					fmt.println("Descriptor binding missing texture resource")
 					return false
 				}
-				layout := info.texture.layout if info.texture.layout != {} else .SHADER_READ_ONLY_OPTIMAL
-				img_infos[idx] = {imageView = info.texture.view, imageLayout = layout}
+				layout :=
+					info.texture.layout if info.texture.layout != {} else .SHADER_READ_ONLY_OPTIMAL
+				img_infos[idx] = {
+					imageView   = info.texture.view,
+					imageLayout = layout,
+				}
 				write.pImageInfo = &img_infos[idx]
 
 			case .COMBINED_IMAGE_SAMPLER:
@@ -576,8 +584,13 @@ update_descriptors :: proc(spec: ^PipelineSpec, set: vk.DescriptorSet) -> bool {
 					fmt.println("Combined image sampler missing texture or sampler")
 					return false
 				}
-				layout := info.texture.layout if info.texture.layout != {} else .SHADER_READ_ONLY_OPTIMAL
-				img_infos[idx] = {sampler = info.texture.sampler, imageView = info.texture.view, imageLayout = layout}
+				layout :=
+					info.texture.layout if info.texture.layout != {} else .SHADER_READ_ONLY_OPTIMAL
+				img_infos[idx] = {
+					sampler     = info.texture.sampler,
+					imageView   = info.texture.view,
+					imageLayout = layout,
+				}
 				write.pImageInfo = &img_infos[idx]
 
 			case .SAMPLER:
@@ -585,7 +598,10 @@ update_descriptors :: proc(spec: ^PipelineSpec, set: vk.DescriptorSet) -> bool {
 					fmt.println("Sampler descriptor missing sampler resource")
 					return false
 				}
-				img_infos[idx] = {sampler = info.sampler^, imageLayout = .SHADER_READ_ONLY_OPTIMAL}
+				img_infos[idx] = {
+					sampler     = info.sampler^,
+					imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+				}
 				write.pImageInfo = &img_infos[idx]
 
 			case:
@@ -603,18 +619,47 @@ update_descriptors :: proc(spec: ^PipelineSpec, set: vk.DescriptorSet) -> bool {
 // MAIN PIPELINE BUILDER
 // ========================================================
 
+log_or_return :: proc(value: $T, ok: bool, msg: string, spec_name: string) -> (T, bool) {
+	if !ok {
+		fmt.printfln("❌ Pipeline '%s' failed at: %s", spec_name, msg)
+	}
+	return value, ok
+}
+
 build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
-	desc_layout := make_descriptor_layout(spec) or_return
-	pipe_layout := make_pipeline_layout(desc_layout, spec) or_return
+	desc_layout := log_or_return(
+		make_descriptor_layout(spec),
+		"make_descriptor_layout",
+		spec.name,
+	) or_return
+
+	pipe_layout := log_or_return(
+		make_pipeline_layout(desc_layout, spec),
+		"make_pipeline_layout",
+		spec.name,
+	) or_return
 
 	pipe: vk.Pipeline
 	if spec.compute_module != "" {
-		pipe = make_compute_pipeline(spec.compute_module, pipe_layout) or_return
+		pipe = log_or_return(
+			make_compute_pipeline(spec.compute_module, pipe_layout),
+			"make_compute_pipeline",
+			spec.name,
+		) or_return
 	} else {
-		pipe = make_graphics_pipeline(spec.vertex_module, spec.fragment_module, pipe_layout) or_return
+		pipe = log_or_return(
+			make_graphics_pipeline(spec.vertex_module, spec.fragment_module, pipe_layout),
+			"make_graphics_pipeline",
+			spec.name,
+		) or_return
 	}
 
-	desc_set := allocate_descriptor_set(desc_layout, "descriptor set") or_return
+	desc_set := log_or_return(
+		allocate_descriptor_set(desc_layout, "descriptor set"),
+		"allocate_descriptor_set",
+		spec.name,
+	) or_return
+
 	update_descriptors(spec, desc_set) or_return
 
 	push_stage: vk.ShaderStageFlags
@@ -629,9 +674,9 @@ build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
 		descriptor_set    = desc_set,
 		push_stage        = push_stage,
 	}
-
 	return true
 }
+
 reset_pipeline_state :: proc(state: ^PipelineState) {
 	if state.pipeline != {} {
 		vk.DestroyPipeline(device, state.pipeline, nil)
@@ -671,30 +716,4 @@ begin_encoding :: proc(element: ^SwapchainElement) -> CommandEncoder {
 
 	vk.BeginCommandBuffer(encoder.command_buffer, &begin_info)
 	return encoder
-}
-
-compile_hlsl :: proc(shader_file, profile, entry, output: string) -> bool {
-	cmd := fmt.aprintf(
-		"dxc -spirv -fvk-use-gl-layout -fspv-target-env=vulkan1.3 -T %s -E %s -Fo %s %s",
-		profile,
-		entry,
-		output,
-		shader_file,
-	)
-	defer delete(cmd)
-	c_cmd := strings.clone_to_cstring(cmd, context.temp_allocator)
-	return system(c_cmd) == 0
-}
-
-compile_shader :: proc(shader_file: string) -> bool {
-	base, _ := strings.replace(shader_file, ".hlsl", "", 1)
-	defer delete(base)
-
-	if strings.contains(shader_file, "compute") {
-		return compile_hlsl(shader_file, "cs_6_0", "main", fmt.aprintf("%s.spv", base))
-	}
-
-	vs_ok := compile_hlsl(shader_file, "vs_6_0", "vs_main", fmt.aprintf("%s_vs.spv", base))
-	fs_ok := compile_hlsl(shader_file, "ps_6_0", "fs_main", fmt.aprintf("%s_fs.spv", base))
-	return vs_ok && fs_ok
 }
