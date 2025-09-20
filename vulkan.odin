@@ -1264,56 +1264,14 @@ vulkan_cleanup :: proc() {
 
 //images
 
-
-transition_image_layout :: proc(
-	cmd: vk.CommandBuffer,
-	image: vk.Image,
-	old_layout, new_layout: vk.ImageLayout,
-) -> bool {
-	barrier := vk.ImageMemoryBarrier {
-		sType = vk.StructureType.IMAGE_MEMORY_BARRIER,
-		oldLayout = old_layout,
-		newLayout = new_layout,
-		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		image = image,
-		subresourceRange = {
-			aspectMask = {vk.ImageAspectFlag.COLOR},
-			levelCount = 1,
-			layerCount = 1,
-		},
-	}
-
-	src_stage: vk.PipelineStageFlags
-	dst_stage: vk.PipelineStageFlags
-
-	if old_layout == vk.ImageLayout.UNDEFINED &&
-	   new_layout == vk.ImageLayout.TRANSFER_DST_OPTIMAL {
-		barrier.srcAccessMask = {}
-		barrier.dstAccessMask = {vk.AccessFlag.TRANSFER_WRITE}
-		src_stage = {vk.PipelineStageFlag.TOP_OF_PIPE}
-		dst_stage = {vk.PipelineStageFlag.TRANSFER}
-	} else if old_layout == vk.ImageLayout.TRANSFER_DST_OPTIMAL &&
-	   new_layout == vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL {
-		barrier.srcAccessMask = {vk.AccessFlag.TRANSFER_WRITE}
-		barrier.dstAccessMask = {vk.AccessFlag.SHADER_READ}
-		src_stage = {vk.PipelineStageFlag.TRANSFER}
-		dst_stage = {vk.PipelineStageFlag.FRAGMENT_SHADER, vk.PipelineStageFlag.COMPUTE_SHADER}
-	} else {
-		fmt.println("Unsupported image layout transition")
-		return false
-	}
-
-	vk.CmdPipelineBarrier(cmd, src_stage, dst_stage, {}, 0, nil, 0, nil, 1, &barrier)
-	return true
-}
-
 // Single path: decode -> allocate -> copy -> view -> sampler
 
-create_texture_from_png :: proc(texture: ^TextureResource, path: string) -> bool {
+create_texture_from_png :: proc(path: string) -> (TextureResource, bool) {
+	tex: TextureResource
+
 	img, err := png.load_from_file(path, {.alpha_add_if_missing})
 	if err != nil || img == nil {
-		return false
+		return tex, false
 	}
 	defer png.destroy(img)
 
@@ -1323,9 +1281,8 @@ create_texture_from_png :: proc(texture: ^TextureResource, path: string) -> bool
 	defer delete(pixels)
 
 	copy(pixels, src[:required])
-	destroy_texture(texture)
 
-	// Image
+	// --- Image
 	ci := vk.ImageCreateInfo {
 		sType = vk.StructureType.IMAGE_CREATE_INFO,
 		imageType = vk.ImageType.D2,
@@ -1339,55 +1296,49 @@ create_texture_from_png :: proc(texture: ^TextureResource, path: string) -> bool
 		sharingMode = vk.SharingMode.EXCLUSIVE,
 		initialLayout = vk.ImageLayout.PREINITIALIZED,
 	}
-	texture.image, _ = vkw(vk.CreateImage, device, &ci, "texture image", vk.Image)
+	tex.image, _ = vkw(vk.CreateImage, device, &ci, "texture image", vk.Image)
 
 	mem_req: vk.MemoryRequirements
-	vk.GetImageMemoryRequirements(device, texture.image, &mem_req)
+	vk.GetImageMemoryRequirements(device, tex.image, &mem_req)
 
-	texture.memory, _ = vkw(
-		vk.AllocateMemory,
-		device,
-		&vk.MemoryAllocateInfo {
-			sType = vk.StructureType.MEMORY_ALLOCATE_INFO,
-			allocationSize = mem_req.size,
-			memoryTypeIndex = find_memory_type(
-				mem_req.memoryTypeBits,
-				{vk.MemoryPropertyFlag.HOST_VISIBLE, vk.MemoryPropertyFlag.HOST_COHERENT},
-			),
-		},
-		"texture memory",
-		vk.DeviceMemory,
-	)
+	alloc := vk.MemoryAllocateInfo {
+		sType           = vk.StructureType.MEMORY_ALLOCATE_INFO,
+		allocationSize  = mem_req.size,
+		memoryTypeIndex = find_memory_type(
+			mem_req.memoryTypeBits,
+			{vk.MemoryPropertyFlag.HOST_VISIBLE, vk.MemoryPropertyFlag.HOST_COHERENT},
+		),
+	}
+	vk.AllocateMemory(device, &alloc, nil, &tex.memory)
+	vk.BindImageMemory(device, tex.image, tex.memory, 0)
 
-	vk.BindImageMemory(device, texture.image, texture.memory, 0)
-
-	// Copy pixels
+	// --- Copy pixels
 	data: rawptr
-	vk.MapMemory(device, texture.memory, 0, mem_req.size, {}, &data)
+	vk.MapMemory(device, tex.memory, 0, mem_req.size, {}, &data)
 	runtime.mem_copy_non_overlapping(data, raw_data(pixels), len(pixels))
-	vk.UnmapMemory(device, texture.memory)
+	vk.UnmapMemory(device, tex.memory)
 
-	// Metadata
-	texture.width = u32(img.width)
-	texture.height = u32(img.height)
-	texture.format = vk.Format.R8G8B8A8_UNORM
-	texture.layout = vk.ImageLayout.GENERAL
+	// --- Metadata
+	tex.width = u32(img.width)
+	tex.height = u32(img.height)
+	tex.format = vk.Format.R8G8B8A8_UNORM
+	tex.layout = vk.ImageLayout.GENERAL
 
-	// View
+	// --- View
 	vi := vk.ImageViewCreateInfo {
 		sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
-		image = texture.image,
+		image = tex.image,
 		viewType = vk.ImageViewType.D2,
-		format = texture.format,
+		format = tex.format,
 		subresourceRange = {
 			aspectMask = {vk.ImageAspectFlag.COLOR},
 			levelCount = 1,
 			layerCount = 1,
 		},
 	}
-	texture.view, _ = vkw(vk.CreateImageView, device, &vi, "texture view", vk.ImageView)
+	tex.view, _ = vkw(vk.CreateImageView, device, &vi, "texture view", vk.ImageView)
 
-	// Sampler
+	// --- Sampler
 	si := vk.SamplerCreateInfo {
 		sType        = vk.StructureType.SAMPLER_CREATE_INFO,
 		magFilter    = vk.Filter.LINEAR,
@@ -1397,9 +1348,9 @@ create_texture_from_png :: proc(texture: ^TextureResource, path: string) -> bool
 		addressModeW = vk.SamplerAddressMode.CLAMP_TO_EDGE,
 		borderColor  = vk.BorderColor.FLOAT_OPAQUE_WHITE,
 	}
-	texture.sampler, _ = vkw(vk.CreateSampler, device, &si, "sampler", vk.Sampler)
+	tex.sampler, _ = vkw(vk.CreateSampler, device, &si, "sampler", vk.Sampler)
 
-	return true
+	return tex, true
 }
 
 

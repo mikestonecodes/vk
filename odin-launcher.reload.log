@@ -1,82 +1,12 @@
 
+/home/mike/Source/vk/render.odin(78:37) Syntax Error: Expected ']', got ',' 
+	descriptors = [accumulation_buffer, sprite_texture], 
+	                                  ^ 
+/home/mike/Source/vk/render.odin(78:53) Syntax Error: Expected '}', got ']' 
+	descriptors = [accumulation_buffer, sprite_texture], 
+	                                                  ^ 
+/home/mike/Source/vk/render.odin(79:2) Syntax Error: Expected an operand 
+	} 
+	^ 
 
-Build succeeded, launching vk...
-DEBUG: Initializing GLFW platform
-DEBUG: GLFW platform setup complete
-DEBUG: Getting window size
-DEBUG: Initializing Vulkan
-Validation layer: linux_read_sorted_physical_devices:
-Validation layer:      Original order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
-Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
-Validation layer: Copying old device 0 into new device 0
-Validation layer: linux_read_sorted_physical_devices:
-Validation layer:      Original order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
-Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
-Validation layer: Copying old device 0 into new device 0
-Validation layer: linux_read_sorted_physical_devices:
-Validation layer:      Original order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
-Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
-Validation layer: Copying old device 0 into new device 0
-Validation layer: linux_read_sorted_physical_devices:
-Validation layer:      Original order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
-Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
-Validation layer: Copying old device 0 into new device 0
-Validation layer: Removing driver /usr/lib/libvulkan_intel.so due to not having any physical devices
-Validation layer: Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
-Validation layer: Inserted device layer "VK_LAYER_KHRONOS_validation" (libVkLayer_khronos_validation.so)
-Validation layer: Failed to find vkGetDeviceProcAddr in layer "libVkLayer_MESA_device_select.so"
-Validation layer: vkCreateDevice layer callstack setup to:
-Validation layer:    <Application>
-Validation layer:      ||
-Validation layer:    <Loader>
-Validation layer:      ||
-Validation layer:    VK_LAYER_KHRONOS_validation
-Validation layer:            Type: Explicit
-Validation layer:            Enabled By: By the Application
-Validation layer:            Manifest: /usr/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json
-Validation layer:            Library:  libVkLayer_khronos_validation.so
-Validation layer:      ||
-Validation layer:    <Device>
-Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "libGLX_nvidia.so.0"
-DEBUG: Creating swapchain
-DEBUG: Initializing resources
-[pipeline] descriptor binding 0 type STORAGE_BUFFER stage ShaderStageFlags{COMPUTE}
-[pipeline] descriptor binding 1 type SAMPLED_IMAGE stage ShaderStageFlags{COMPUTE}
-[pipeline] descriptor binding 2 type SAMPLER stage ShaderStageFlags{COMPUTE}
-[pipeline] descriptor binding 0 type STORAGE_BUFFER stage ShaderStageFlags{FRAGMENT}
-DEBUG: Vulkan init complete
-Discovered 3 shaders: graphics.hlsl post_process.hlsl compute.hlsl 
-Validation layer: vkQueueSubmit(): pSubmits[0] command buffer VkCommandBuffer 0x318b1ce0 expects VkImage 0x180000000018 (subresource: aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, mipLevel = 0, arrayLayer = 0) to be in layout VK_IMAGE_LAYOUT_GENERAL--instead, current layout is VK_IMAGE_LAYOUT_PREINITIALIZED.
-The Vulkan spec states: If a descriptor with type equal to any of VK_DESCRIPTOR_TYPE_SAMPLE_WEIGHT_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_BLOCK_MATCH_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, or VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT is accessed as a result of this command, all image subresources identified by that descriptor must be in the image layout identified when the descriptor was written (https://docs.vulkan.org/spec/latest/chapters/drawing.html#VUID-vkCmdDraw-None-09600)
-Validation layer: vkQueueSubmit(): pSubmits[0] command buffer VkCommandBuffer 0x318b6f90 expects VkImage 0x180000000018 (subresource: aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, mipLevel = 0, arrayLayer = 0) to be in layout VK_IMAGE_LAYOUT_GENERAL--instead, current layout is VK_IMAGE_LAYOUT_PREINITIALIZED.
-The Vulkan spec states: If a descriptor with type equal to any of VK_DESCRIPTOR_TYPE_SAMPLE_WEIGHT_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_BLOCK_MATCH_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, or VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT is accessed as a result of this command, all image subresources identified by that descriptor must be in the image layout identified when the descriptor was written (https://docs.vulkan.org/spec/latest/chapters/drawing.html#VUID-vkCmdDraw-None-09600)
-Validation layer: vkQueueSubmit(): pSubmits[0] command buffer VkCommandBuffer 0x317cb060 expects VkImage 0x180000000018 (subresource: aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, mipLevel = 0, arrayLayer = 0) to be in layout VK_IMAGE_LAYOUT_GENERAL--instead, current layout is VK_IMAGE_LAYOUT_PREINITIALIZED.
-The Vulkan spec states: If a descriptor with type equal to any of VK_DESCRIPTOR_TYPE_SAMPLE_WEIGHT_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_BLOCK_MATCH_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, or VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT is accessed as a result of this command, all image subresources identified by that descriptor must be in the image layout identified when the descriptor was written (https://docs.vulkan.org/spec/latest/chapters/drawing.html#VUID-vkCmdDraw-None-09600)
-Window resized to 1866x666
-Validation layer: vkQueueSubmit(): pSubmits[0] command buffer VkCommandBuffer 0x318b1ce0 expects VkImage 0x180000000018 (subresource: aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, mipLevel = 0, arrayLayer = 0) to be in layout VK_IMAGE_LAYOUT_GENERAL--instead, current layout is VK_IMAGE_LAYOUT_PREINITIALIZED.
-The Vulkan spec states: If a descriptor with type equal to any of VK_DESCRIPTOR_TYPE_SAMPLE_WEIGHT_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_BLOCK_MATCH_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, or VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT is accessed as a result of this command, all image subresources identified by that descriptor must be in the image layout identified when the descriptor was written (https://docs.vulkan.org/spec/latest/chapters/drawing.html#VUID-vkCmdDraw-None-09600)
-[pipeline] descriptor binding 0 type STORAGE_BUFFER stage ShaderStageFlags{COMPUTE}
-[pipeline] descriptor binding 1 type SAMPLED_IMAGE stage ShaderStageFlags{COMPUTE}
-[pipeline] descriptor binding 2 type SAMPLER stage ShaderStageFlags{COMPUTE}
-[pipeline] descriptor binding 0 type STORAGE_BUFFER stage ShaderStageFlags{FRAGMENT}
-Validation layer: vkQueueSubmit(): pSubmits[0] command buffer VkCommandBuffer 0x31cc3d50 expects VkImage 0x3b000000003b (subresource: aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, mipLevel = 0, arrayLayer = 0) to be in layout VK_IMAGE_LAYOUT_GENERAL--instead, current layout is VK_IMAGE_LAYOUT_PREINITIALIZED.
-The Vulkan spec states: If a descriptor with type equal to any of VK_DESCRIPTOR_TYPE_SAMPLE_WEIGHT_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_BLOCK_MATCH_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, or VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT is accessed as a result of this command, all image subresources identified by that descriptor must be in the image layout identified when the descriptor was written (https://docs.vulkan.org/spec/latest/chapters/drawing.html#VUID-vkCmdDraw-None-09600)
-Validation layer: vkQueueSubmit(): pSubmits[0] command buffer VkCommandBuffer 0x31cd5a80 expects VkImage 0x3b000000003b (subresource: aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, mipLevel = 0, arrayLayer = 0) to be in layout VK_IMAGE_LAYOUT_GENERAL--instead, current layout is VK_IMAGE_LAYOUT_PREINITIALIZED.
-The Vulkan spec states: If a descriptor with type equal to any of VK_DESCRIPTOR_TYPE_SAMPLE_WEIGHT_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_BLOCK_MATCH_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, or VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT is accessed as a result of this command, all image subresources identified by that descriptor must be in the image layout identified when the descriptor was written (https://docs.vulkan.org/spec/latest/chapters/drawing.html#VUID-vkCmdDraw-None-09600)
-Validation layer: vkQueueSubmit(): pSubmits[0] command buffer VkCommandBuffer 0x31cadae0 expects VkImage 0x3b000000003b (subresource: aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, mipLevel = 0, arrayLayer = 0) to be in layout VK_IMAGE_LAYOUT_GENERAL--instead, current layout is VK_IMAGE_LAYOUT_PREINITIALIZED.
-The Vulkan spec states: If a descriptor with type equal to any of VK_DESCRIPTOR_TYPE_SAMPLE_WEIGHT_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_BLOCK_MATCH_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, or VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT is accessed as a result of this command, all image subresources identified by that descriptor must be in the image layout identified when the descriptor was written (https://docs.vulkan.org/spec/latest/chapters/drawing.html#VUID-vkCmdDraw-None-09600)
-Validation layer: vkQueueSubmit(): pSubmits[0] command buffer VkCommandBuffer 0x31cc3d50 expects VkImage 0x3b000000003b (subresource: aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, mipLevel = 0, arrayLayer = 0) to be in layout VK_IMAGE_LAYOUT_GENERAL--instead, current layout is VK_IMAGE_LAYOUT_PREINITIALIZED.
-The Vulkan spec states: If a descriptor with type equal to any of VK_DESCRIPTOR_TYPE_SAMPLE_WEIGHT_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_BLOCK_MATCH_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, or VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT is accessed as a result of this command, all image subresources identified by that descriptor must be in the image layout identified when the descriptor was written (https://docs.vulkan.org/spec/latest/chapters/drawing.html#VUID-vkCmdDraw-None-09600)
-Validation layer: vkQueueSubmit(): pSubmits[0] command buffer VkCommandBuffer 0x31cd5a80 expects VkImage 0x3b000000003b (subresource: aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, mipLevel = 0, arrayLayer = 0) to be in layout VK_IMAGE_LAYOUT_GENERAL--instead, current layout is VK_IMAGE_LAYOUT_PREINITIALIZED.
-The Vulkan spec states: If a descriptor with type equal to any of VK_DESCRIPTOR_TYPE_SAMPLE_WEIGHT_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_BLOCK_MATCH_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, or VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT is accessed as a result of this command, all image subresources identified by that descriptor must be in the image layout identified when the descriptor was written (https://docs.vulkan.org/spec/latest/chapters/drawing.html#VUID-vkCmdDraw-None-09600)
-Validation layer: (Warning - This VUID has now been reported 10 times, which is the duplicated_message_limit value, this will be the last time reporting it).
-vkQueueSubmit(): pSubmits[0] command buffer VkCommandBuffer 0x31cadae0 expects VkImage 0x3b000000003b (subresource: aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, mipLevel = 0, arrayLayer = 0) to be in layout VK_IMAGE_LAYOUT_GENERAL--instead, current layout is VK_IMAGE_LAYOUT_PREINITIALIZED.
-The Vulkan spec states: If a descriptor with type equal to any of VK_DESCRIPTOR_TYPE_SAMPLE_WEIGHT_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_BLOCK_MATCH_IMAGE_QCOM, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, or VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT is accessed as a result of this command, all image subresources identified by that descriptor must be in the image layout identified when the descriptor was written (https://docs.vulkan.org/spec/latest/chapters/drawing.html#VUID-vkCmdDraw-None-09600)
+Build failed. See errors above.

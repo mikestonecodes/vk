@@ -48,12 +48,25 @@ DescriptorBindingInfo :: struct {
 
 PipelineSpec :: struct {
 	name:            string,
-	push:            PushConstantInfo,
-	descriptors:     [MAX_DESCRIPTOR_BINDINGS]DescriptorBindingInfo,
+	push:            union {
+		PushConstantInfo,
+		typeid,
+	},
+	descriptors:     union {
+		[MAX_DESCRIPTOR_BINDINGS]DescriptorBindingInfo,
+		[]^BufferResource,
+		[]^TextureResource,
+		[]ResourceBinding,
+	},
 	descriptor_count: u32,
 	compute_module:  string,
 	vertex_module:   string,
 	fragment_module: string,
+}
+
+ResourceBinding :: union {
+	^BufferResource,
+	^TextureResource,
 }
 
 ComputePipelineConfig :: struct {
@@ -147,6 +160,50 @@ sampled_image_binding :: proc(
 		stage = stage,
 		texture = texture,
 	}
+}
+
+
+transition_image_layout :: proc(
+	cmd: vk.CommandBuffer,
+	image: vk.Image,
+	old_layout, new_layout: vk.ImageLayout,
+) -> bool {
+	barrier := vk.ImageMemoryBarrier {
+		sType = vk.StructureType.IMAGE_MEMORY_BARRIER,
+		oldLayout = old_layout,
+		newLayout = new_layout,
+		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		image = image,
+		subresourceRange = {
+			aspectMask = {vk.ImageAspectFlag.COLOR},
+			levelCount = 1,
+			layerCount = 1,
+		},
+	}
+
+	src_stage: vk.PipelineStageFlags
+	dst_stage: vk.PipelineStageFlags
+
+	if old_layout == vk.ImageLayout.UNDEFINED &&
+	   new_layout == vk.ImageLayout.TRANSFER_DST_OPTIMAL {
+		barrier.srcAccessMask = {}
+		barrier.dstAccessMask = {vk.AccessFlag.TRANSFER_WRITE}
+		src_stage = {vk.PipelineStageFlag.TOP_OF_PIPE}
+		dst_stage = {vk.PipelineStageFlag.TRANSFER}
+	} else if old_layout == vk.ImageLayout.TRANSFER_DST_OPTIMAL &&
+	   new_layout == vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL {
+		barrier.srcAccessMask = {vk.AccessFlag.TRANSFER_WRITE}
+		barrier.dstAccessMask = {vk.AccessFlag.SHADER_READ}
+		src_stage = {vk.PipelineStageFlag.TRANSFER}
+		dst_stage = {vk.PipelineStageFlag.FRAGMENT_SHADER, vk.PipelineStageFlag.COMPUTE_SHADER}
+	} else {
+		fmt.println("Unsupported image layout transition")
+		return false
+	}
+
+	vk.CmdPipelineBarrier(cmd, src_stage, dst_stage, {}, 0, nil, 0, nil, 1, &barrier)
+	return true
 }
 
 sampler_binding :: proc(
