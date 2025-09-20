@@ -32,35 +32,32 @@ void main(uint3 global_id : SV_DispatchThreadID) {
         return;
     }
 
-    float seed = (float)particle_id * (GOLDEN_RATIO - 1.0f);
-    float angle = seed * TAU + push_constants.time * 0.25f;
-    float swirl = sin(push_constants.time * 0.2f + seed * 4.0f) * 0.5f;
-    float radius = 0.35f + push_constants.spread * 0.4f + sin(seed * 7.0f + push_constants.time * 0.8f) * 0.2f;
-    float2 disk = float2(cos(angle + swirl), sin(angle + swirl)) * radius;
+    // Simple grid pattern
+    uint grid_size = 16; // Grid cells per dimension
+    uint particles_per_row = (uint)sqrt((float)push_constants.particle_count);
+    particles_per_row = max(1u, particles_per_row);
 
-    float aspect = (float)tex_width / max(1.0f, (float)tex_height);
-    float2 ndc = float2(disk.x / aspect, disk.y);
-    float2 uv = ndc * 0.5f + 0.5f;
+    uint grid_x = particle_id % particles_per_row;
+    uint grid_y = particle_id / particles_per_row;
+
+    float2 grid_pos = float2((float)grid_x / (float)particles_per_row, (float)grid_y / (float)particles_per_row);
+
+    float2 uv = grid_pos;
     if (any(uv < 0.0f) || any(uv > 1.0f)) {
         return;
     }
 
-    float hue = frac(seed * 0.37f + push_constants.time * 0.05f);
-    float3 rgb = float3(
-        sin(TAU * (hue + 0.0f)) * 0.5f + 0.5f,
-        sin(TAU * (hue + 0.33f)) * 0.5f + 0.5f,
-        sin(TAU * (hue + 0.66f)) * 0.5f + 0.5f
-    );
+    // Simple color based on grid position
+    float3 rgb = float3(grid_pos.x, grid_pos.y, 0.5f);
     rgb = saturate(rgb);
 
-    float shimmer = sin(seed * 11.0f + push_constants.time * 1.4f) * 0.5f + 0.5f;
-    float base_weight = (0.6f + 0.4f * shimmer) * max(0.1f, push_constants.brightness);
+    float base_weight = push_constants.brightness;
 
     float2 tex_dims = float2((float)(tex_width - 1u), (float)(tex_height - 1u));
     float2 pixel = uv * tex_dims;
     int2 base_coord = int2(pixel);
 
-    const int radius_px = 2;
+    const int radius_px = 1;
     for (int oy = -radius_px; oy <= radius_px; ++oy) {
         for (int ox = -radius_px; ox <= radius_px; ++ox) {
             int2 coord = base_coord + int2(ox, oy);
@@ -68,9 +65,7 @@ void main(uint3 global_id : SV_DispatchThreadID) {
                 continue;
             }
 
-            float dist2 = (float)(ox * ox + oy * oy);
-            float falloff = exp(-dist2 * 0.6f);
-            float local_weight = base_weight * falloff;
+            float local_weight = base_weight;
             if (local_weight <= 0.0001f) {
                 continue;
             }

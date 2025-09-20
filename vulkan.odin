@@ -389,9 +389,14 @@ check_shader_reload :: proc() -> bool {
 		if compile_changed_shaders(changed_shaders[:]) {
 			destroy_render_pipeline_state(render_pipeline_states[:])
 			if !init_render_pipeline_state(render_pipeline_specs[:], render_pipeline_states[:]) {
+				fmt.println("Failed to refresh shader modules after shader reload")
+				return false
+			}
+			pipelines_ready = build_pipelines(render_pipeline_specs[:], render_pipeline_states[:])
+			if !pipelines_ready {
 				fmt.println("Failed to rebuild pipelines after shader reload")
 			}
-			return true
+			return pipelines_ready
 		}
 	}
 

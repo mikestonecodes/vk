@@ -222,7 +222,7 @@ allocate_descriptor_set :: proc(
 }
 
 init_render_pipeline_state :: proc(specs: []PipelineSpec, states: []PipelineState) -> bool {
-	/*
+
 	for spec in specs {
 		if spec.compute_module != "" {
 			shader_name := strings.trim_suffix(spec.compute_module, ".spv")
@@ -243,7 +243,7 @@ init_render_pipeline_state :: proc(specs: []PipelineSpec, states: []PipelineStat
 			compile_shader(shader_file)
 		}
 	}
-*/
+
 	return true
 }
 
