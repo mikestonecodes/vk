@@ -36,7 +36,8 @@ timeline_value: c.uint64_t = 0
 MAX_FRAMES_IN_FLIGHT :: c.uint32_t(3)
 
 image_available: [MAX_FRAMES_IN_FLIGHT]vk.Semaphore
-render_finished: [MAX_FRAMES_IN_FLIGHT]vk.Semaphore
+image_render_finished: [^]vk.Semaphore
+frame_timeline_values: [MAX_FRAMES_IN_FLIGHT]c.uint64_t
 frames_in_flight: c.uint32_t = 0
 current_frame: c.uint32_t = 0
 
@@ -251,7 +252,7 @@ submit_commands :: proc(element: ^SwapchainElement, frame_index: c.uint32_t) {
 
 	wait_semaphores := [1]vk.Semaphore{image_available[frame_index]}
 
-	signal_semaphores := [2]vk.Semaphore{render_finished[frame_index], timeline_semaphore}
+	signal_semaphores := [2]vk.Semaphore{image_render_finished[image_index], timeline_semaphore}
 
 	submit_info := vk.SubmitInfo {
 		sType                = vk.StructureType.SUBMIT_INFO,
@@ -267,10 +268,12 @@ submit_commands :: proc(element: ^SwapchainElement, frame_index: c.uint32_t) {
 
 	vk.QueueSubmit(queue, 1, &submit_info, {})
 	element.last_value = timeline_value
+	frame_timeline_values[frame_index] = timeline_value
 }
 
-present_frame :: proc(frame_index: c.uint32_t) -> bool {
-	wait_semaphores := [1]vk.Semaphore{render_finished[frame_index]}
+present_frame :: proc(image_index: c.uint32_t) -> bool {
+	index_copy := image_index
+	wait_semaphores := [1]vk.Semaphore{image_render_finished[image_index]}
 
 	present_info := vk.PresentInfoKHR {
 		sType              = vk.StructureType.PRESENT_INFO_KHR,
@@ -278,7 +281,7 @@ present_frame :: proc(frame_index: c.uint32_t) -> bool {
 		pWaitSemaphores    = raw_data(wait_semaphores[:]),
 		swapchainCount     = 1,
 		pSwapchains        = &swapchain,
-		pImageIndices      = &image_index,
+		pImageIndices      = &index_copy,
 	}
 
 	result := vk.QueuePresentKHR(queue, &present_info)
@@ -291,11 +294,13 @@ present_frame :: proc(frame_index: c.uint32_t) -> bool {
 }
 
 render_frame :: proc(start_time: time.Time) -> bool {
+
 	if frames_in_flight == 0 || elements == nil {
 		return false
 	}
 
 	frame_index := current_frame % frames_in_flight
+	wait_for_timeline(frame_timeline_values[frame_index])
 
 	// 1. Acquire swapchain image for this frame slot
 	acquire_next_image(frame_index) or_return
@@ -313,7 +318,7 @@ render_frame :: proc(start_time: time.Time) -> bool {
 	submit_commands(element, frame_index)
 
 	// 5. Present once rendering completes
-	present_frame(frame_index) or_return
+	present_frame(image_index) or_return
 
 	current_frame = (frame_index + 1) % frames_in_flight
 
@@ -666,6 +671,7 @@ create_swapchain :: proc() -> bool {
 	}
 
 	new_elements := make([^]SwapchainElement, actual_image_count)
+	new_image_render_finished := make([^]vk.Semaphore, actual_image_count)
 	success := false
 	defer {
 		if !success {
@@ -679,8 +685,12 @@ create_swapchain :: proc() -> bool {
 				if new_elements[i].commandBuffer != {} {
 					vk.ResetCommandBuffer(new_elements[i].commandBuffer, {})
 				}
+				if new_image_render_finished[i] != {} {
+					vk.DestroySemaphore(device, new_image_render_finished[i], nil)
+				}
 			}
 			free(new_elements)
+			free(new_image_render_finished)
 			vk.DestroyRenderPass(device, new_render_pass, nil)
 			vk.DestroySwapchainKHR(device, new_swapchain, nil)
 		}
@@ -751,6 +761,28 @@ create_swapchain :: proc() -> bool {
 		frames_in_flight = 1
 	}
 	current_frame = 0
+	for i in 0 ..< len(frame_timeline_values) {
+		frame_timeline_values[i] = 0
+	}
+
+	if image_render_finished != nil {
+		for i in 0 ..< image_count {
+			if image_render_finished[i] != {} {
+				vk.DestroySemaphore(device, image_render_finished[i], nil)
+			}
+		}
+		free(image_render_finished)
+	}
+
+	for i in 0 ..< actual_image_count {
+		new_image_render_finished[i] = vkw(
+			vk.CreateSemaphore,
+			device,
+			&vk.SemaphoreCreateInfo {sType = vk.StructureType.SEMAPHORE_CREATE_INFO},
+			"render finished semaphore",
+			vk.Semaphore,
+		) or_return
+	}
 
 	if elements != nil {
 		free(elements)
@@ -759,6 +791,7 @@ create_swapchain :: proc() -> bool {
 	swapchain = new_swapchain
 	render_pass = new_render_pass
 	elements = new_elements
+	image_render_finished = new_image_render_finished
 	image_count = actual_image_count
 	success = true
 	return true
@@ -780,9 +813,21 @@ destroy_swapchain :: proc() {
 		free(elements)
 		elements = nil
 	}
+	if image_render_finished != nil {
+		for i in 0 ..< image_count {
+			if image_render_finished[i] != {} {
+				vk.DestroySemaphore(device, image_render_finished[i], nil)
+			}
+		}
+		free(image_render_finished)
+		image_render_finished = nil
+	}
 	image_count = 0
 	frames_in_flight = 0
 	current_frame = 0
+	for i in 0 ..< len(frame_timeline_values) {
+		frame_timeline_values[i] = 0
+	}
 	if render_pass != {} {
 		vk.DestroyRenderPass(device, render_pass, nil)
 		render_pass = {}
@@ -926,13 +971,6 @@ init_vulkan :: proc() -> bool {
 			device,
 			&binary_sem_info,
 			"image available semaphore",
-			vk.Semaphore,
-		) or_return
-		render_finished[i] = vkw(
-			vk.CreateSemaphore,
-			device,
-			&binary_sem_info,
-			"render finished semaphore",
 			vk.Semaphore,
 		) or_return
 	}
@@ -1270,10 +1308,6 @@ vulkan_cleanup :: proc() {
 		if image_available[i] != {} {
 			vk.DestroySemaphore(device, image_available[i], nil)
 			image_available[i] = {}
-		}
-		if render_finished[i] != {} {
-			vk.DestroySemaphore(device, render_finished[i], nil)
-			render_finished[i] = {}
 		}
 	}
 	vk.DestroyCommandPool(device, command_pool, nil)
