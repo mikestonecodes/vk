@@ -454,45 +454,27 @@ check_shader_reload :: proc() -> bool {
 		return false
 	}
 
-	any_changed := false
-	changed_shaders: [dynamic]string
-	defer delete(changed_shaders)
+	changed: [dynamic]string
+	defer delete(changed)
 
 	for name, &info in shader_registry {
-		file_info, err := os.stat(info.source_path)
-		if err != nil {
-			continue
-		}
-
-		if file_info.modification_time != info.last_modified {
+		if file_info, err := os.stat(info.source_path);
+		   err == nil && file_info.modification_time != info.last_modified {
 			info.last_modified = file_info.modification_time
-			append(&changed_shaders, name)
-			any_changed = true
+			append(&changed, name)
 		}
 	}
 
-	if any_changed {
-		fmt.printf("Detected changes in shaders: ")
-		for shader in changed_shaders {
-			fmt.printf("%s ", shader)
+	if len(changed) > 0 && compile_changed_shaders(changed[:]) {
+		vk.QueueWaitIdle(queue) // 🔒 make sure old pipelines are done
+		destroy_render_pipeline_state(render_pipeline_states[:])
+		if !init_render_pipeline_state(render_pipeline_specs[:], render_pipeline_states[:]) {
+			return false
 		}
-		fmt.println()
-
-		if compile_changed_shaders(changed_shaders[:]) {
-			destroy_render_pipeline_state(render_pipeline_states[:])
-			if !init_render_pipeline_state(render_pipeline_specs[:], render_pipeline_states[:]) {
-				fmt.println("Failed to refresh shader modules after shader reload")
-				return false
-			}
-			pipelines_ready = build_pipelines(render_pipeline_specs[:], render_pipeline_states[:])
-			if !pipelines_ready {
-				fmt.println("Failed to rebuild pipelines after shader reload")
-			}
-			return pipelines_ready
-		}
+		pipelines_ready = build_pipelines(render_pipeline_specs[:], render_pipeline_states[:])
 	}
 
-	return false
+	return pipelines_ready
 }
 
 compile_changed_shaders :: proc(changed_shaders: []string) -> bool {
