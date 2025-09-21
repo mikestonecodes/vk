@@ -84,6 +84,7 @@ init_render_resources :: proc() -> bool {
 
 	sprite_texture_width = sprite_texture.width
 	sprite_texture_height = sprite_texture.height
+
 	render_pipeline_specs[0] = {
 		name = "particles",
 		compute_module = "compute.spv",
@@ -92,19 +93,6 @@ init_render_resources :: proc() -> bool {
 			stage = {vk.ShaderStageFlag.COMPUTE},
 			size = u32(size_of(ComputePushConstants)),
 		},
-		descriptors = [4]DescriptorBindingInfo {
-			{
-				label = "accumulation-buffer",
-				descriptorType = .STORAGE_BUFFER,
-				stage = {vk.ShaderStageFlag.COMPUTE},
-				binding = 0,
-				buffer = &accumulation_buffer,
-			},
-			{},
-			{},
-			{},
-		},
-		descriptor_count = 1,
 	}
 
 	render_pipeline_specs[1] = {
@@ -116,32 +104,8 @@ init_render_resources :: proc() -> bool {
 			stage = {vk.ShaderStageFlag.FRAGMENT},
 			size = u32(size_of(PostProcessPushConstants)),
 		},
-		descriptors = [4]DescriptorBindingInfo {
-			{
-				label = "accumulation-buffer",
-				descriptorType = .STORAGE_BUFFER,
-				stage = {vk.ShaderStageFlag.FRAGMENT},
-				binding = 0,
-				buffer = &accumulation_buffer,
-			},
-			{
-				label = "sprite-texture",
-				descriptorType = .SAMPLED_IMAGE,
-				stage = {vk.ShaderStageFlag.FRAGMENT},
-				binding = 1,
-				texture = &sprite_texture,
-			},
-			{
-				label = "sprite-sampler",
-				descriptorType = .SAMPLER,
-				stage = {vk.ShaderStageFlag.FRAGMENT},
-				binding = 2,
-				sampler = &sprite_texture.sampler,
-			},
-			{},
-		},
-		descriptor_count = 3,
 	}
+
 	compute_push_constants = ComputePushConstants {
 		screen_width   = u32(width),
 		screen_height  = u32(height),
@@ -163,6 +127,8 @@ init_render_resources :: proc() -> bool {
 		world_width       = WORLD_WIDTH,
 		world_height      = WORLD_HEIGHT,
 	}
+
+	update_global_descriptors() or_return
 	return true
 
 }
@@ -176,9 +142,7 @@ record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
 // compute.hlsl -> accumulation_buffer
 
 simulate_particles :: proc(frame: FrameInputs) {
-
 	vk.CmdFillBuffer(frame.cmd, accumulation_buffer.buffer, 0, accumulation_buffer.size, 0)
-	apply_transfer_to_compute_barrier(frame.cmd, &accumulation_buffer)
 
 	compute_push_constants.time = frame.time
 	compute_push_constants.delta_time = frame.delta_time
@@ -187,19 +151,18 @@ simulate_particles :: proc(frame: FrameInputs) {
 	compute_push_constants.spread = 4.0 // try 2..8
 	compute_push_constants.brightness = 1.0
 
-	groups := (PARTICLE_COUNT + 128 - 1) / 128
 	bind(frame, &render_pipeline_states[0], .COMPUTE, &compute_push_constants)
-	vk.CmdDispatch(frame.cmd, groups, 1, 1)
+	vk.CmdDispatch(frame.cmd, (PARTICLE_COUNT + 128 - 1) / 128, 1, 1)
 
-	apply_compute_to_fragment_barrier(frame.cmd, &accumulation_buffer)
 }
 
 
 // accumulation_buffer -> post_process.hlsl -> swapchain framebuffer
 composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) {
+
+	apply_compute_to_fragment_barrier(frame.cmd, &accumulation_buffer)
 	begin_render_pass(frame, framebuffer)
 	post_process_push_constants.time = frame.time
-
 	post_process_push_constants.screen_width = u32(window_width)
 	post_process_push_constants.screen_height = u32(window_height)
 	bind(frame, &render_pipeline_states[1], .GRAPHICS, &post_process_push_constants)

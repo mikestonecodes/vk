@@ -382,6 +382,7 @@ vulkan_init :: proc() -> (ok: bool) {
 	update_window_size()
 	init_vulkan() or_return
 	create_swapchain() or_return
+	init_global_descriptors() or_return
 	init_vulkan_resources() or_return
 	return true
 }
