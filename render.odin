@@ -8,7 +8,7 @@ import png "core:image/png"
 
 import vk "vendor:vulkan"
 
-PARTICLE_COUNT :: u32(980_000)
+PARTICLE_COUNT :: u32(15_980_000)
 COMPUTE_GROUP_SIZE :: u32(128)
 PIPELINE_COUNT :: 2
 
@@ -18,8 +18,7 @@ WORLD_HEIGHT :: u32(4320)
 
 accumulation_buffer: BufferResource
 sprite_texture: TextureResource
-sprite_texture_width: u32
-sprite_texture_height: u32
+
 
 TextureUploadContext :: struct {
 	texture: ^TextureResource,
@@ -67,9 +66,6 @@ init_render_resources :: proc() -> bool {
 
 	destroy_buffer(&accumulation_buffer)
 	destroy_texture(&sprite_texture)
-	sprite_texture_width = 0
-	sprite_texture_height = 0
-
 
 	create_buffer(
 		&accumulation_buffer,
@@ -81,10 +77,6 @@ init_render_resources :: proc() -> bool {
 	)
 
 	sprite_texture = create_texture_from_png("test3.png") or_return
-	update_bindless_texture(0, &sprite_texture) or_return
-
-	sprite_texture_width = sprite_texture.width
-	sprite_texture_height = sprite_texture.height
 
 	render_pipeline_specs[0] = {
 		name = "particles",
@@ -114,8 +106,8 @@ init_render_resources :: proc() -> bool {
 		spread         = 1.0,
 		brightness     = 1.0,
 		camera_zoom    = 1.0,
-		sprite_width   = sprite_texture_width,
-		sprite_height  = sprite_texture_height,
+		sprite_width   = sprite_texture.width,
+		sprite_height  = sprite_texture.height,
 	}
 
 	post_process_push_constants = PostProcessPushConstants {
@@ -129,7 +121,10 @@ init_render_resources :: proc() -> bool {
 		world_height      = WORLD_HEIGHT,
 	}
 
-	update_global_descriptors() or_return
+	bind_resource(0, &accumulation_buffer)
+	bind_resource(0, &sprite_texture)
+	bind_resource(0, &sprite_texture.sampler)
+
 	return true
 
 }

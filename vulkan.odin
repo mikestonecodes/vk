@@ -57,6 +57,23 @@ SwapchainElement :: struct {
 	last_value:    c.uint64_t,
 }
 
+
+BufferResource :: struct {
+	buffer: vk.Buffer,
+	memory: vk.DeviceMemory,
+	size:   vk.DeviceSize,
+}
+
+TextureResource :: struct {
+	image:   vk.Image,
+	memory:  vk.DeviceMemory,
+	view:    vk.ImageView,
+	sampler: vk.Sampler,
+	width:   u32,
+	height:  u32,
+	format:  vk.Format,
+	layout:  vk.ImageLayout,
+}
 // ============================================
 // Single-object create wrapper
 // ============================================
@@ -327,7 +344,7 @@ render_frame :: proc(start_time: time.Time) -> bool {
 	// 4. Record rendering commands
 	encoder, frame := begin_frame_commands(element, start_time)
 	record_commands(element, frame)
-	finish_encoding(&encoder)
+	vk.EndCommandBuffer(encoder.command_buffer)
 
 	// 5. Submit draw work
 	submit_commands(element, frame_index)
@@ -370,7 +387,6 @@ handle_resize :: proc() {
 		}
 		// Recreate offscreen resources with new dimensions (handled by render init)
 		init_render_resources()
-
 		destroy_render_pipeline_state(render_pipeline_states[:])
 		pipelines_ready = build_pipelines(render_pipeline_specs[:], render_pipeline_states[:])
 
@@ -1142,81 +1158,43 @@ find_memory_type :: proc(type_filter: u32, properties: vk.MemoryPropertyFlags) -
 	return 0
 }
 
-
-// Generic buffer creation
-createBuffer :: proc(
-	size_bytes: int,
-	usage: vk.BufferUsageFlags,
-	memory_properties: vk.MemoryPropertyFlags = {vk.MemoryPropertyFlag.DEVICE_LOCAL},
-) -> (
-	vk.Buffer,
-	vk.DeviceMemory,
-) {
-	buffer_info := vk.BufferCreateInfo {
-		sType       = vk.StructureType.BUFFER_CREATE_INFO,
-		size        = vk.DeviceSize(size_bytes),
-		usage       = usage,
-		sharingMode = vk.SharingMode.EXCLUSIVE,
-	}
-
-	buffer: vk.Buffer
-	if vk.CreateBuffer(device, &buffer_info, nil, &buffer) != vk.Result.SUCCESS {
-		fmt.println("Failed to create buffer")
-		return {}, {}
-	}
-
-	mem_requirements: vk.MemoryRequirements
-	vk.GetBufferMemoryRequirements(device, buffer, &mem_requirements)
-
-	alloc_info := vk.MemoryAllocateInfo {
-		sType           = vk.StructureType.MEMORY_ALLOCATE_INFO,
-		allocationSize  = mem_requirements.size,
-		memoryTypeIndex = find_memory_type(mem_requirements.memoryTypeBits, memory_properties),
-	}
-
-	buffer_memory: vk.DeviceMemory
-	if vk.AllocateMemory(device, &alloc_info, nil, &buffer_memory) != vk.Result.SUCCESS {
-		fmt.println("Failed to allocate buffer memory")
-		vk.DestroyBuffer(device, buffer, nil)
-		return {}, {}
-	}
-
-	vk.BindBufferMemory(device, buffer, buffer_memory, 0)
-	return buffer, buffer_memory
-}
-
-BufferResource :: struct {
-	buffer: vk.Buffer,
-	memory: vk.DeviceMemory,
-	size:   vk.DeviceSize,
-}
-
-TextureResource :: struct {
-	image:   vk.Image,
-	memory:  vk.DeviceMemory,
-	view:    vk.ImageView,
-	sampler: vk.Sampler,
-	width:   u32,
-	height:  u32,
-	format:  vk.Format,
-	layout:  vk.ImageLayout,
-}
-
 create_buffer :: proc(
-	resource: ^BufferResource,
+	res: ^BufferResource,
 	size: vk.DeviceSize,
 	usage: vk.BufferUsageFlags,
 	memory_properties: vk.MemoryPropertyFlags = {vk.MemoryPropertyFlag.DEVICE_LOCAL},
 ) -> bool {
-	buffer, memory := createBuffer(int(size), usage, memory_properties)
-	if buffer == {} {
-		resource^ = BufferResource{}
+	info := vk.BufferCreateInfo {
+		sType       = .BUFFER_CREATE_INFO,
+		size        = size,
+		usage       = usage,
+		sharingMode = .EXCLUSIVE,
+	}
+
+	if vk.CreateBuffer(device, &info, nil, &res.buffer) != .SUCCESS {
+		fmt.println("Failed to create buffer")
+		res^ = BufferResource{}
 		return false
 	}
 
-	resource.buffer = buffer
-	resource.memory = memory
-	resource.size = size
+	req: vk.MemoryRequirements
+	vk.GetBufferMemoryRequirements(device, res.buffer, &req)
+
+	alloc := vk.MemoryAllocateInfo {
+		sType           = .MEMORY_ALLOCATE_INFO,
+		allocationSize  = req.size,
+		memoryTypeIndex = find_memory_type(req.memoryTypeBits, memory_properties),
+	}
+
+	if vk.AllocateMemory(device, &alloc, nil, &res.memory) != .SUCCESS {
+		fmt.println("Failed to allocate buffer memory")
+		vk.DestroyBuffer(device, res.buffer, nil)
+		res^ = BufferResource{}
+		return false
+	}
+
+	vk.BindBufferMemory(device, res.buffer, res.memory, 0)
+	res.size = size
 	return true
 }
 
@@ -1290,73 +1268,11 @@ apply_compute_to_fragment_barrier :: proc(cmd: vk.CommandBuffer, buf: ^BufferRes
 }
 
 
-execute_single_time_commands :: proc(
-	record: proc(cmd: vk.CommandBuffer, user_data: rawptr) -> bool,
-	user_data: rawptr,
-) -> bool {
-	cmd: vk.CommandBuffer
-	if vk.AllocateCommandBuffers(
-		   device,
-		   &vk.CommandBufferAllocateInfo {
-			   sType = vk.StructureType.COMMAND_BUFFER_ALLOCATE_INFO,
-			   commandPool = command_pool,
-			   level = vk.CommandBufferLevel.PRIMARY,
-			   commandBufferCount = 1,
-		   },
-		   &cmd,
-	   ) !=
-	   vk.Result.SUCCESS {
-		fmt.println("Failed to allocate single-time command buffer")
-		return false
-	}
-	defer vk.FreeCommandBuffers(device, command_pool, 1, &cmd)
-
-	begin_info := vk.CommandBufferBeginInfo {
-		sType = vk.StructureType.COMMAND_BUFFER_BEGIN_INFO,
-		flags = {vk.CommandBufferUsageFlag.ONE_TIME_SUBMIT},
-	}
-
-	if vk.BeginCommandBuffer(cmd, &begin_info) != vk.Result.SUCCESS {
-		fmt.println("Failed to begin single-time command buffer")
-		return false
-	}
-
-	if !record(cmd, user_data) {
-		vk.EndCommandBuffer(cmd)
-		return false
-	}
-
-	if vk.EndCommandBuffer(cmd) != vk.Result.SUCCESS {
-		fmt.println("Failed to end single-time command buffer")
-		return false
-	}
-
-	submit := vk.SubmitInfo {
-		sType              = vk.StructureType.SUBMIT_INFO,
-		commandBufferCount = 1,
-		pCommandBuffers    = &cmd,
-	}
-
-	if vk.QueueSubmit(queue, 1, &submit, vk.Fence{}) != vk.Result.SUCCESS {
-		fmt.println("Failed to submit single-time commands")
-		return false
-	}
-
-	vk.QueueWaitIdle(queue)
-	return true
-}
-
-
 vulkan_cleanup :: proc() {
 	vk.DeviceWaitIdle(device)
 
-	// Command buffers are freed automatically when command pool is destroyed
-	// No need to manually free them since they're allocated from the pool
-
 	destroy_swapchain()
-
 	cleanup_render_resources()
-
 	destroy_render_pipeline_state(render_pipeline_states[:])
 
 	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {

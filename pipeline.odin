@@ -16,70 +16,33 @@ FrameInputs :: struct {
 	delta_time: f32,
 }
 
-
 PipelineState :: struct {
 	pipeline:   vk.Pipeline,
 	layout:     vk.PipelineLayout,
 	push_stage: vk.ShaderStageFlags,
 }
 
-MAX_DESCRIPTOR_BINDINGS :: u32(4)
 
-PipelineKind :: enum {
-	Compute,
-	Post,
-}
 PushConstantInfo :: struct {
 	label: string,
 	stage: vk.ShaderStageFlags,
 	size:  u32,
 }
 
-DescriptorBindingInfo :: struct {
-	label:          string,
-	binding:        u32,
-	descriptorType: vk.DescriptorType,
-	stage:          vk.ShaderStageFlags,
-	buffer:         ^BufferResource,
-	texture:        ^TextureResource,
-	sampler:        ^vk.Sampler,
-}
 
 PipelineSpec :: struct {
-	name:             string,
-	push:             union {
+	name:            string,
+	push:            union {
 		PushConstantInfo,
 		typeid,
 	},
-	compute_module:   string,
-	vertex_module:    string,
-	fragment_module:  string,
-}
-
-ResourceBinding :: union {
-	^BufferResource,
-	^TextureResource,
-}
-
-ComputePipelineConfig :: struct {
-	name:   string,
-	shader: string,
-	push:   PushConstantInfo,
-}
-
-GraphicsPipelineConfig :: struct {
-	name:     string,
-	vertex:   string,
-	fragment: string,
-	push:     PushConstantInfo,
+	compute_module:  string,
+	vertex_module:   string,
+	fragment_module: string,
 }
 
 last_frame_time: f32
-
-descriptor_pool: vk.DescriptorPool
-
 pipelines_ready: bool
-
 
 render_pipeline_specs: [PIPELINE_COUNT]PipelineSpec
 render_pipeline_states: [PIPELINE_COUNT]PipelineState
@@ -101,18 +64,7 @@ begin_render_pass :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) {
 		.INLINE,
 	)
 }
-make_compute_pipeline_spec :: proc(config: ComputePipelineConfig) -> PipelineSpec {
-	return PipelineSpec{name = config.name, push = config.push, compute_module = config.shader}
-}
 
-make_graphics_pipeline_spec :: proc(config: GraphicsPipelineConfig) -> PipelineSpec {
-	return PipelineSpec {
-		name = config.name,
-		push = config.push,
-		vertex_module = config.vertex,
-		fragment_module = config.fragment,
-	}
-}
 make_stage :: proc(
 	stage: vk.ShaderStageFlag,
 	module: vk.ShaderModule,
@@ -125,114 +77,7 @@ make_stage :: proc(
 		pName = name,
 	}
 }
-push_constant_info :: proc(
-	label: string,
-	stage: vk.ShaderStageFlags,
-	size: u32,
-) -> PushConstantInfo {
-	return PushConstantInfo{label = label, stage = stage, size = size}
-}
 
-
-storage_buffer_binding :: proc(
-	label: string,
-	stage: vk.ShaderStageFlags,
-	binding: u32 = 0,
-	resource: ^BufferResource = nil,
-) -> DescriptorBindingInfo {
-	return DescriptorBindingInfo {
-		label = label,
-		binding = binding,
-		descriptorType = vk.DescriptorType.STORAGE_BUFFER,
-		stage = stage,
-		buffer = resource,
-	}
-}
-
-sampled_image_binding :: proc(
-	label: string,
-	stage: vk.ShaderStageFlags,
-	binding: u32 = 0,
-	texture: ^TextureResource = nil,
-) -> DescriptorBindingInfo {
-	return DescriptorBindingInfo {
-		label = label,
-		binding = binding,
-		descriptorType = vk.DescriptorType.SAMPLED_IMAGE,
-		stage = stage,
-		texture = texture,
-	}
-}
-
-sampler_binding :: proc(
-	label: string,
-	stage: vk.ShaderStageFlags,
-	binding: u32 = 0,
-	sampl: ^vk.Sampler = nil,
-) -> DescriptorBindingInfo {
-	return DescriptorBindingInfo {
-		label = label,
-		binding = binding,
-		descriptorType = vk.DescriptorType.SAMPLER,
-		stage = stage,
-		sampler = sampl,
-	}
-}
-
-finish_encoding :: proc(encoder: ^CommandEncoder) {
-	vk.EndCommandBuffer(encoder.command_buffer)
-}
-
-
-//
-
-transition_image_layout :: proc(
-	cmd: vk.CommandBuffer,
-	image: vk.Image,
-	old_layout, new_layout: vk.ImageLayout,
-) -> bool {
-	barrier := vk.ImageMemoryBarrier {
-		sType = vk.StructureType.IMAGE_MEMORY_BARRIER,
-		oldLayout = old_layout,
-		newLayout = new_layout,
-		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		image = image,
-		subresourceRange = {
-			aspectMask = {vk.ImageAspectFlag.COLOR},
-			levelCount = 1,
-			layerCount = 1,
-		},
-	}
-
-	src_stage: vk.PipelineStageFlags
-	dst_stage: vk.PipelineStageFlags
-
-	if old_layout == vk.ImageLayout.UNDEFINED &&
-	   new_layout == vk.ImageLayout.TRANSFER_DST_OPTIMAL {
-		barrier.srcAccessMask = {}
-		barrier.dstAccessMask = {vk.AccessFlag.TRANSFER_WRITE}
-		src_stage = {vk.PipelineStageFlag.TOP_OF_PIPE}
-		dst_stage = {vk.PipelineStageFlag.TRANSFER}
-	} else if old_layout == vk.ImageLayout.TRANSFER_DST_OPTIMAL &&
-	   new_layout == vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL {
-		barrier.srcAccessMask = {vk.AccessFlag.TRANSFER_WRITE}
-		barrier.dstAccessMask = {vk.AccessFlag.SHADER_READ}
-		src_stage = {vk.PipelineStageFlag.TRANSFER}
-		dst_stage = {vk.PipelineStageFlag.FRAGMENT_SHADER, vk.PipelineStageFlag.COMPUTE_SHADER}
-	} else if old_layout == vk.ImageLayout.PREINITIALIZED && new_layout == vk.ImageLayout.GENERAL {
-		barrier.srcAccessMask = {vk.AccessFlag.HOST_WRITE}
-		barrier.dstAccessMask = {vk.AccessFlag.SHADER_READ}
-		src_stage = {vk.PipelineStageFlag.HOST}
-		dst_stage = {vk.PipelineStageFlag.FRAGMENT_SHADER, vk.PipelineStageFlag.COMPUTE_SHADER}
-	} else {
-		fmt.println("Unsupported image layout transition")
-		return false
-	}
-
-	vk.CmdPipelineBarrier(cmd, src_stage, dst_stage, {}, 0, nil, 0, nil, 1, &barrier)
-	return true
-}
 
 begin_frame_commands :: proc(
 	element: ^SwapchainElement,
@@ -277,81 +122,6 @@ bind :: proc(
 	vk.CmdPushConstants(frame.cmd, state.layout, state.push_stage, 0, push_size, push_constants)
 }
 
-allocate_descriptor_set :: proc(
-	layout: vk.DescriptorSetLayout,
-	fail_msg: string,
-) -> (
-	descriptor_set: vk.DescriptorSet,
-	ok: bool,
-) {
-	layouts := [1]vk.DescriptorSetLayout{layout}
-	vkw(
-		vk.AllocateDescriptorSets,
-		device,
-		&vk.DescriptorSetAllocateInfo {
-			sType = vk.StructureType.DESCRIPTOR_SET_ALLOCATE_INFO,
-			descriptorPool = descriptor_pool,
-			descriptorSetCount = 1,
-			pSetLayouts = raw_data(layouts[:]),
-		},
-		&descriptor_set,
-		fail_msg,
-	) or_return
-	ok = true
-	return
-}
-create_descriptor_pool :: proc(pool_sizes: []vk.DescriptorPoolSize, set_count: int) -> bool {
-	if len(pool_sizes) == 0 do return false
-	descriptor_pool = vkw(
-		vk.CreateDescriptorPool,
-		device,
-		&vk.DescriptorPoolCreateInfo {
-			sType = .DESCRIPTOR_POOL_CREATE_INFO,
-			flags = {.FREE_DESCRIPTOR_SET},
-			poolSizeCount = u32(len(pool_sizes)),
-			pPoolSizes = &pool_sizes[0],
-			maxSets = u32(set_count),
-		},
-		"descriptor pool",
-		vk.DescriptorPool,
-	) or_return
-	return true
-}
-
-update_bindless_texture :: proc(slot: u32, tex: ^TextureResource) -> bool {
-    img_info := vk.DescriptorImageInfo{
-        imageView   = tex.view,
-        imageLayout = .SHADER_READ_ONLY_OPTIMAL,
-    }
-    samp_info := vk.DescriptorImageInfo{
-        sampler     = tex.sampler,
-        imageLayout = .SHADER_READ_ONLY_OPTIMAL,
-    }
-
-    writes := [2]vk.WriteDescriptorSet{
-        {
-            sType            = .WRITE_DESCRIPTOR_SET,
-            dstSet           = global_desc_set,
-            dstBinding       = 1,           // sampled image array
-            dstArrayElement  = slot,        // slot index in textures[]
-            descriptorCount  = 1,
-            descriptorType   = .SAMPLED_IMAGE,
-            pImageInfo       = &img_info,
-        },
-        {
-            sType            = .WRITE_DESCRIPTOR_SET,
-            dstSet           = global_desc_set,
-            dstBinding       = 2,           // sampler array
-            dstArrayElement  = slot,        // slot index in samplers[]
-            descriptorCount  = 1,
-            descriptorType   = .SAMPLER,
-            pImageInfo       = &samp_info,
-        },
-    }
-
-    vk.UpdateDescriptorSets(device, u32(len(writes)), &writes[0], 0, nil)
-    return true
-}
 
 //BUILD PIPEZ
 
@@ -363,56 +133,34 @@ update_bindless_texture :: proc(slot: u32, tex: ^TextureResource) -> bool {
 global_desc_layout: vk.DescriptorSetLayout
 global_desc_set: vk.DescriptorSet
 
-update_global_descriptors :: proc() -> bool {
-	buf_info := vk.DescriptorBufferInfo {
-		buffer = accumulation_buffer.buffer,
-		offset = 0,
-		range  = accumulation_buffer.size,
+
+bind_resource :: proc(slot: u32, resource: $T) {
+	w := vk.WriteDescriptorSet {
+		sType           = .WRITE_DESCRIPTOR_SET,
+		dstSet          = global_desc_set,
+		dstArrayElement = slot,
+		descriptorCount = 1,
 	}
 
-	img_info := vk.DescriptorImageInfo {
-		imageView   = sprite_texture.view,
-		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+	when T == ^BufferResource {
+		w.dstBinding = 0
+		w.descriptorType = .STORAGE_BUFFER
+		w.pBufferInfo = &vk.DescriptorBufferInfo{buffer = resource.buffer, range = resource.size}
+	}
+	when T == ^TextureResource {
+		w.dstBinding = 1
+		w.descriptorType = .SAMPLED_IMAGE
+		w.pImageInfo =
+		&vk.DescriptorImageInfo{imageView = resource.view, imageLayout = .SHADER_READ_ONLY_OPTIMAL}
+	}
+	when T == ^vk.Sampler {
+		w.dstBinding = 2
+		w.descriptorType = .SAMPLER
+		w.pImageInfo = &vk.DescriptorImageInfo{sampler = resource^}
 	}
 
-	samp_info := vk.DescriptorImageInfo {
-		sampler = sprite_texture.sampler,
-	}
-
-	writes := [3]vk.WriteDescriptorSet {
-		{
-			sType           = .WRITE_DESCRIPTOR_SET,
-			dstSet          = global_desc_set,
-			dstBinding      = 0, // STORAGE_BUFFER[]
-			dstArrayElement = 0,
-			descriptorCount = 1,
-			descriptorType  = .STORAGE_BUFFER,
-			pBufferInfo     = &buf_info,
-		},
-		{
-			sType           = .WRITE_DESCRIPTOR_SET,
-			dstSet          = global_desc_set,
-			dstBinding      = 1, // SAMPLED_IMAGE[]
-			dstArrayElement = 0,
-			descriptorCount = 1,
-			descriptorType  = .SAMPLED_IMAGE,
-			pImageInfo      = &img_info,
-		},
-		{
-			sType           = .WRITE_DESCRIPTOR_SET,
-			dstSet          = global_desc_set,
-			dstBinding      = 2, // SAMPLER[]
-			dstArrayElement = 0,
-			descriptorCount = 1,
-			descriptorType  = .SAMPLER,
-			pImageInfo      = &samp_info,
-		},
-	}
-
-	vk.UpdateDescriptorSets(device, u32(len(writes)), &writes[0], 0, nil)
-	return true
+	vk.UpdateDescriptorSets(device, 1, &w, 0, nil)
 }
-
 
 init_global_descriptors :: proc() -> bool {
 	bindings := [3]vk.DescriptorSetLayoutBinding {
@@ -485,17 +233,8 @@ init_global_descriptors :: proc() -> bool {
 build_pipelines :: proc(specs: []PipelineSpec, states: []PipelineState) -> bool {
 	assert(len(specs) == len(states), "pipeline spec/state length mismatch")
 	if len(specs) == 0 do return true
-	pool_sizes := []vk.DescriptorPoolSize {
-		{type = .STORAGE_BUFFER, descriptorCount = 1},
-		{type = .SAMPLED_IMAGE, descriptorCount = 1},
-		{type = .SAMPLER, descriptorCount = 1},
-	}
-	create_descriptor_pool(pool_sizes, len(specs)) or_return
 	for idx in 0 ..< len(specs) {
-		if !build_pipeline(&specs[idx], &states[idx]) {
-			fmt.println("Failed to build pipeline at index", idx, "name =", specs[idx].name)
-			return false
-		}
+		build_pipeline(&specs[idx], &states[idx]) or_return
 	}
 	return true
 }
