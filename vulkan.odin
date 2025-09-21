@@ -403,17 +403,19 @@ layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
 // ──────────────────────────────────────────────────────────────
 // Device extensions to reduce boilerplate & enable advanced features
 // ──────────────────────────────────────────────────────────────
+
 device_extension_names := [?]cstring {
-	"VK_KHR_swapchain", // required
-	"VK_KHR_synchronization2", // simpler barriers
-	"VK_EXT_descriptor_indexing", // bindless descriptors
-	"VK_KHR_push_descriptor", // skip pools for small sets
-	"VK_EXT_extended_dynamic_state", // dynamic state
+	"VK_KHR_swapchain",
+	"VK_KHR_synchronization2",
+	"VK_EXT_descriptor_indexing",
+	"VK_KHR_push_descriptor",
+	"VK_EXT_extended_dynamic_state",
 	"VK_EXT_extended_dynamic_state2",
 	"VK_EXT_extended_dynamic_state3",
-	"VK_EXT_graphics_pipeline_library", // faster pipeline reloads
-	"VK_KHR_dedicated_allocation", // simpler memory rules
-	"VK_KHR_get_memory_requirements2", // required for dedicated alloc
+	"VK_EXT_graphics_pipeline_library",
+	"VK_KHR_pipeline_library", // required by GPL
+	"VK_KHR_dedicated_allocation",
+	"VK_KHR_get_memory_requirements2",
 }
 
 create_logical_device :: proc() -> bool {
@@ -445,13 +447,18 @@ create_logical_device :: proc() -> bool {
 		synchronization2 = true,
 	}
 
-	// (Optional) more features could be chained here if needed later
+	// Graphics Pipeline Library (EXT) — REQUIRED when enabling the extension
+	gpl_features := vk.PhysicalDeviceGraphicsPipelineLibraryFeaturesEXT {
+		sType                   = .PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
+		graphicsPipelineLibrary = true,
+	}
 
-	// Chain them: timeline → indexing → sync2
+	// Chain them: timeline → indexing → sync2 → GPL
 	timeline_features.pNext = &desc_indexing
 	desc_indexing.pNext = &sync2_features
+	sync2_features.pNext = &gpl_features
 
-	// Query support — recommended to verify the GPU actually supports them
+	// (Optional) query support
 	features2 := vk.PhysicalDeviceFeatures2 {
 		sType = .PHYSICAL_DEVICE_FEATURES_2,
 		pNext = &timeline_features,
@@ -460,7 +467,7 @@ create_logical_device :: proc() -> bool {
 
 	device_create_info := vk.DeviceCreateInfo {
 		sType                   = .DEVICE_CREATE_INFO,
-		pNext                   = &timeline_features, // start of feature chain
+		pNext                   = &timeline_features, // start of chain
 		queueCreateInfoCount    = 1,
 		pQueueCreateInfos       = &queue_create_info,
 		enabledLayerCount       = ENABLE_VALIDATION ? len(layer_names) : 0,
@@ -1376,6 +1383,54 @@ vulkan_cleanup :: proc() {
 
 // Single path: decode -> allocate -> copy -> view -> sampler
 
+transition_to_sampled :: proc(image: vk.Image) {
+	cmd: vk.CommandBuffer
+	vk.AllocateCommandBuffers(
+		device,
+		&vk.CommandBufferAllocateInfo {
+			sType = .COMMAND_BUFFER_ALLOCATE_INFO,
+			level = .PRIMARY,
+			commandPool = command_pool,
+			commandBufferCount = 1,
+		},
+		&cmd,
+	)
+
+	vk.BeginCommandBuffer(
+		cmd,
+		&vk.CommandBufferBeginInfo{sType = .COMMAND_BUFFER_BEGIN_INFO, flags = {.ONE_TIME_SUBMIT}},
+	)
+
+	vk.CmdPipelineBarrier2(
+		cmd,
+		&vk.DependencyInfo {
+			sType = .DEPENDENCY_INFO,
+			imageMemoryBarrierCount = 1,
+			pImageMemoryBarriers = &vk.ImageMemoryBarrier2 {
+				sType = .IMAGE_MEMORY_BARRIER_2,
+				srcStageMask = {.HOST},
+				srcAccessMask = {.HOST_WRITE},
+				dstStageMask = {.FRAGMENT_SHADER},
+				dstAccessMask = {.SHADER_READ},
+				oldLayout = .PREINITIALIZED,
+				newLayout = .SHADER_READ_ONLY_OPTIMAL,
+				image = image,
+				subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+			},
+		},
+	)
+
+	vk.EndCommandBuffer(cmd)
+	vk.QueueSubmit(
+		queue,
+		1,
+		&vk.SubmitInfo{sType = .SUBMIT_INFO, commandBufferCount = 1, pCommandBuffers = &cmd},
+		{},
+	)
+	vk.QueueWaitIdle(queue)
+	vk.FreeCommandBuffers(device, command_pool, 1, &cmd)
+}
+
 create_texture_from_png :: proc(path: string) -> (TextureResource, bool) {
 	tex: TextureResource
 
@@ -1387,24 +1442,20 @@ create_texture_from_png :: proc(path: string) -> (TextureResource, bool) {
 
 	required := img.width * img.height * 4
 	src := bytes.buffer_to_bytes(&img.pixels)
-	pixels := make([]u8, required)
-	defer delete(pixels)
-
-	copy(pixels, src[:required])
 
 	// --- Image
 	ci := vk.ImageCreateInfo {
-		sType = vk.StructureType.IMAGE_CREATE_INFO,
-		imageType = vk.ImageType.D2,
-		format = vk.Format.R8G8B8A8_UNORM,
-		extent = {width = u32(img.width), height = u32(img.height), depth = 1},
-		mipLevels = 1,
-		arrayLayers = 1,
-		samples = {vk.SampleCountFlag._1},
-		tiling = vk.ImageTiling.LINEAR,
-		usage = {vk.ImageUsageFlag.SAMPLED},
-		sharingMode = vk.SharingMode.EXCLUSIVE,
-		initialLayout = vk.ImageLayout.PREINITIALIZED,
+		sType         = .IMAGE_CREATE_INFO,
+		imageType     = .D2,
+		format        = .R8G8B8A8_UNORM,
+		extent        = {u32(img.width), u32(img.height), 1},
+		mipLevels     = 1,
+		arrayLayers   = 1,
+		samples       = {._1},
+		tiling        = .LINEAR,
+		usage         = {.SAMPLED},
+		sharingMode   = .EXCLUSIVE,
+		initialLayout = .PREINITIALIZED,
 	}
 	tex.image, _ = vkw(vk.CreateImage, device, &ci, "texture image", vk.Image)
 
@@ -1412,11 +1463,11 @@ create_texture_from_png :: proc(path: string) -> (TextureResource, bool) {
 	vk.GetImageMemoryRequirements(device, tex.image, &mem_req)
 
 	alloc := vk.MemoryAllocateInfo {
-		sType           = vk.StructureType.MEMORY_ALLOCATE_INFO,
+		sType           = .MEMORY_ALLOCATE_INFO,
 		allocationSize  = mem_req.size,
 		memoryTypeIndex = find_memory_type(
 			mem_req.memoryTypeBits,
-			{vk.MemoryPropertyFlag.HOST_VISIBLE, vk.MemoryPropertyFlag.HOST_COHERENT},
+			{.HOST_VISIBLE, .HOST_COHERENT},
 		),
 	}
 	vk.AllocateMemory(device, &alloc, nil, &tex.memory)
@@ -1425,54 +1476,37 @@ create_texture_from_png :: proc(path: string) -> (TextureResource, bool) {
 	// --- Copy pixels
 	data: rawptr
 	vk.MapMemory(device, tex.memory, 0, mem_req.size, {}, &data)
-	runtime.mem_copy_non_overlapping(data, raw_data(pixels), len(pixels))
+	runtime.mem_copy_non_overlapping(data, raw_data(src), required)
 	vk.UnmapMemory(device, tex.memory)
 
-	// --- Transition layout from PREINITIALIZED to GENERAL
-	if !execute_single_time_commands(proc(cmd: vk.CommandBuffer, user_data: rawptr) -> bool {
-			tex := (^TextureResource)(user_data)
-			return transition_image_layout(
-				cmd,
-				tex.image,
-				vk.ImageLayout.PREINITIALIZED,
-				vk.ImageLayout.GENERAL,
-			)
-		}, &tex) {
-		return tex, false
-	}
-
-	// --- Metadata
-	tex.width = u32(img.width)
-	tex.height = u32(img.height)
-	tex.format = vk.Format.R8G8B8A8_UNORM
-	tex.layout = vk.ImageLayout.GENERAL
+	// --- Transition PREINITIALIZED → SHADER_READ_ONLY_OPTIMAL
+	transition_to_sampled(tex.image)
+	tex.layout = .SHADER_READ_ONLY_OPTIMAL
 
 	// --- View
 	vi := vk.ImageViewCreateInfo {
-		sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
+		sType = .IMAGE_VIEW_CREATE_INFO,
 		image = tex.image,
-		viewType = vk.ImageViewType.D2,
-		format = tex.format,
-		subresourceRange = {
-			aspectMask = {vk.ImageAspectFlag.COLOR},
-			levelCount = 1,
-			layerCount = 1,
-		},
+		viewType = .D2,
+		format = .R8G8B8A8_UNORM,
+		subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
 	}
 	tex.view, _ = vkw(vk.CreateImageView, device, &vi, "texture view", vk.ImageView)
 
 	// --- Sampler
 	si := vk.SamplerCreateInfo {
-		sType        = vk.StructureType.SAMPLER_CREATE_INFO,
-		magFilter    = vk.Filter.LINEAR,
-		minFilter    = vk.Filter.LINEAR,
-		addressModeU = vk.SamplerAddressMode.CLAMP_TO_EDGE,
-		addressModeV = vk.SamplerAddressMode.CLAMP_TO_EDGE,
-		addressModeW = vk.SamplerAddressMode.CLAMP_TO_EDGE,
-		borderColor  = vk.BorderColor.FLOAT_OPAQUE_WHITE,
+		sType        = .SAMPLER_CREATE_INFO,
+		magFilter    = .LINEAR,
+		minFilter    = .LINEAR,
+		addressModeU = .CLAMP_TO_EDGE,
+		addressModeV = .CLAMP_TO_EDGE,
+		addressModeW = .CLAMP_TO_EDGE,
 	}
 	tex.sampler, _ = vkw(vk.CreateSampler, device, &si, "sampler", vk.Sampler)
 
+	tex.width = u32(img.width)
+	tex.height = u32(img.height)
+	tex.format = .R8G8B8A8_UNORM
 	return tex, true
 }
 

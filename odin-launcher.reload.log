@@ -43,8 +43,6 @@ Validation layer:            Manifest: /usr/share/vulkan/explicit_layer.d/VkLaye
 Validation layer:            Library:  libVkLayer_khronos_validation.so
 Validation layer:      ||
 Validation layer:    <Device>
-Validation layer: vkCreateDevice(): pCreateInfo->ppEnabledExtensionNames[7] Missing extension required by the device extension VK_EXT_graphics_pipeline_library: VK_KHR_pipeline_library.
-The Vulkan spec states: All required device extensions for each extension in the VkDeviceCreateInfo::ppEnabledExtensionNames list must also be present in that list. (https://docs.vulkan.org/spec/latest/chapters/devsandqueues.html#VUID-vkCreateDevice-ppEnabledExtensionNames-01387)
 Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "libGLX_nvidia.so.0"
 compiling shader:
 compiling shader:
