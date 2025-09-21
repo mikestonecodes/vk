@@ -318,6 +318,40 @@ create_descriptor_pool :: proc(pool_sizes: []vk.DescriptorPoolSize, set_count: i
 	return true
 }
 
+update_bindless_texture :: proc(slot: u32, tex: ^TextureResource) -> bool {
+    img_info := vk.DescriptorImageInfo{
+        imageView   = tex.view,
+        imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+    }
+    samp_info := vk.DescriptorImageInfo{
+        sampler     = tex.sampler,
+        imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+    }
+
+    writes := [2]vk.WriteDescriptorSet{
+        {
+            sType            = .WRITE_DESCRIPTOR_SET,
+            dstSet           = global_desc_set,
+            dstBinding       = 1,           // sampled image array
+            dstArrayElement  = slot,        // slot index in textures[]
+            descriptorCount  = 1,
+            descriptorType   = .SAMPLED_IMAGE,
+            pImageInfo       = &img_info,
+        },
+        {
+            sType            = .WRITE_DESCRIPTOR_SET,
+            dstSet           = global_desc_set,
+            dstBinding       = 2,           // sampler array
+            dstArrayElement  = slot,        // slot index in samplers[]
+            descriptorCount  = 1,
+            descriptorType   = .SAMPLER,
+            pImageInfo       = &samp_info,
+        },
+    }
+
+    vk.UpdateDescriptorSets(device, u32(len(writes)), &writes[0], 0, nil)
+    return true
+}
 
 //BUILD PIPEZ
 

@@ -47,8 +47,16 @@ Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver:
 compiling shader:
 compiling shader:
 compiling shader:
-Discovered 2 shaders: graphics.hlsl compute.hlsl
+Discovered 2 shaders: compute.hlsl graphics.hlsl
 Window resized to 1866x1026
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling graphics.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
 compiling shader:
 compiling shader:
 compiling shader:

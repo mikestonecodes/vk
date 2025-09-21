@@ -81,6 +81,7 @@ init_render_resources :: proc() -> bool {
 	)
 
 	sprite_texture = create_texture_from_png("test3.png") or_return
+	update_bindless_texture(0, &sprite_texture) or_return
 
 	sprite_texture_width = sprite_texture.width
 	sprite_texture_height = sprite_texture.height
