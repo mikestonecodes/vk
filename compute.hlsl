@@ -29,8 +29,7 @@ struct PushConstants {
 [[vk::binding(0, 0)]] RWStructuredBuffer<uint> buffers[];
 
 struct GlobalData {
-	float camx;
-	float camy;
+	float2 camPos;
 };
 
 [[vk::binding(3, 0)]] RWStructuredBuffer<GlobalData> globalData;
@@ -59,7 +58,6 @@ float2 rand2(uint n) {
     );
 }
 
-
 [numthreads(128,1,1)]
 void main(uint3 tid : SV_DispatchThreadID)
 {
@@ -71,7 +69,7 @@ void main(uint3 tid : SV_DispatchThreadID)
     RWStructuredBuffer<uint> accum_buffer = buffers[0];
 
     // --- Load persisted camera state as floats ---
-    float2 camPos = float2(globalData[0].camx, globalData[0].camy);
+    float2 camPos = float2(globalData[0].camPos);
 
     // --- Input delta (normalize so diagonals aren't faster) ---
     float2 delta = float2(
@@ -101,9 +99,12 @@ void main(uint3 tid : SV_DispatchThreadID)
     float2 p = basePos + offset + camPos;
     int2 ip  = int2(floor(p + 0.5));
 
-    // Wrap safely to [0..W-1], [0..H-1]
-    ip.x = ((ip.x % int(W)) + int(W)) % int(W);
-    ip.y = ((ip.y % int(H)) + int(H)) % int(H);
+    // Proper wrapping for negative coordinates
+    if (ip.x < 0) ip.x = int(W) - 1 - ((-ip.x - 1) % int(W));
+    else ip.x = ip.x % int(W);
+
+    if (ip.y < 0) ip.y = int(H) - 1 - ((-ip.y - 1) % int(H));
+    else ip.y = ip.y % int(H);
 
     uint2 pix = uint2(ip);
     uint baseIdx = (pix.y * W + pix.x) * 4u;
@@ -112,7 +113,6 @@ void main(uint3 tid : SV_DispatchThreadID)
     float dirtHue  = 0.1 + 0.1 * sin(id * 0.37);
     float3 baseCol = float3(0.35 + dirtHue, 0.25 + dirtHue*0.5, 0.15);
     baseCol *= (0.7 + 0.6 * hash11(id * 771u)) * max(push_constants.brightness, 0.0);
-
     uint addR = (uint)(saturate(baseCol.r) * COLOR_SCALE);
     uint addG = (uint)(saturate(baseCol.g) * COLOR_SCALE);
     uint addB = (uint)(saturate(baseCol.b) * COLOR_SCALE);
@@ -125,8 +125,7 @@ void main(uint3 tid : SV_DispatchThreadID)
 
     // Persist exactly once per dispatch
     if (id == 0) {
-        globalData[0].camx = camPos.x;
-        globalData[0].camy = camPos.y;
+        globalData[0].camPos = camPos;
     }
 }
 

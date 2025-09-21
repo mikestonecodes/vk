@@ -51,8 +51,8 @@ ComputePushConstants :: struct {
 }
 
 GlobalData :: struct {
-	camx: f32,
-	camy: f32,
+	camPos_x: f32,
+	camPos_y: f32,
 }
 
 compute_push_constants: ComputePushConstants

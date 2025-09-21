@@ -45,37 +45,51 @@ Validation layer:      ||
 Validation layer:    <Device>
 Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "libGLX_nvidia.so.0"
 compiling shader:
+compute.hlsl:73:42: error: no member named 'camx' in 'GlobalData'
+    float2 camPos = float2(globalData[0].camx, globalData[0].camy);
+                           ~~~~~~~~~~~~~ ^
+compute.hlsl:73:62: error: no member named 'camy' in 'GlobalData'
+    float2 camPos = float2(globalData[0].camx, globalData[0].camy);
+                                               ~~~~~~~~~~~~~ ^
+compute.hlsl:127:23: error: no member named 'camx' in 'GlobalData'
+        globalData[0].camx = camPos.x;
+        ~~~~~~~~~~~~~ ^
+compute.hlsl:128:23: error: no member named 'camy' in 'GlobalData'
+        globalData[0].camy = camPos.y;
+        ~~~~~~~~~~~~~ ^
+
+Shader compilation failed: compute.hlsl
 compiling shader:
 compiling shader:
-Discovered 2 shaders: graphics.hlsl compute.hlsl
+Discovered 2 shaders: compute.hlsl graphics.hlsl
 Window resized to 1866x1026
 compiling shader:
+compute.hlsl:73:42: error: no member named 'camx' in 'GlobalData'
+    float2 camPos = float2(globalData[0].camx, globalData[0].camy);
+                           ~~~~~~~~~~~~~ ^
+compute.hlsl:73:62: error: no member named 'camy' in 'GlobalData'
+    float2 camPos = float2(globalData[0].camx, globalData[0].camy);
+                                               ~~~~~~~~~~~~~ ^
+compute.hlsl:127:23: error: no member named 'camx' in 'GlobalData'
+        globalData[0].camx = camPos.x;
+        ~~~~~~~~~~~~~ ^
+compute.hlsl:128:23: error: no member named 'camy' in 'GlobalData'
+        globalData[0].camy = camPos.y;
+        ~~~~~~~~~~~~~ ^
+
+Shader compilation failed: compute.hlsl
 compiling shader:
 compiling shader:
 Recompiling compute.hlsl
 compiling shader:
-compute.hlsl:63:8: error: redefinition of 'GlobalData'
-struct GlobalData {
-       ^
-compute.hlsl:31:8: note: previous definition is here
-struct GlobalData {
-       ^
-compute.hlsl:68:54: error: redefinition of 'globalData'
-[[vk::binding(3, 0)]] RWStructuredBuffer<GlobalData> globalData;
-                                                     ^
-compute.hlsl:36:54: note: previous definition is here
-[[vk::binding(3, 0)]] RWStructuredBuffer<GlobalData> globalData;
-                                                     ^
+compute.hlsl:128:23: error: no member named 'camx' in 'GlobalData'
+        globalData[0].camx = camPos.x;
+        ~~~~~~~~~~~~~ ^
+compute.hlsl:129:23: error: no member named 'camy' in 'GlobalData'
+        globalData[0].camy = camPos.y;
+        ~~~~~~~~~~~~~ ^
 
 Failed: compute.hlsl
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
 Recompiling compute.hlsl
 compiling shader:
 compiling shader:
