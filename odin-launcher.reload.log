@@ -7,25 +7,25 @@ Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 Validation layer: Copying old device 0 into new device 0
 Validation layer: Removing driver /usr/lib/libvulkan_intel.so due to not having any physical devices
 Validation layer: Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
@@ -45,51 +45,17 @@ Validation layer:      ||
 Validation layer:    <Device>
 Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "libGLX_nvidia.so.0"
 compiling shader:
-compute.hlsl:73:42: error: no member named 'camx' in 'GlobalData'
-    float2 camPos = float2(globalData[0].camx, globalData[0].camy);
-                           ~~~~~~~~~~~~~ ^
-compute.hlsl:73:62: error: no member named 'camy' in 'GlobalData'
-    float2 camPos = float2(globalData[0].camx, globalData[0].camy);
-                                               ~~~~~~~~~~~~~ ^
-compute.hlsl:127:23: error: no member named 'camx' in 'GlobalData'
-        globalData[0].camx = camPos.x;
-        ~~~~~~~~~~~~~ ^
-compute.hlsl:128:23: error: no member named 'camy' in 'GlobalData'
-        globalData[0].camy = camPos.y;
-        ~~~~~~~~~~~~~ ^
-
-Shader compilation failed: compute.hlsl
 compiling shader:
 compiling shader:
-Discovered 2 shaders: compute.hlsl graphics.hlsl
+Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
+The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)
+Discovered 2 shaders: compute.hlsl graphics.hlsl 
 Window resized to 1866x1026
 compiling shader:
-compute.hlsl:73:42: error: no member named 'camx' in 'GlobalData'
-    float2 camPos = float2(globalData[0].camx, globalData[0].camy);
-                           ~~~~~~~~~~~~~ ^
-compute.hlsl:73:62: error: no member named 'camy' in 'GlobalData'
-    float2 camPos = float2(globalData[0].camx, globalData[0].camy);
-                                               ~~~~~~~~~~~~~ ^
-compute.hlsl:127:23: error: no member named 'camx' in 'GlobalData'
-        globalData[0].camx = camPos.x;
-        ~~~~~~~~~~~~~ ^
-compute.hlsl:128:23: error: no member named 'camy' in 'GlobalData'
-        globalData[0].camy = camPos.y;
-        ~~~~~~~~~~~~~ ^
-
-Shader compilation failed: compute.hlsl
 compiling shader:
 compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compute.hlsl:128:23: error: no member named 'camx' in 'GlobalData'
-        globalData[0].camx = camPos.x;
-        ~~~~~~~~~~~~~ ^
-compute.hlsl:129:23: error: no member named 'camy' in 'GlobalData'
-        globalData[0].camy = camPos.y;
-        ~~~~~~~~~~~~~ ^
-
-Failed: compute.hlsl
+Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
+The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)
 Recompiling compute.hlsl
 compiling shader:
 compiling shader:
@@ -98,3 +64,35 @@ compiling shader:
 compiling shader:
 compiling shader:
 compiling shader:
+Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
+The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)
+Recompiling compute.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
+The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)
+Recompiling compute.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
+The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)
+Recompiling graphics.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
+The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)

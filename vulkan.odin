@@ -478,6 +478,9 @@ create_logical_device :: proc() -> bool {
 	}
 	features2 := vk.PhysicalDeviceFeatures2 {
 		sType = .PHYSICAL_DEVICE_FEATURES_2,
+		features = vk.PhysicalDeviceFeatures{
+			fragmentStoresAndAtomics = true,
+		},
 		pNext = &timeline,
 	}
 	vk.GetPhysicalDeviceFeatures2(phys_device, &features2)

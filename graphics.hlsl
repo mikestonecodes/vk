@@ -26,6 +26,15 @@ VertexOutput vs_main(uint vid:SV_VertexID) {
 }
 
 static const float COLOR_SCALE = 4096.0f;
+struct GlobalData {
+	float2 camPos;
+	float zoom;
+	float pad;
+};
+
+[[vk::binding(3, 0)]] RWStructuredBuffer<GlobalData> globalData;
+
+
 
 float4 fs_main(VertexOutput input) : SV_Target {
     uint w = push_constants.screen_width;
@@ -35,7 +44,7 @@ float4 fs_main(VertexOutput input) : SV_Target {
     uint2 p = uint2(uv * float2(w,h));
     p = min(p, uint2(w-1,h-1));
 
-    const int R = 16;
+    int R = max(1, int(16.0 * globalData[0].zoom));
     float3 col    = 0.0;
     float density = 0.0;
     float weightSum = 0.0;

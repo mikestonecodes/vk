@@ -53,6 +53,8 @@ ComputePushConstants :: struct {
 GlobalData :: struct {
 	camPos_x: f32,
 	camPos_y: f32,
+	zoom:     f32,
+	padding:  f32,
 }
 
 compute_push_constants: ComputePushConstants
@@ -120,7 +122,7 @@ init_render_resources :: proc() -> bool {
 	bind_resource(0, &accumulation_buffer)
 	bind_resource(0, &sprite_texture)
 	bind_resource(0, &sprite_texture.sampler)
-	bind_resource(0, &extra_data_buffer,3)
+	bind_resource(0, &extra_data_buffer, 3)
 
 
 	return true

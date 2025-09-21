@@ -187,7 +187,7 @@ init_global_descriptors :: proc() -> bool {
 			binding         = 3,
 			descriptorType  = .STORAGE_BUFFER,
 			descriptorCount = 1, // global state (camera, etc.)
-			stageFlags      = {vk.ShaderStageFlag.COMPUTE},
+			stageFlags      = {vk.ShaderStageFlag.COMPUTE, vk.ShaderStageFlag.FRAGMENT},
 		},
 	}
 

@@ -30,6 +30,8 @@ struct PushConstants {
 
 struct GlobalData {
 	float2 camPos;
+	float zoom;
+	float pad;
 };
 
 [[vk::binding(3, 0)]] RWStructuredBuffer<GlobalData> globalData;
@@ -62,7 +64,6 @@ float2 rand2(uint n) {
 void main(uint3 tid : SV_DispatchThreadID)
 {
     uint id = tid.x;
-
     const uint W = push_constants.screen_width;
     const uint H = push_constants.screen_height;
 
@@ -70,6 +71,10 @@ void main(uint3 tid : SV_DispatchThreadID)
 
     // --- Load persisted camera state as floats ---
     float2 camPos = float2(globalData[0].camPos);
+    float current_zoom = globalData[0].zoom;
+
+    // Initialize zoom to 1.0 if it's 0 or invalid
+    if (current_zoom <= 0.0) current_zoom = 1.0;
 
     // --- Input delta (normalize so diagonals aren't faster) ---
     float2 delta = float2(
@@ -78,6 +83,17 @@ void main(uint3 tid : SV_DispatchThreadID)
     );
     float len2 = dot(delta, delta);
     if (len2 > 0.0) delta /= sqrt(len2);
+
+    // --- Zoom input (E = zoom in, Q = zoom out) ---
+    float zoom_delta = (push_constants.key_e ? 1.0 : 0.0) - (push_constants.key_q ? 1.0 : 0.0);
+    float zoom_speed = 1.5;
+    float zoom_factor = current_zoom * exp(zoom_delta * zoom_speed * push_constants.delta_time);
+
+    // Clamp zoom to reasonable bounds
+    zoom_factor = clamp(zoom_factor, 0.1, 10.0);
+
+
+
 
     float camera_speed = 400.0;
     camPos += delta * camera_speed * push_constants.delta_time;
@@ -88,15 +104,20 @@ void main(uint3 tid : SV_DispatchThreadID)
 
     float phase  = hash11(id) * TWO_PI;
     float radius = 10.0 + 40.0 * hash11(id * 77u);
-    float speed  = 0.5  + 0.2 * hash11(id * 31337u);
+    //float speed  = 0.5  + 0.2 * hash11(id * 31337u);
+
+    float speed  = 0.0;
 
     float2 offset = float2(
         cos(push_constants.time * speed + phase),
         sin(push_constants.time * speed + phase)
     ) * radius;
 
-    // Integer pixel coord after applying persistent camera
+    // Integer pixel coord after applying persistent camera and zoom
+    float2 screen_center = float2(W, H) * 0.5;
     float2 p = basePos + offset + camPos;
+    // Invert zoom so higher values = zoom in (make things bigger)
+    p = (p - screen_center) / zoom_factor + screen_center;
     int2 ip  = int2(floor(p + 0.5));
 
     // Proper wrapping for negative coordinates
@@ -126,6 +147,7 @@ void main(uint3 tid : SV_DispatchThreadID)
     // Persist exactly once per dispatch
     if (id == 0) {
         globalData[0].camPos = camPos;
+        globalData[0].zoom = zoom_factor;
     }
 }
 
