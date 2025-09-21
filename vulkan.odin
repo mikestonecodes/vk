@@ -379,17 +379,10 @@ handle_resize :: proc() {
 }
 
 vulkan_init :: proc() -> (ok: bool) {
-	// Get initial window size
-	fmt.println("DEBUG: Getting window size")
 	update_window_size()
-
-	fmt.println("DEBUG: Initializing Vulkan")
-	if !init_vulkan() do return false
-	fmt.println("DEBUG: Creating swapchain")
+	init_vulkan() or_return
 	create_swapchain() or_return
-	fmt.println("DEBUG: Initializing resources")
-	if !init_vulkan_resources() do return false
-	fmt.println("DEBUG: Vulkan init complete")
+	init_vulkan_resources() or_return
 	return true
 }
 
@@ -397,16 +390,94 @@ vulkan_init :: proc() -> (ok: bool) {
 get_instance_extensions :: proc() -> []cstring {
 	// Get required extensions from GLFW
 	glfw_extensions := glfw.GetRequiredInstanceExtensions()
-	extensions := make([]cstring, len(glfw_extensions) + 1)
+	extensions := make([]cstring, len(glfw_extensions) + 2)
 	for i in 0 ..< len(glfw_extensions) {
 		extensions[i] = glfw_extensions[i]
 	}
 	extensions[len(glfw_extensions)] = "VK_EXT_debug_utils"
+	extensions[len(glfw_extensions) + 1] = "VK_EXT_validation_features" // optional but useful
 	return extensions
 }
 layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
-device_extension_names := [?]cstring{"VK_KHR_swapchain"}
 
+// ──────────────────────────────────────────────────────────────
+// Device extensions to reduce boilerplate & enable advanced features
+// ──────────────────────────────────────────────────────────────
+device_extension_names := [?]cstring {
+	"VK_KHR_swapchain", // required
+	"VK_KHR_synchronization2", // simpler barriers
+	"VK_EXT_descriptor_indexing", // bindless descriptors
+	"VK_KHR_push_descriptor", // skip pools for small sets
+	"VK_EXT_extended_dynamic_state", // dynamic state
+	"VK_EXT_extended_dynamic_state2",
+	"VK_EXT_extended_dynamic_state3",
+	"VK_EXT_graphics_pipeline_library", // faster pipeline reloads
+	"VK_KHR_dedicated_allocation", // simpler memory rules
+	"VK_KHR_get_memory_requirements2", // required for dedicated alloc
+}
+
+create_logical_device :: proc() -> bool {
+	queue_priority: f32 = 1.0
+	queue_create_info := vk.DeviceQueueCreateInfo {
+		sType            = .DEVICE_QUEUE_CREATE_INFO,
+		queueFamilyIndex = queue_family_index,
+		queueCount       = 1,
+		pQueuePriorities = &queue_priority,
+	}
+
+	// Timeline semaphores
+	timeline_features := vk.PhysicalDeviceTimelineSemaphoreFeatures {
+		sType             = .PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
+		timelineSemaphore = true,
+	}
+
+	// Descriptor indexing
+	desc_indexing := vk.PhysicalDeviceDescriptorIndexingFeatures {
+		sType                                     = .PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
+		descriptorBindingPartiallyBound           = true,
+		runtimeDescriptorArray                    = true,
+		shaderSampledImageArrayNonUniformIndexing = true,
+	}
+
+	// Synchronization2
+	sync2_features := vk.PhysicalDeviceSynchronization2Features {
+		sType            = .PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
+		synchronization2 = true,
+	}
+
+	// (Optional) more features could be chained here if needed later
+
+	// Chain them: timeline → indexing → sync2
+	timeline_features.pNext = &desc_indexing
+	desc_indexing.pNext = &sync2_features
+
+	// Query support — recommended to verify the GPU actually supports them
+	features2 := vk.PhysicalDeviceFeatures2 {
+		sType = .PHYSICAL_DEVICE_FEATURES_2,
+		pNext = &timeline_features,
+	}
+	vk.GetPhysicalDeviceFeatures2(phys_device, &features2)
+
+	device_create_info := vk.DeviceCreateInfo {
+		sType                   = .DEVICE_CREATE_INFO,
+		pNext                   = &timeline_features, // start of feature chain
+		queueCreateInfoCount    = 1,
+		pQueueCreateInfos       = &queue_create_info,
+		enabledLayerCount       = ENABLE_VALIDATION ? len(layer_names) : 0,
+		ppEnabledLayerNames     = ENABLE_VALIDATION ? raw_data(layer_names[:]) : nil,
+		enabledExtensionCount   = len(device_extension_names),
+		ppEnabledExtensionNames = raw_data(device_extension_names[:]),
+	}
+
+	result := vk.CreateDevice(phys_device, &device_create_info, nil, &device)
+	if result != vk.Result.SUCCESS {
+		fmt.printf("Failed to create device: %d\n", result)
+		return false
+	}
+
+	vk.GetDeviceQueue(device, queue_family_index, 0, &queue)
+	return true
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Shader registry (canonical: .hlsl)
@@ -1032,46 +1103,6 @@ setup_physical_device :: proc() -> bool {
 	return true
 }
 
-create_logical_device :: proc() -> bool {
-	queue_priority: f32 = 1.0
-	queue_create_info := vk.DeviceQueueCreateInfo {
-		sType            = vk.StructureType.DEVICE_QUEUE_CREATE_INFO,
-		queueFamilyIndex = queue_family_index,
-		queueCount       = 1,
-		pQueuePriorities = &queue_priority,
-	}
-
-	// Enable timeline semaphore features
-	timeline_features := vk.PhysicalDeviceTimelineSemaphoreFeatures {
-		sType             = vk.StructureType.PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
-		timelineSemaphore = true,
-	}
-
-	device_create_info := vk.DeviceCreateInfo {
-		sType                   = vk.StructureType.DEVICE_CREATE_INFO,
-		pNext                   = &timeline_features,
-		queueCreateInfoCount    = 1,
-		pQueueCreateInfos       = &queue_create_info,
-		enabledLayerCount       = ENABLE_VALIDATION ? len(layer_names) : 0,
-		ppEnabledLayerNames     = ENABLE_VALIDATION ? raw_data(layer_names[:]) : nil,
-		enabledExtensionCount   = len(device_extension_names),
-		ppEnabledExtensionNames = raw_data(device_extension_names[:]),
-	}
-
-	result := vk.CreateDevice(phys_device, &device_create_info, nil, &device)
-	if result != vk.Result.SUCCESS {
-		fmt.printf("Failed to create device: %d\n", result)
-		return false
-	}
-
-	vk.GetDeviceQueue(device, queue_family_index, 0, &queue)
-	return true
-}
-
-VertexPushConstants :: struct {
-	screen_width:  i32,
-	screen_height: i32,
-}
 
 init_vulkan_resources :: proc() -> bool {
 
@@ -1207,81 +1238,47 @@ destroy_texture :: proc(resource: ^TextureResource) {
 	resource^ = TextureResource{}
 }
 
-BufferBarriers :: struct {
-	transfer_to_compute: vk.BufferMemoryBarrier,
-	compute_to_fragment: vk.BufferMemoryBarrier,
-}
 
-init_buffer_barriers :: proc(barriers: ^BufferBarriers, resource: ^BufferResource) {
-	if resource.buffer == {} {
-		barriers^ = BufferBarriers{}
-		return
+apply_transfer_to_compute_barrier :: proc(cmd: vk.CommandBuffer, buf: ^BufferResource) {
+	runtime.assert(buf.buffer != {}, "transfer barrier requested before initialization")
+
+	barrier := vk.BufferMemoryBarrier2 {
+		sType         = .BUFFER_MEMORY_BARRIER_2,
+		srcStageMask  = {.TRANSFER},
+		srcAccessMask = {.TRANSFER_WRITE},
+		dstStageMask  = {.COMPUTE_SHADER},
+		dstAccessMask = {.SHADER_WRITE},
+		buffer        = buf.buffer,
+		offset        = 0,
+		size          = buf.size,
 	}
-
-	barriers.transfer_to_compute = vk.BufferMemoryBarrier {
-		sType               = vk.StructureType.BUFFER_MEMORY_BARRIER,
-		srcAccessMask       = {vk.AccessFlag.TRANSFER_WRITE},
-		dstAccessMask       = {vk.AccessFlag.SHADER_WRITE},
-		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		buffer              = resource.buffer,
-		offset              = 0,
-		size                = resource.size,
+	dep := vk.DependencyInfo {
+		sType                    = .DEPENDENCY_INFO,
+		bufferMemoryBarrierCount = 1,
+		pBufferMemoryBarriers    = &barrier,
 	}
+	vk.CmdPipelineBarrier2(cmd, &dep)
+}
 
-	barriers.compute_to_fragment = vk.BufferMemoryBarrier {
-		sType               = vk.StructureType.BUFFER_MEMORY_BARRIER,
-		srcAccessMask       = {vk.AccessFlag.SHADER_WRITE},
-		dstAccessMask       = {vk.AccessFlag.SHADER_READ},
-		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		buffer              = resource.buffer,
-		offset              = 0,
-		size                = resource.size,
+apply_compute_to_fragment_barrier :: proc(cmd: vk.CommandBuffer, buf: ^BufferResource) {
+	runtime.assert(buf.buffer != {}, "compute barrier requested before initialization")
+
+	barrier := vk.BufferMemoryBarrier2 {
+		sType         = .BUFFER_MEMORY_BARRIER_2,
+		srcStageMask  = {.COMPUTE_SHADER},
+		srcAccessMask = {.SHADER_WRITE},
+		dstStageMask  = {.FRAGMENT_SHADER},
+		dstAccessMask = {.SHADER_READ},
+		buffer        = buf.buffer,
+		offset        = 0,
+		size          = buf.size,
 	}
-}
-
-reset_buffer_barriers :: proc(barriers: ^BufferBarriers) {
-	barriers.transfer_to_compute = vk.BufferMemoryBarrier{}
-	barriers.compute_to_fragment = vk.BufferMemoryBarrier{}
-}
-
-apply_transfer_to_compute_barrier :: proc(cmd: vk.CommandBuffer, barriers: ^BufferBarriers) {
-	runtime.assert(
-		barriers.transfer_to_compute.buffer != {},
-		"transfer barrier requested before initialization",
-	)
-	vk.CmdPipelineBarrier(
-		cmd,
-		{vk.PipelineStageFlag.TRANSFER},
-		{vk.PipelineStageFlag.COMPUTE_SHADER},
-		{},
-		0,
-		nil,
-		1,
-		&barriers.transfer_to_compute,
-		0,
-		nil,
-	)
-}
-
-apply_compute_to_fragment_barrier :: proc(cmd: vk.CommandBuffer, barriers: ^BufferBarriers) {
-	runtime.assert(
-		barriers.compute_to_fragment.buffer != {},
-		"compute barrier requested before initialization",
-	)
-	vk.CmdPipelineBarrier(
-		cmd,
-		{vk.PipelineStageFlag.COMPUTE_SHADER},
-		{vk.PipelineStageFlag.FRAGMENT_SHADER},
-		{},
-		0,
-		nil,
-		1,
-		&barriers.compute_to_fragment,
-		0,
-		nil,
-	)
+	dep := vk.DependencyInfo {
+		sType                    = .DEPENDENCY_INFO,
+		bufferMemoryBarrierCount = 1,
+		pBufferMemoryBarriers    = &barrier,
+	}
+	vk.CmdPipelineBarrier2(cmd, &dep)
 }
 
 

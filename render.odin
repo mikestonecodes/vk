@@ -17,7 +17,6 @@ WORLD_WIDTH :: u32(7680)
 WORLD_HEIGHT :: u32(4320)
 
 accumulation_buffer: BufferResource
-accumulation_barriers: BufferBarriers
 sprite_texture: TextureResource
 sprite_texture_width: u32
 sprite_texture_height: u32
@@ -67,7 +66,6 @@ post_process_push_constants: PostProcessPushConstants
 init_render_resources :: proc() -> bool {
 
 	destroy_buffer(&accumulation_buffer)
-	reset_buffer_barriers(&accumulation_barriers)
 	destroy_texture(&sprite_texture)
 	sprite_texture_width = 0
 	sprite_texture_height = 0
@@ -82,7 +80,6 @@ init_render_resources :: proc() -> bool {
 		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
 	)
 
-	init_buffer_barriers(&accumulation_barriers, &accumulation_buffer)
 	sprite_texture = create_texture_from_png("test3.png") or_return
 
 	sprite_texture_width = sprite_texture.width
@@ -181,7 +178,7 @@ record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
 simulate_particles :: proc(frame: FrameInputs) {
 
 	vk.CmdFillBuffer(frame.cmd, accumulation_buffer.buffer, 0, accumulation_buffer.size, 0)
-	apply_transfer_to_compute_barrier(frame.cmd, &accumulation_barriers)
+	apply_transfer_to_compute_barrier(frame.cmd, &accumulation_buffer)
 
 	compute_push_constants.time = frame.time
 	compute_push_constants.delta_time = frame.delta_time
@@ -194,7 +191,7 @@ simulate_particles :: proc(frame: FrameInputs) {
 	bind(frame, &render_pipeline_states[0], .COMPUTE, &compute_push_constants)
 	vk.CmdDispatch(frame.cmd, groups, 1, 1)
 
-	apply_compute_to_fragment_barrier(frame.cmd, &accumulation_barriers)
+	apply_compute_to_fragment_barrier(frame.cmd, &accumulation_buffer)
 }
 
 
@@ -212,6 +209,5 @@ composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) 
 
 cleanup_render_resources :: proc() {
 	destroy_buffer(&accumulation_buffer)
-	reset_buffer_barriers(&accumulation_barriers)
 	destroy_texture(&sprite_texture)
 }
