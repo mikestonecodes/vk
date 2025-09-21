@@ -8,7 +8,7 @@ import png "core:image/png"
 
 import vk "vendor:vulkan"
 
-PARTICLE_COUNT :: u32(15_980_000)
+PARTICLE_COUNT :: u32(980_000)
 COMPUTE_GROUP_SIZE :: u32(128)
 PIPELINE_COUNT :: 2
 
@@ -19,13 +19,6 @@ WORLD_HEIGHT :: u32(4320)
 accumulation_buffer: BufferResource
 sprite_texture: TextureResource
 
-
-TextureUploadContext :: struct {
-	texture: ^TextureResource,
-	staging: ^BufferResource,
-	width:   u32,
-	height:  u32,
-}
 
 PostProcessPushConstants :: struct {
 	time:              f32,
