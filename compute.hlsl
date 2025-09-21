@@ -6,13 +6,35 @@ struct PushConstants {
     uint  _pad0;
     uint  screen_width;
     uint  screen_height;
-    float spread;
     float brightness;
+	    float mouse_x;
+	    float mouse_y;
+	    uint  mouse_left;
+	    uint  mouse_right;
+	    uint  key_h;
+	    uint  key_j;
+	    uint  key_k;
+	    uint  key_l;
+	    uint  key_w;
+	    uint  key_a;
+	    uint  key_s;
+	    uint  key_d;
+	    uint  key_q;
+	    uint  key_e;
+
 };
 [[vk::push_constant]] PushConstants push_constants;
 
 // Global array of storage buffers
-[[vk::binding(0, 0)]] RWStructuredBuffer<uint> accum_buffers[];
+[[vk::binding(0, 0)]] RWStructuredBuffer<uint> buffers[];
+
+struct GlobalData {
+	float camx;
+	float camy;
+};
+
+[[vk::binding(3, 0)]] RWStructuredBuffer<GlobalData> globalData;
+
 
 static const float COLOR_SCALE = 4096.0f;
 static const float TWO_PI      = 6.28318530718f;
@@ -37,16 +59,30 @@ float2 rand2(uint n) {
     );
 }
 
+
 [numthreads(128,1,1)]
 void main(uint3 tid : SV_DispatchThreadID)
 {
     uint id = tid.x;
-    if (id >= push_constants.particle_count) return;
 
     const uint W = push_constants.screen_width;
     const uint H = push_constants.screen_height;
 
-    RWStructuredBuffer<uint> accum_buffer = accum_buffers[0];
+    RWStructuredBuffer<uint> accum_buffer = buffers[0];
+
+    // --- Load persisted camera state as floats ---
+    float2 camPos = float2(globalData[0].camx, globalData[0].camy);
+
+    // --- Input delta (normalize so diagonals aren't faster) ---
+    float2 delta = float2(
+        (push_constants.key_d ? 1.0 : 0.0) - (push_constants.key_a ? 1.0 : 0.0),
+        (push_constants.key_s ? 1.0 : 0.0) - (push_constants.key_w ? 1.0 : 0.0)
+    );
+    float len2 = dot(delta, delta);
+    if (len2 > 0.0) delta /= sqrt(len2);
+
+    float camera_speed = 400.0;
+    camPos += delta * camera_speed * push_constants.delta_time;
 
     // ---- Swirling cluster ----
     float2 clusterSeed = rand2((id / 256u) + 999u);
@@ -61,13 +97,18 @@ void main(uint3 tid : SV_DispatchThreadID)
         sin(push_constants.time * speed + phase)
     ) * radius;
 
-    int2 ip = int2(floor(basePos + offset + 0.5));
-    if (ip.x < 0 || ip.x >= int(W) || ip.y < 0 || ip.y >= int(H)) return;
+    // Integer pixel coord after applying persistent camera
+    float2 p = basePos + offset + camPos;
+    int2 ip  = int2(floor(p + 0.5));
+
+    // Wrap safely to [0..W-1], [0..H-1]
+    ip.x = ((ip.x % int(W)) + int(W)) % int(W);
+    ip.y = ((ip.y % int(H)) + int(H)) % int(H);
 
     uint2 pix = uint2(ip);
     uint baseIdx = (pix.y * W + pix.x) * 4u;
 
-    // --- Dirt color ---
+    // --- Color ---
     float dirtHue  = 0.1 + 0.1 * sin(id * 0.37);
     float3 baseCol = float3(0.35 + dirtHue, 0.25 + dirtHue*0.5, 0.15);
     baseCol *= (0.7 + 0.6 * hash11(id * 771u)) * max(push_constants.brightness, 0.0);
@@ -81,4 +122,11 @@ void main(uint3 tid : SV_DispatchThreadID)
     InterlockedAdd(accum_buffer[baseIdx+1], addG);
     InterlockedAdd(accum_buffer[baseIdx+2], addB);
     InterlockedAdd(accum_buffer[baseIdx+3], addA);
+
+    // Persist exactly once per dispatch
+    if (id == 0) {
+        globalData[0].camx = camPos.x;
+        globalData[0].camy = camPos.y;
+    }
 }
+

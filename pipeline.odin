@@ -134,7 +134,7 @@ global_desc_layout: vk.DescriptorSetLayout
 global_desc_set: vk.DescriptorSet
 
 
-bind_resource :: proc(slot: u32, resource: $T) {
+bind_resource :: proc(slot: u32, resource: $T, dstBinding := u32(max(u32))) {
 	w := vk.WriteDescriptorSet {
 		sType           = .WRITE_DESCRIPTOR_SET,
 		dstSet          = global_desc_set,
@@ -143,44 +143,51 @@ bind_resource :: proc(slot: u32, resource: $T) {
 	}
 
 	when T == ^BufferResource {
-		w.dstBinding = 0
+		w.dstBinding = dstBinding if dstBinding != max(u32) else 0
 		w.descriptorType = .STORAGE_BUFFER
 		w.pBufferInfo = &vk.DescriptorBufferInfo{buffer = resource.buffer, range = resource.size}
 	}
 	when T == ^TextureResource {
-		w.dstBinding = 1
+		w.dstBinding = dstBinding if dstBinding != max(u32) else 1
 		w.descriptorType = .SAMPLED_IMAGE
 		w.pImageInfo =
 		&vk.DescriptorImageInfo{imageView = resource.view, imageLayout = .SHADER_READ_ONLY_OPTIMAL}
 	}
 	when T == ^vk.Sampler {
-		w.dstBinding = 2
+		w.dstBinding = dstBinding if dstBinding != max(u32) else 2
 		w.descriptorType = .SAMPLER
 		w.pImageInfo = &vk.DescriptorImageInfo{sampler = resource^}
 	}
 
 	vk.UpdateDescriptorSets(device, 1, &w, 0, nil)
 }
+global_desc_pool: vk.DescriptorPool
 
 init_global_descriptors :: proc() -> bool {
-	bindings := [3]vk.DescriptorSetLayoutBinding {
+	bindings := [4]vk.DescriptorSetLayoutBinding {
 		{
 			binding = 0,
 			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 1024,
+			descriptorCount = 4,
 			stageFlags = {vk.ShaderStageFlag.COMPUTE, vk.ShaderStageFlag.FRAGMENT},
 		},
 		{
 			binding = 1,
 			descriptorType = .SAMPLED_IMAGE,
-			descriptorCount = 1024,
+			descriptorCount = 2,
 			stageFlags = {vk.ShaderStageFlag.FRAGMENT},
 		},
 		{
 			binding = 2,
 			descriptorType = .SAMPLER,
-			descriptorCount = 64,
+			descriptorCount = 2,
 			stageFlags = {vk.ShaderStageFlag.FRAGMENT},
+		},
+		{
+			binding         = 3,
+			descriptorType  = .STORAGE_BUFFER,
+			descriptorCount = 1, // global state (camera, etc.)
+			stageFlags      = {vk.ShaderStageFlag.COMPUTE},
 		},
 	}
 
@@ -196,12 +203,13 @@ init_global_descriptors :: proc() -> bool {
 		vk.DescriptorSetLayout,
 	) or_return
 
-	pool_sizes := [3]vk.DescriptorPoolSize {
-		{type = .STORAGE_BUFFER, descriptorCount = 1024},
-		{type = .SAMPLED_IMAGE, descriptorCount = 1024},
-		{type = .SAMPLER, descriptorCount = 64},
+	pool_sizes := [4]vk.DescriptorPoolSize {
+		{type = .STORAGE_BUFFER, descriptorCount = 4},
+		{type = .SAMPLED_IMAGE, descriptorCount = 2},
+		{type = .SAMPLER, descriptorCount = 2},
+		{type = .STORAGE_BUFFER, descriptorCount = 1},
 	}
-	global_desc_pool := vkw(
+	global_desc_pool = vkw(
 		vk.CreateDescriptorPool,
 		device,
 		&vk.DescriptorPoolCreateInfo {
@@ -299,6 +307,7 @@ make_compute_pipeline :: proc(
 	ok = (result == .SUCCESS)
 	return
 }
+
 make_graphics_pipeline :: proc(
 	vert_path, frag_path: string,
 	layout: vk.PipelineLayout,
@@ -424,6 +433,10 @@ reset_pipeline_state :: proc(state: ^PipelineState) {
 	if state.pipeline != {} {
 		vk.DestroyPipeline(device, state.pipeline, nil)
 		state.pipeline = {}
+	}
+	if state.layout != {} {
+		vk.DestroyPipelineLayout(device, state.layout, nil)
+		state.layout = {}
 	}
 	state.push_stage = {}
 }

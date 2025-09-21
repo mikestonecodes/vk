@@ -97,29 +97,20 @@ vkw_create :: proc(
 	}
 	return out, true
 }
-
 // Array enumeration wrapper (get count, then get array)
 vkw_enumerate :: proc(call: $T, first_param: $P, msg: string, $Out: typeid) -> ([]Out, bool) {
 	count: u32
-	if call(first_param, &count, nil) != .SUCCESS {
-		fmt.printf("Failed to get count for %s\n", msg)
-		return nil, false
-	}
+	call(first_param, &count, nil)
 
 	if count == 0 {
 		return nil, true
 	}
 
 	array := make([]Out, count)
-	if call(first_param, &count, raw_data(array)) != .SUCCESS {
-		fmt.printf("Failed to get array for %s\n", msg)
-		delete(array)
-		return nil, false
-	}
+	call(first_param, &count, raw_data(array))
 
 	return array, true
 }
-
 // Device enumeration wrapper (instance-specific)
 vkw_enumerate_device :: proc(
 	call: $T,
@@ -421,19 +412,18 @@ layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
 // Device extensions to reduce boilerplate & enable advanced features
 // ──────────────────────────────────────────────────────────────
 
+
 device_extension_names := [?]cstring {
 	"VK_KHR_swapchain",
 	"VK_KHR_synchronization2",
 	"VK_EXT_descriptor_indexing",
-	"VK_KHR_push_descriptor",
 	"VK_EXT_extended_dynamic_state",
 	"VK_EXT_extended_dynamic_state2",
 	"VK_EXT_extended_dynamic_state3",
-	"VK_EXT_graphics_pipeline_library",
-	"VK_KHR_pipeline_library", // required by GPL
 	"VK_KHR_dedicated_allocation",
 	"VK_KHR_get_memory_requirements2",
 }
+
 
 create_logical_device :: proc() -> bool {
 	queue_priority: f32 = 1.0
@@ -444,47 +434,57 @@ create_logical_device :: proc() -> bool {
 		pQueuePriorities = &queue_priority,
 	}
 
-	// Timeline semaphores
-	timeline_features := vk.PhysicalDeviceTimelineSemaphoreFeatures {
-		sType             = .PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
-		timelineSemaphore = true,
-	}
 
-	// Descriptor indexing
+	eds1 := vk.PhysicalDeviceExtendedDynamicStateFeaturesEXT {
+		sType                = .PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
+		extendedDynamicState = true,
+	}
+	eds2 := vk.PhysicalDeviceExtendedDynamicState2FeaturesEXT {
+		sType                 = .PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT,
+		extendedDynamicState2 = true,
+		pNext                 = &eds1,
+	}
+	eds3 := vk.PhysicalDeviceExtendedDynamicState3FeaturesEXT {
+		sType                                   = .PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT,
+		extendedDynamicState3ColorBlendEnable   = true,
+		extendedDynamicState3ColorBlendEquation = true,
+		extendedDynamicState3ColorWriteMask     = true,
+		extendedDynamicState3PolygonMode        = true,
+		/*
+		extendedDynamicState3CullMode                = true,
+		extendedDynamicState3FrontFace               = true,
+		extendedDynamicState3RasterizerDiscardEnable = true,
+		extendedDynamicState3ViewportWithCount       = true,
+		extendedDynamicState3ScissorWithCount        = true,
+		*/
+		pNext                                   = &eds2,
+	}
+	sync2 := vk.PhysicalDeviceSynchronization2Features {
+		sType            = .PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
+		synchronization2 = true,
+		pNext            = &eds3,
+	}
 	desc_indexing := vk.PhysicalDeviceDescriptorIndexingFeatures {
 		sType                                     = .PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
 		descriptorBindingPartiallyBound           = true,
 		runtimeDescriptorArray                    = true,
 		shaderSampledImageArrayNonUniformIndexing = true,
+		pNext                                     = &sync2,
 	}
-
-	// Synchronization2
-	sync2_features := vk.PhysicalDeviceSynchronization2Features {
-		sType            = .PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
-		synchronization2 = true,
+	timeline := vk.PhysicalDeviceTimelineSemaphoreFeatures {
+		sType             = .PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
+		timelineSemaphore = true,
+		pNext             = &desc_indexing,
 	}
-
-	// Graphics Pipeline Library (EXT) — REQUIRED when enabling the extension
-	gpl_features := vk.PhysicalDeviceGraphicsPipelineLibraryFeaturesEXT {
-		sType                   = .PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
-		graphicsPipelineLibrary = true,
-	}
-
-	// Chain them: timeline → indexing → sync2 → GPL
-	timeline_features.pNext = &desc_indexing
-	desc_indexing.pNext = &sync2_features
-	sync2_features.pNext = &gpl_features
-
-	// (Optional) query support
 	features2 := vk.PhysicalDeviceFeatures2 {
 		sType = .PHYSICAL_DEVICE_FEATURES_2,
-		pNext = &timeline_features,
+		pNext = &timeline,
 	}
 	vk.GetPhysicalDeviceFeatures2(phys_device, &features2)
 
 	device_create_info := vk.DeviceCreateInfo {
 		sType                   = .DEVICE_CREATE_INFO,
-		pNext                   = &timeline_features, // start of chain
+		pNext                   = &timeline, // start of chain
 		queueCreateInfoCount    = 1,
 		pQueueCreateInfos       = &queue_create_info,
 		enabledLayerCount       = ENABLE_VALIDATION ? len(layer_names) : 0,
@@ -656,7 +656,7 @@ load_shader_module :: proc(path: string) -> (shader: vk.ShaderModule, ok: bool) 
 	if os.exists(hlsl) {
 		if !compile_shader(hlsl) {
 			fmt.printf("Shader compilation failed: %s\n", hlsl)
-			return {}, false
+			//	return {}, false
 		}
 	}
 
@@ -757,6 +757,14 @@ debug_callback :: proc "system" (
 
 
 create_swapchain :: proc() -> bool {
+	// Nuke any previous per-frame semaphores before recreating them
+	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		if image_available[i] != {} {
+			vk.DestroySemaphore(device, image_available[i], nil)
+			image_available[i] = {}
+		}
+	}
+
 	// Query caps
 	caps: vk.SurfaceCapabilitiesKHR
 	if vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(phys_device, vulkan_surface, &caps) !=
@@ -929,25 +937,6 @@ create_swapchain :: proc() -> bool {
 	return true
 }
 
-destroy_swapchain :: proc() {
-
-	for i in 0 ..< image_count {
-		if elements[i].framebuffer != {} do vk.DestroyFramebuffer(device, elements[i].framebuffer, nil)
-		if elements[i].imageView != {} do vk.DestroyImageView(device, elements[i].imageView, nil)
-		if elements[i].commandBuffer != {} do vk.ResetCommandBuffer(elements[i].commandBuffer, {})
-		if image_render_finished[i] != {} do vk.DestroySemaphore(device, image_render_finished[i], nil)
-
-		// zero-out the slots (optional but tidy)
-		elements[i] = SwapchainElement{}
-		image_render_finished[i] = {}
-	}
-	image_count = 0
-	frames_in_flight = 0
-	current_frame = 0
-
-	vk.DestroyRenderPass(device, render_pass, nil)
-	vk.DestroySwapchainKHR(device, swapchain, nil)
-}
 
 init_vulkan :: proc() -> bool {
 	// Load global function pointers (this uses the loader already provided by the system)
@@ -1081,52 +1070,47 @@ setup_debug_messenger :: proc() -> bool {
 }
 
 setup_physical_device :: proc() -> bool {
-	device_count: c.uint32_t
-	vk.EnumeratePhysicalDevices(instance, &device_count, nil)
-	if device_count == 0 {
+	devices, ok := vkw_enumerate_device(
+		vk.EnumeratePhysicalDevices,
+		instance,
+		"physical devices",
+		vk.PhysicalDevice,
+	)
+	if !ok || len(devices) == 0 {
 		fmt.println("No physical devices found")
 		return false
 	}
-
-	devices := make([^]vk.PhysicalDevice, device_count)
-	defer free(devices)
-	vk.EnumeratePhysicalDevices(instance, &device_count, devices)
+	defer delete(devices)
 	phys_device = devices[0]
 
-	// Find queue family
-	queue_family_count: c.uint32_t
-	vk.GetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_family_count, nil)
+	queue_families, qf_ok := vkw_enumerate_physical(
+		vk.GetPhysicalDeviceQueueFamilyProperties,
+		phys_device,
+		"queue families",
+		vk.QueueFamilyProperties,
+	)
+	if !qf_ok {return false}
+	defer delete(queue_families)
 
-	queue_families := make([^]vk.QueueFamilyProperties, queue_family_count)
-	defer free(queue_families)
-	vk.GetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_family_count, queue_families)
-
-	found_queue_family := false
-	for i in 0 ..< queue_family_count {
-		present_support: b32 = false
-		result := vk.GetPhysicalDeviceSurfaceSupportKHR(
-			phys_device,
-			i,
-			vulkan_surface,
-			&present_support,
-		)
-		if result == vk.Result.SUCCESS &&
+	for qf, i in queue_families {
+		present_support: b32
+		if vk.GetPhysicalDeviceSurfaceSupportKHR(
+			   phys_device,
+			   u32(i),
+			   vulkan_surface,
+			   &present_support,
+		   ) ==
+			   .SUCCESS &&
 		   present_support &&
-		   vk.QueueFlag.GRAPHICS in queue_families[i].queueFlags {
-			queue_family_index = i
-			found_queue_family = true
-			break
+		   vk.QueueFlag.GRAPHICS in qf.queueFlags {
+			queue_family_index = u32(i)
+			return true
 		}
 	}
 
-	if !found_queue_family {
-		fmt.println("No suitable queue family found")
-		return false
-	}
-
-	return true
+	fmt.println("No suitable queue family found")
+	return false
 }
-
 
 init_vulkan_resources :: proc() -> bool {
 
@@ -1268,30 +1252,83 @@ apply_compute_to_fragment_barrier :: proc(cmd: vk.CommandBuffer, buf: ^BufferRes
 }
 
 
-vulkan_cleanup :: proc() {
-	vk.DeviceWaitIdle(device)
-
-	destroy_swapchain()
-	cleanup_render_resources()
-	destroy_render_pipeline_state(render_pipeline_states[:])
-
+destroy_all_sync_objects :: proc() {
+	// Per–frame semaphores
 	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		if image_available[i] != {} do vk.DestroySemaphore(device, image_available[i], nil)
+		if image_available[i] != {} {
+			vk.DestroySemaphore(device, image_available[i], nil)
+			image_available[i] = {}
+		}
 	}
-	// Cleanup remaining vulkan resources
-	vk.DestroySemaphore(device, timeline_semaphore, nil)
 
-	vk.DestroyCommandPool(device, command_pool, nil)
+	// Per–swapchain-image semaphores
+	for i in 0 ..< MAX_SWAPCHAIN_IMAGES {
+		if image_render_finished[i] != {} {
+			vk.DestroySemaphore(device, image_render_finished[i], nil)
+			image_render_finished[i] = {}
+		}
+	}
+
+	// Timeline
+	if timeline_semaphore != {} {
+		vk.DestroySemaphore(device, timeline_semaphore, nil)
+		timeline_semaphore = {}
+	}
+}
+destroy_swapchain :: proc() {
+	for i in 0 ..< MAX_SWAPCHAIN_IMAGES {
+		if elements[i].framebuffer != {} do vk.DestroyFramebuffer(device, elements[i].framebuffer, nil)
+		if elements[i].imageView != {} do vk.DestroyImageView(device, elements[i].imageView, nil)
+		if elements[i].commandBuffer != {} do vk.ResetCommandBuffer(elements[i].commandBuffer, {})
+		if image_render_finished[i] != {} do vk.DestroySemaphore(device, image_render_finished[i], nil)
+
+		elements[i] = SwapchainElement{}
+		image_render_finished[i] = {}
+	}
+
+	image_count = 0
+	frames_in_flight = 0
+	current_frame = 0
+
+	if render_pass != {} do vk.DestroyRenderPass(device, render_pass, nil)
+	render_pass = {}
+	if swapchain != {} do vk.DestroySwapchainKHR(device, swapchain, nil)
+	swapchain = {}
+}
+
+vulkan_cleanup :: proc() {
+
+	vk.DeviceWaitIdle(device)
+	// Swapchain + framebuffers
+	destroy_swapchain()
+	destroy_all_sync_objects()
+
+	// Buffers, textures
+	cleanup_render_resources()
+	// Pipelines + layouts
+	destroy_render_pipeline_state(render_pipeline_states[:])
+	// Descriptor pool & layout
+	if global_desc_pool != {} do vk.DestroyDescriptorPool(device, global_desc_pool, nil)
+	if global_desc_layout != {} do vk.DestroyDescriptorSetLayout(device, global_desc_layout, nil)
+
+	// Command pool
+	if command_pool != {} do vk.DestroyCommandPool(device, command_pool, nil)
+
+	// Device & instance
 	vk.DestroyDevice(device, nil)
 	vk.DestroySurfaceKHR(instance, vulkan_surface, nil)
+
 	if ENABLE_VALIDATION {
 		vkDestroyDebugUtilsMessengerEXT := cast(proc "c" (
 			_: vk.Instance,
 			_: vk.DebugUtilsMessengerEXT,
 			_: rawptr,
 		))vk.GetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT")
-		if vkDestroyDebugUtilsMessengerEXT != nil do vkDestroyDebugUtilsMessengerEXT(instance, debug_messenger, nil)
+		if vkDestroyDebugUtilsMessengerEXT != nil {
+			vkDestroyDebugUtilsMessengerEXT(instance, debug_messenger, nil)
+		}
 	}
+
 	vk.DestroyInstance(instance, nil)
 }
 

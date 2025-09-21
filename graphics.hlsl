@@ -1,14 +1,6 @@
 struct PushConstants {
-    float time;
-    float exposure;
-    float gamma;
-    float contrast;
     uint  screen_width;
     uint  screen_height;
-    float vignette_strength;
-    float _pad0;
-    uint  _pad1;
-    uint  _pad2;
 };
 [[vk::push_constant]] PushConstants push_constants;
 

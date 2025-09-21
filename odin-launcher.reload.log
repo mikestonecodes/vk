@@ -7,25 +7,25 @@ Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: Removing driver /usr/lib/libvulkan_intel.so due to not having any physical devices
 Validation layer: Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
@@ -47,8 +47,40 @@ Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver:
 compiling shader:
 compiling shader:
 compiling shader:
-Discovered 2 shaders: compute.hlsl graphics.hlsl 
+Discovered 2 shaders: graphics.hlsl compute.hlsl
 Window resized to 1866x1026
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling compute.hlsl
+compiling shader:
+compute.hlsl:63:8: error: redefinition of 'GlobalData'
+struct GlobalData {
+       ^
+compute.hlsl:31:8: note: previous definition is here
+struct GlobalData {
+       ^
+compute.hlsl:68:54: error: redefinition of 'globalData'
+[[vk::binding(3, 0)]] RWStructuredBuffer<GlobalData> globalData;
+                                                     ^
+compute.hlsl:36:54: note: previous definition is here
+[[vk::binding(3, 0)]] RWStructuredBuffer<GlobalData> globalData;
+                                                     ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling compute.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
 compiling shader:
 compiling shader:
 compiling shader:

@@ -5,7 +5,7 @@ import "core:bytes"
 import "core:fmt"
 import image "core:image"
 import png "core:image/png"
-
+import "vendor:glfw"
 import vk "vendor:vulkan"
 
 PARTICLE_COUNT :: u32(980_000)
@@ -18,23 +18,13 @@ WORLD_HEIGHT :: u32(4320)
 
 accumulation_buffer: BufferResource
 sprite_texture: TextureResource
+extra_data_buffer: BufferResource
 
 
 PostProcessPushConstants :: struct {
-	time:              f32,
-	exposure:          f32,
-	gamma:             f32,
-	contrast:          f32,
-	screen_width:      u32,
-	screen_height:     u32,
-	vignette_strength: f32,
-	_pad0:             f32,
-	world_width:       u32,
-	world_height:      u32,
-	_pad1:             u32,
-	_pad2:             u32,
+	screen_width:  u32,
+	screen_height: u32,
 }
-
 
 ComputePushConstants :: struct {
 	time:           f32,
@@ -43,13 +33,26 @@ ComputePushConstants :: struct {
 	_pad0:          u32,
 	screen_width:   u32,
 	screen_height:  u32,
-	spread:         f32,
 	brightness:     f32,
-	sprite_width:   u32,
-	sprite_height:  u32,
-	total_threads:  u32, // <--- add this
-	camera_zoom:    u32,
-	camera_pos:     u32,
+	mouse_x:        f32,
+	mouse_y:        f32,
+	mouse_left:     u32,
+	mouse_right:    u32,
+	key_h:          u32,
+	key_j:          u32,
+	key_k:          u32,
+	key_l:          u32,
+	key_w:          u32,
+	key_a:          u32,
+	key_s:          u32,
+	key_d:          u32,
+	key_q:          u32,
+	key_e:          u32,
+}
+
+GlobalData :: struct {
+	camx: f32,
+	camy: f32,
 }
 
 compute_push_constants: ComputePushConstants
@@ -58,6 +61,7 @@ post_process_push_constants: PostProcessPushConstants
 init_render_resources :: proc() -> bool {
 
 	destroy_buffer(&accumulation_buffer)
+	destroy_buffer(&extra_data_buffer)
 	destroy_texture(&sprite_texture)
 
 	create_buffer(
@@ -68,6 +72,15 @@ init_render_resources :: proc() -> bool {
 		vk.DeviceSize(size_of(u32)), // 4 channels
 		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
 	)
+
+	create_buffer(
+		&extra_data_buffer,
+		vk.DeviceSize(window_width) *
+		vk.DeviceSize(window_height) *
+		vk.DeviceSize(size_of(GlobalData)), // 4 channels
+		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
+	)
+
 
 	sprite_texture = create_texture_from_png("test3.png") or_return
 
@@ -96,27 +109,19 @@ init_render_resources :: proc() -> bool {
 		screen_width   = u32(width),
 		screen_height  = u32(height),
 		particle_count = PARTICLE_COUNT,
-		spread         = 1.0,
 		brightness     = 1.0,
-		camera_zoom    = 1.0,
-		sprite_width   = sprite_texture.width,
-		sprite_height  = sprite_texture.height,
 	}
 
 	post_process_push_constants = PostProcessPushConstants {
-		screen_width      = u32(width),
-		screen_height     = u32(height),
-		exposure          = 1.2,
-		gamma             = 2.2,
-		contrast          = 1.0,
-		vignette_strength = 0.35,
-		world_width       = WORLD_WIDTH,
-		world_height      = WORLD_HEIGHT,
+		screen_width  = u32(width),
+		screen_height = u32(height),
 	}
 
 	bind_resource(0, &accumulation_buffer)
 	bind_resource(0, &sprite_texture)
 	bind_resource(0, &sprite_texture.sampler)
+	bind_resource(0, &extra_data_buffer,3)
+
 
 	return true
 
@@ -127,22 +132,29 @@ record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
 	composite_to_swapchain(frame, element.framebuffer)
 }
 
-
 // compute.hlsl -> accumulation_buffer
-
 simulate_particles :: proc(frame: FrameInputs) {
 	vk.CmdFillBuffer(frame.cmd, accumulation_buffer.buffer, 0, accumulation_buffer.size, 0)
-
 	compute_push_constants.time = frame.time
 	compute_push_constants.delta_time = frame.delta_time
 	compute_push_constants.screen_width = u32(window_width)
 	compute_push_constants.screen_height = u32(window_height)
-	compute_push_constants.spread = 4.0 // try 2..8
-	compute_push_constants.brightness = 1.0
-
+	compute_push_constants.mouse_x = f32(mouse_x)
+	compute_push_constants.mouse_y = f32(mouse_y)
+	compute_push_constants.mouse_left = is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT) ? 1 : 0
+	compute_push_constants.mouse_right = is_mouse_button_pressed(glfw.MOUSE_BUTTON_RIGHT) ? 1 : 0
+	compute_push_constants.key_h = is_key_pressed(glfw.KEY_H) ? 1 : 0
+	compute_push_constants.key_j = is_key_pressed(glfw.KEY_J) ? 1 : 0
+	compute_push_constants.key_k = is_key_pressed(glfw.KEY_K) ? 1 : 0
+	compute_push_constants.key_l = is_key_pressed(glfw.KEY_L) ? 1 : 0
+	compute_push_constants.key_w = is_key_pressed(glfw.KEY_W) ? 1 : 0
+	compute_push_constants.key_a = is_key_pressed(glfw.KEY_A) ? 1 : 0
+	compute_push_constants.key_s = is_key_pressed(glfw.KEY_S) ? 1 : 0
+	compute_push_constants.key_d = is_key_pressed(glfw.KEY_D) ? 1 : 0
+	compute_push_constants.key_q = is_key_pressed(glfw.KEY_Q) ? 1 : 0
+	compute_push_constants.key_e = is_key_pressed(glfw.KEY_E) ? 1 : 0
 	bind(frame, &render_pipeline_states[0], .COMPUTE, &compute_push_constants)
 	vk.CmdDispatch(frame.cmd, (PARTICLE_COUNT + 128 - 1) / 128, 1, 1)
-
 }
 
 
@@ -151,7 +163,6 @@ composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) 
 
 	apply_compute_to_fragment_barrier(frame.cmd, &accumulation_buffer)
 	begin_render_pass(frame, framebuffer)
-	post_process_push_constants.time = frame.time
 	post_process_push_constants.screen_width = u32(window_width)
 	post_process_push_constants.screen_height = u32(window_height)
 	bind(frame, &render_pipeline_states[1], .GRAPHICS, &post_process_push_constants)
@@ -160,6 +171,7 @@ composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) 
 }
 
 cleanup_render_resources :: proc() {
+	destroy_buffer(&extra_data_buffer)
 	destroy_buffer(&accumulation_buffer)
 	destroy_texture(&sprite_texture)
 }
