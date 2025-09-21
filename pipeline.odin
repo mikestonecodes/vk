@@ -686,10 +686,6 @@ reset_pipeline_state :: proc(state: ^PipelineState) {
 		vk.DestroyPipeline(device, state.pipeline, nil)
 		state.pipeline = {}
 	}
-	if state.layout != {} {
-		vk.DestroyPipelineLayout(device, state.layout, nil)
-		state.layout = {}
-	}
 	state.push_stage = {}
 }
 
