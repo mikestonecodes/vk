@@ -60,6 +60,7 @@ float2 rand2(uint n) {
     );
 }
 
+
 [numthreads(128,1,1)]
 void main(uint3 tid : SV_DispatchThreadID)
 {
@@ -103,9 +104,81 @@ void main(uint3 tid : SV_DispatchThreadID)
 
     // Generate particles based on world position for infinite detail
     uint world_hash = asuint(world_pos.x * 1000.0) ^ asuint(world_pos.y * 1000.0);
-    float particle_density = 0.8 * zoom_factor;
 
-    if (hash11(world_hash)) { // Always generate particles for debugging
+    // Scale-dependent rendering
+    float scale = 1.0 / zoom_factor;
+
+    // Smooth transition - calculate blend factors
+    float transition_start = 1.0;
+    float transition_end = 3.0;
+    float planet_blend = saturate((scale - transition_start) / (transition_end - transition_start));
+    float dirt_blend = 1.0 - planet_blend;
+
+    // Planet layer - make it huge so it fills the screen when zoomed out
+    float2 plant_center = float2(0, 0);
+    float plant_radius = 10000.0; // Much larger radius
+    float dist_to_center = length(world_pos - plant_center);
+
+    if (dist_to_center < plant_radius && planet_blend > 0.0) {
+        // Inside planet - render varied terrain
+        uint2 screen_pos_uint = uint2(pixel_id % W, pixel_id / W);
+        uint baseIdx = (screen_pos_uint.y * W + screen_pos_uint.x) * 4u;
+
+        // Create varied terrain based on world position - make regions much larger
+        uint terrain_hash = asuint(world_pos.x * 0.0001) ^ asuint(world_pos.y * 0.0001);
+        float terrain_type = hash11(terrain_hash);
+
+        float3 plant_color;
+        if (terrain_type < 0.3) {
+            // Forests - green
+            plant_color = float3(0.2, 0.6, 0.2);
+        } else if (terrain_type < 0.5) {
+            // Grasslands - light green
+            plant_color = float3(0.4, 0.7, 0.3);
+        } else if (terrain_type < 0.7) {
+            // Deserts - sandy brown
+            plant_color = float3(0.8, 0.7, 0.4);
+        } else {
+            // Oceans - blue
+            plant_color = float3(0.2, 0.4, 0.8);
+        }
+
+        plant_color *= max(push_constants.brightness, 0.0);
+        uint addR = (uint)(saturate(plant_color.r * planet_blend) * COLOR_SCALE);
+        uint addG = (uint)(saturate(plant_color.g * planet_blend) * COLOR_SCALE);
+        uint addB = (uint)(saturate(plant_color.b * planet_blend) * COLOR_SCALE);
+        uint addA = (uint)(COLOR_SCALE * planet_blend);
+
+        InterlockedAdd(accum_buffer[baseIdx+0], addR);
+        InterlockedAdd(accum_buffer[baseIdx+1], addG);
+        InterlockedAdd(accum_buffer[baseIdx+2], addB);
+        InterlockedAdd(accum_buffer[baseIdx+3], addA);
+    }
+    // Stars in space (outside planet)
+    else if (planet_blend > 0.0) {
+        // Create stars based on world position - very sparse since they splat
+        uint star_hash = asuint(world_pos.x * 0.01) ^ asuint(world_pos.y * 0.01);
+        if (hash11(star_hash) > 0.993) { // Very sparse stars for splatting
+            uint2 screen_pos_uint = uint2(pixel_id % W, pixel_id / W);
+            uint baseIdx = (screen_pos_uint.y * W + screen_pos_uint.x) * 4u;
+
+            // Make stars bright white
+            float3 star_color = float3(9.0, 9.0, 9.0) ;
+
+            uint addR = (uint)(saturate(star_color.r * planet_blend) * COLOR_SCALE);
+            uint addG = (uint)(saturate(star_color.g * planet_blend) * COLOR_SCALE);
+            uint addB = (uint)(saturate(star_color.b * planet_blend) * COLOR_SCALE);
+            uint addA = (uint)(COLOR_SCALE * planet_blend);
+
+            InterlockedAdd(accum_buffer[baseIdx+0], addR);
+            InterlockedAdd(accum_buffer[baseIdx+1], addG);
+            InterlockedAdd(accum_buffer[baseIdx+2], addB);
+            InterlockedAdd(accum_buffer[baseIdx+3], addA);
+        }
+    }
+
+    // Dirt layer
+    if (dirt_blend > 0.0 && hash11(world_hash)) {
         // ---- Swirling cluster ----
         float2 clusterSeed = rand2(world_hash + 999u);
         float2 basePos = world_pos + clusterSeed * 10.0;
@@ -129,14 +202,32 @@ void main(uint3 tid : SV_DispatchThreadID)
             uint2 pix = uint2(ip);
             uint baseIdx = (pix.y * W + pix.x) * 4u;
 
-            // --- Color ---
-            float dirtHue = 0.1 + 0.1 * sin(world_hash * 0.37);
-            float3 baseCol = float3(0.35 + dirtHue, 0.25 + dirtHue*0.5, 0.15);
-            baseCol *= (0.7 + 0.6 * hash11(world_hash * 771u)) * max(push_constants.brightness, 0.0);
-            uint addR = (uint)(saturate(baseCol.r) * COLOR_SCALE);
-            uint addG = (uint)(saturate(baseCol.g) * COLOR_SCALE);
-            uint addB = (uint)(saturate(baseCol.b) * COLOR_SCALE);
-            uint addA = (uint)(COLOR_SCALE);
+            // --- Color aligned with planet terrain ---
+            uint terrain_hash_dirt = asuint(world_pos.x * 0.0001) ^ asuint(world_pos.y * 0.0001);
+            float terrain_type_dirt = hash11(terrain_hash_dirt);
+
+            float3 baseCol;
+            if (terrain_type_dirt < 0.3) {
+                // Forest soil - dark brown
+                baseCol = float3(0.3, 0.2, 0.1);
+            } else if (terrain_type_dirt < 0.5) {
+                // Grassland soil - medium brown
+                baseCol = float3(0.4, 0.3, 0.2);
+            } else if (terrain_type_dirt < 0.7) {
+                // Desert sand - light tan
+                baseCol = float3(0.6, 0.5, 0.3);
+            } else {
+                // Ocean sediment - gray-blue
+                baseCol = float3(0.3, 0.3, 0.4);
+            }
+
+            // Add some variation
+            float variation = 0.7 + 0.6 * hash11(world_hash * 771u);
+            baseCol *= variation * max(push_constants.brightness, 0.0);
+            uint addR = (uint)(saturate(baseCol.r * dirt_blend) * COLOR_SCALE);
+            uint addG = (uint)(saturate(baseCol.g * dirt_blend) * COLOR_SCALE);
+            uint addB = (uint)(saturate(baseCol.b * dirt_blend) * COLOR_SCALE);
+            uint addA = (uint)(COLOR_SCALE * dirt_blend);
 
             InterlockedAdd(accum_buffer[baseIdx+0], addR);
             InterlockedAdd(accum_buffer[baseIdx+1], addG);

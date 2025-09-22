@@ -76,5 +76,9 @@ float4 fs_main(VertexOutput input) : SV_Target {
     }
     if (density < 1e-6f) return float4(0,0,0,1);
 
+    // Boost color saturation and intensity for more vivid output
+    col = saturate(col * 1.5); // Increase intensity
+    col = pow(col, 0.8); // Boost saturation
+
     return float4(col, density);
 }
