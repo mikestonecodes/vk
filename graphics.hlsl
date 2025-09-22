@@ -29,7 +29,6 @@ static const float COLOR_SCALE = 4096.0f;
 struct GlobalData {
 	float2 camPos;
 	float zoom;
-	float pad;
 };
 
 [[vk::binding(3, 0)]] RWStructuredBuffer<GlobalData> globalData;
@@ -44,7 +43,7 @@ float4 fs_main(VertexOutput input) : SV_Target {
     uint2 p = uint2(uv * float2(w,h));
     p = min(p, uint2(w-1,h-1));
 
-    int R = max(1, int(16.0 * globalData[0].zoom));
+    const int R = 16;
     float3 col    = 0.0;
     float density = 0.0;
     float weightSum = 0.0;
@@ -56,7 +55,6 @@ float4 fs_main(VertexOutput input) : SV_Target {
 
             float2 spriteUV = (float2(dx,dy) / float(R*2) + 0.5);
 
-            // 🔑 Sample from bindless slot 0
             float4 spriteSample = textures[0].Sample(samplers[0], spriteUV);
             if (spriteSample.a < 1e-6f) continue;
 

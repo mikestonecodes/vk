@@ -89,60 +89,61 @@ void main(uint3 tid : SV_DispatchThreadID)
     float zoom_speed = 1.5;
     float zoom_factor = current_zoom * exp(zoom_delta * zoom_speed * push_constants.delta_time);
 
-    // Clamp zoom to reasonable bounds
-    zoom_factor = clamp(zoom_factor, 0.1, 10.0);
+    // Remove zoom limits for infinite zoom
+    zoom_factor = max(zoom_factor, 1e-10);
 
-
-
-
-    float camera_speed = 400.0;
+    float camera_speed = 400.0 / zoom_factor;
     camPos += delta * camera_speed * push_constants.delta_time;
 
-    // ---- Swirling cluster ----
-    float2 clusterSeed = rand2((id / 256u) + 999u);
-    float2 basePos     = clusterSeed * float2(W, H);
-
-    float phase  = hash11(id) * TWO_PI;
-    float radius = 10.0 + 40.0 * hash11(id * 77u);
-    //float speed  = 0.5  + 0.2 * hash11(id * 31337u);
-
-    float speed  = 0.0;
-
-    float2 offset = float2(
-        cos(push_constants.time * speed + phase),
-        sin(push_constants.time * speed + phase)
-    ) * radius;
-
-    // Integer pixel coord after applying persistent camera and zoom
+    // Convert screen coordinates to world coordinates based on camera
     float2 screen_center = float2(W, H) * 0.5;
-    float2 p = basePos + offset + camPos;
-    // Invert zoom so higher values = zoom in (make things bigger)
-    p = (p - screen_center) / zoom_factor + screen_center;
-    int2 ip  = int2(floor(p + 0.5));
+    uint pixel_id = id % (W * H);
+    uint2 screen_pos = uint2(pixel_id % W, pixel_id / W);
+    float2 world_pos = (float2(screen_pos) - screen_center) / zoom_factor + camPos;
 
-    // Proper wrapping for negative coordinates
-    if (ip.x < 0) ip.x = int(W) - 1 - ((-ip.x - 1) % int(W));
-    else ip.x = ip.x % int(W);
+    // Generate particles based on world position for infinite detail
+    uint world_hash = asuint(world_pos.x * 1000.0) ^ asuint(world_pos.y * 1000.0);
+    float particle_density = 0.8 * zoom_factor;
 
-    if (ip.y < 0) ip.y = int(H) - 1 - ((-ip.y - 1) % int(H));
-    else ip.y = ip.y % int(H);
+    if (hash11(world_hash)) { // Always generate particles for debugging
+        // ---- Swirling cluster ----
+        float2 clusterSeed = rand2(world_hash + 999u);
+        float2 basePos = world_pos + clusterSeed * 10.0;
 
-    uint2 pix = uint2(ip);
-    uint baseIdx = (pix.y * W + pix.x) * 4u;
+        float phase = hash11(world_hash) * TWO_PI;
+        float radius = 10.0 + 40.0 * hash11(world_hash * 77u);
+        float speed = 0.5 + 0.3 * hash11(world_hash * 123u);
 
-    // --- Color ---
-    float dirtHue  = 0.1 + 0.1 * sin(id * 0.37);
-    float3 baseCol = float3(0.35 + dirtHue, 0.25 + dirtHue*0.5, 0.15);
-    baseCol *= (0.7 + 0.6 * hash11(id * 771u)) * max(push_constants.brightness, 0.0);
-    uint addR = (uint)(saturate(baseCol.r) * COLOR_SCALE);
-    uint addG = (uint)(saturate(baseCol.g) * COLOR_SCALE);
-    uint addB = (uint)(saturate(baseCol.b) * COLOR_SCALE);
-    uint addA = (uint)(COLOR_SCALE);
+        float2 offset = float2(
+            cos(push_constants.time * speed + phase),
+            sin(push_constants.time * speed + phase)
+        ) * radius;
 
-    InterlockedAdd(accum_buffer[baseIdx+0], addR);
-    InterlockedAdd(accum_buffer[baseIdx+1], addG);
-    InterlockedAdd(accum_buffer[baseIdx+2], addB);
-    InterlockedAdd(accum_buffer[baseIdx+3], addA);
+        // Transform particle world position back to screen space
+        float2 particle_world_pos = basePos + offset;
+        float2 screen_particle_pos = (particle_world_pos - camPos) * zoom_factor + screen_center;
+        int2 ip = int2(floor(screen_particle_pos + 0.5));
+
+        // Check if particle is visible on screen
+        if (ip.x >= 0 && ip.x < int(W) && ip.y >= 0 && ip.y < int(H)) {
+            uint2 pix = uint2(ip);
+            uint baseIdx = (pix.y * W + pix.x) * 4u;
+
+            // --- Color ---
+            float dirtHue = 0.1 + 0.1 * sin(world_hash * 0.37);
+            float3 baseCol = float3(0.35 + dirtHue, 0.25 + dirtHue*0.5, 0.15);
+            baseCol *= (0.7 + 0.6 * hash11(world_hash * 771u)) * max(push_constants.brightness, 0.0);
+            uint addR = (uint)(saturate(baseCol.r) * COLOR_SCALE);
+            uint addG = (uint)(saturate(baseCol.g) * COLOR_SCALE);
+            uint addB = (uint)(saturate(baseCol.b) * COLOR_SCALE);
+            uint addA = (uint)(COLOR_SCALE);
+
+            InterlockedAdd(accum_buffer[baseIdx+0], addR);
+            InterlockedAdd(accum_buffer[baseIdx+1], addG);
+            InterlockedAdd(accum_buffer[baseIdx+2], addB);
+            InterlockedAdd(accum_buffer[baseIdx+3], addA);
+        }
+    }
 
     // Persist exactly once per dispatch
     if (id == 0) {
@@ -150,4 +151,3 @@ void main(uint3 tid : SV_DispatchThreadID)
         globalData[0].zoom = zoom_factor;
     }
 }
-
