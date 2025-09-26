@@ -8,7 +8,7 @@ import png "core:image/png"
 import "vendor:glfw"
 import vk "vendor:vulkan"
 
-PARTICLE_COUNT :: u32(1_000_000)
+PARTICLE_COUNT :: u32(5000)
 // Dynamic particle count based on screen size for consistent performance
 get_adaptive_particle_count :: proc() -> u32 {
 	pixel_count := window_width * window_height
@@ -21,8 +21,8 @@ COMPUTE_GROUP_SIZE :: u32(128)
 PIPELINE_COUNT :: 2
 
 // Fixed world dimensions - particles live in this coordinate space
-WORLD_WIDTH :: u32(7680)
-WORLD_HEIGHT :: u32(4320)
+WORLD_WIDTH :: u32(1920)
+WORLD_HEIGHT :: u32(1080)
 
 accumulation_buffer: BufferResource
 sprite_texture: TextureResource
@@ -78,7 +78,7 @@ init_render_resources :: proc() -> bool {
 		&accumulation_buffer,
 		vk.DeviceSize(window_width) *
 		vk.DeviceSize(window_height) *
-		4 *
+		2 *
 		vk.DeviceSize(size_of(u32)), // 4 channels
 		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
 	)

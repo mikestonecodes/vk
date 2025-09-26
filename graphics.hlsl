@@ -35,9 +35,7 @@ struct GlobalData {
 
 
 static const float3 LUMA = float3(0.299f, 0.587f, 0.114f);
-static const int    KERNEL_RADIUS = 5;
-static const int    SECTOR_COUNT  = 8;
-static const int    ANGLE_SAMPLES = 3;
+static const int    SECTOR_COUNT  = 1;
 static const float  TWO_PI        = 6.28318530718f;
 
 float3 ACESFilm(float3 x) {
@@ -96,6 +94,11 @@ struct SectorStats {
 };
 
 void compute_sector_stats(int2 center, uint w, uint h, float base_angle, out SectorStats stats) {
+
+	int    KERNEL_RADIUS = max(4, min(16, int(5.0f / globalData[0].zoom)));
+
+	int    ANGLE_SAMPLES = max(1, min(3, int(5.0f / globalData[0].zoom)));
+
     float3 weighted_color_sum = float3(0.0f, 0.0f, 0.0f);
     float3 weighted_color_sq_sum = float3(0.0f, 0.0f, 0.0f);
     float  weighted_density_sum = 0.0f;
