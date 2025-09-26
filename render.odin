@@ -8,7 +8,15 @@ import png "core:image/png"
 import "vendor:glfw"
 import vk "vendor:vulkan"
 
-PARTICLE_COUNT :: u32(980_000)
+PARTICLE_COUNT :: u32(1_000_000)
+// Dynamic particle count based on screen size for consistent performance
+get_adaptive_particle_count :: proc() -> u32 {
+	pixel_count := window_width * window_height
+	base_count : u32 = 1_000_000
+	// Scale particle count to maintain consistent density regardless of resolution
+	scale_factor := f32(pixel_count) / f32(1920 * 1080) // Scale proportionally to screen area
+	return u32(f32(base_count) * scale_factor)
+}
 COMPUTE_GROUP_SIZE :: u32(128)
 PIPELINE_COUNT :: 2
 
@@ -107,10 +115,11 @@ init_render_resources :: proc() -> bool {
 		},
 	}
 
+	adaptive_count := get_adaptive_particle_count()
 	compute_push_constants = ComputePushConstants {
 		screen_width   = u32(width),
 		screen_height  = u32(height),
-		particle_count = PARTICLE_COUNT,
+		particle_count = adaptive_count,
 		brightness     = 1.0,
 	}
 
@@ -156,7 +165,9 @@ simulate_particles :: proc(frame: FrameInputs) {
 	compute_push_constants.key_q = is_key_pressed(glfw.KEY_Q) ? 1 : 0
 	compute_push_constants.key_e = is_key_pressed(glfw.KEY_E) ? 1 : 0
 	bind(frame, &render_pipeline_states[0], .COMPUTE, &compute_push_constants)
-	vk.CmdDispatch(frame.cmd, (PARTICLE_COUNT + 128 - 1) / 128, 1, 1)
+	adaptive_count := get_adaptive_particle_count()
+	compute_push_constants.particle_count = adaptive_count
+	vk.CmdDispatch(frame.cmd, (adaptive_count + 128 - 1) / 128, 1, 1)
 }
 
 

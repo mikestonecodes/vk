@@ -47,24 +47,8 @@ Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver:
 compiling shader:
 compiling shader:
 compiling shader:
-Discovered 2 shaders: graphics.hlsl compute.hlsl 
-Window resized to 1866x666
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
+Discovered 2 shaders: compute.hlsl graphics.hlsl 
+Window resized to 1866x2056
 compiling shader:
 compiling shader:
 compiling shader:
@@ -72,119 +56,11 @@ Window resized to 3736x2056
 compiling shader:
 compiling shader:
 compiling shader:
-Window resized to 1866x666
+Window resized to 1866x2056
 compiling shader:
 compiling shader:
 compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compute.hlsl:165:104: error: use of undeclared identifier 'dirt_blend'
-            baseCol *= (0.7 + 0.6 * hash11(world_hash * 771u)) * max(push_constants.brightness, 0.0) * dirt_blend;
-                                                                                                       ^
-compute.hlsl:169:46: error: use of undeclared identifier 'dirt_blend'
-            uint addA = (uint)(COLOR_SCALE * dirt_blend);
-                                             ^
-compute.hlsl:183:2: error: expected '}'
-}
- ^
-compute.hlsl:66:1: note: to match this '{'
-{
-^
-
-Failed: compute.hlsl
-Recompiling compute.hlsl
-compiling shader:
-compute.hlsl:183:2: error: expected '}'
-}
- ^
-compute.hlsl:66:1: note: to match this '{'
-{
-^
-
-Failed: compute.hlsl
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compute.hlsl:182:5: error: expected unqualified-id
-    if (id == 0) {
-    ^
-compute.hlsl:186:1: error: extraneous closing brace ('}')
-}
-^
-
-Failed: compute.hlsl
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
+Recompiling graphics.hlsl
 compiling shader:
 compiling shader:
 compiling shader:
@@ -200,6 +76,118 @@ compiling shader:
 compiling shader:
 compiling shader:
 compiling shader:
+Recompiling graphics.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling graphics.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling graphics.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 3736x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 1866x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 3736x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 1866x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling graphics.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling graphics.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 3736x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling graphics.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling graphics.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 1866x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 3736x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 1866x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 3736x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 1866x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling compute.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 3736x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 1866x2056
+compiling shader:
+compiling shader:
+compiling shader:
 Recompiling compute.hlsl
 compiling shader:
 compiling shader:
@@ -216,99 +204,7 @@ compiling shader:
 compiling shader:
 compiling shader:
 compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
+Window resized to 1866x1026
 compiling shader:
 compiling shader:
 compiling shader:
