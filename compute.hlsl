@@ -111,6 +111,7 @@ struct BiomeSample {
     float3 color;
     float  terrain;
     float  moisture;
+    float  water;
 };
 
 BiomeSample sample_biome(float2 pos, float planet_radius) {
@@ -161,6 +162,7 @@ BiomeSample sample_biome(float2 pos, float planet_radius) {
     sample.color = color;
     sample.terrain = terrain;
     sample.moisture = moisture;
+    sample.water = saturate(ocean + shore * 0.6f);
     return sample;
 }
 
@@ -242,12 +244,37 @@ void main(uint3 tid : SV_DispatchThreadID)
 
         // Painterly-friendly variation with soft brush accents
         float micro_variation = fbm(world_pos * 0.0012f + float2(17.0f, -9.3f), 2, 2.15f, 0.6f, 877u);
-        plant_color *= lerp(0.86f, 1.12f, micro_variation);
+        plant_color *= lerp(0.88f, 1.08f, micro_variation);
+
+        float water_emphasis = biome_here.water;
+        if (water_emphasis > 0.0f) {
+            float3 deep_water = float3(0.16f, 0.28f, 0.58f);
+            float3 foam_tint = float3(0.36f, 0.48f, 0.72f);
+            float crest = saturate(0.5f + 0.5f * sin(world_pos.x * 0.0009f - world_pos.y * 0.0006f + push_constants.time * 0.35f));
+            float3 target = lerp(deep_water, foam_tint, crest);
+            plant_color = lerp(plant_color, target, water_emphasis * 0.65f);
+        }
 
         float edge_fade = 1.0f - saturate(dist_to_center / (plant_radius * 0.86f));
-        plant_color *= (0.72f + 0.28f * edge_fade);
 
-        plant_color = saturate(plant_color * max(push_constants.brightness, 0.0f));
+        float sphere_z = sqrt(max(plant_radius * plant_radius - dist_to_center * dist_to_center, 0.0f));
+        float3 normal = normalize(float3(world_pos - plant_center, sphere_z));
+        float3 light_dir = normalize(float3(-0.45f, 0.62f, 0.64f));
+        float lambert = saturate(dot(normal, light_dir));
+        float ambient = 0.48f;
+        float shading = ambient + lambert * 0.52f;
+
+        float rim = pow(saturate(1.0f - dot(normal, float3(0.0f, 0.0f, 1.0f))), 2.5f);
+        shading *= lerp(1.0f, 0.92f, rim);
+        shading = max(shading, 0.55f);
+
+        plant_color *= shading;
+        plant_color *= (0.70f + 0.30f * edge_fade);
+
+        float water_wave = biome_here.water * 0.05f * sin(push_constants.time * 0.45f + world_pos.x * 0.0007f - world_pos.y * 0.0009f);
+        plant_color *= (1.0f + water_wave);
+
+        plant_color = saturate(plant_color * max(push_constants.brightness * 0.9f, 0.0f));
 
         // Batch color values to reduce atomic operations
         uint addR = (uint)(plant_color.r * planet_blend * COLOR_SCALE);
@@ -301,18 +328,32 @@ void main(uint3 tid : SV_DispatchThreadID)
 
     // Dirt layer (brush strokes following biome flow)
     if (dirt_blend > 0.0f) {
-        float2 temporal_offset = float2(push_constants.time * 0.03f, -push_constants.time * 0.017f);
+        float water_presence = biome_here.water;
+        float movement_scale = water_presence > 0.3f ? saturate(water_presence) : 0.0f;
+
+        float2 temporal_offset = float2(push_constants.time * 0.03f, -push_constants.time * 0.017f) * movement_scale;
         float brush_field = fbm(world_pos * 0.00085f + temporal_offset, 4, 1.85f, 0.55f, 601u);
         float scatter = hash11(world_hash * 977u);
+        float threshold = lerp(0.78f, 0.42f, movement_scale);
 
-        if (brush_field > scatter) {
+        if (brush_field > scatter * threshold) {
             float2 flow_origin = world_pos + (rand2(world_hash + 999u) - 0.5f) * 80.0f;
-            float flow_angle = fbm(flow_origin * 0.0006f + float2(push_constants.time * 0.02f, -push_constants.time * 0.015f), 3, 1.9f, 0.6f, 811u) * TWO_PI;
+            float base_angle = fbm(flow_origin * 0.0006f, 3, 1.9f, 0.6f, 811u) * TWO_PI;
+
+            BiomeSample stroke_biome = sample_biome(flow_origin, plant_radius);
+            float water_stroke = stroke_biome.water;
+            if (movement_scale <= 0.0f) {
+                water_stroke = 0.0f;
+            }
+            float angle_anim = water_stroke * push_constants.time * 0.6f;
+            float flow_angle = base_angle + angle_anim;
             float2 dir = float2(cos(flow_angle), sin(flow_angle));
-            float jitter = hash11(world_hash * 313u) - 0.5f;
-            float pulse_speed = 0.4f + 0.6f * hash11(world_hash * 173u);
-            float pulse = sin(push_constants.time * pulse_speed + hash11(world_hash * 127u) * TWO_PI);
-            float stroke_length = lerp(14.0f, 64.0f, brush_field);
+
+            float jitter = (hash11(world_hash * 313u) - 0.5f) * lerp(0.35f, 0.65f, water_stroke);
+            float pulse_speed = lerp(0.15f, 0.85f, water_stroke);
+            float pulse = water_stroke * sin(push_constants.time * pulse_speed + hash11(world_hash * 127u) * TWO_PI);
+            float stroke_length_base = lerp(12.0f, 48.0f, brush_field);
+            float stroke_length = lerp(stroke_length_base * 0.7f, stroke_length_base * 1.6f, water_stroke);
 
             float2 particle_world_pos = flow_origin + dir * stroke_length * pulse + float2(-dir.y, dir.x) * jitter * stroke_length * 0.35f;
             float2 screen_particle_pos = (particle_world_pos - camPos) * zoom_factor + screen_center;
@@ -323,12 +364,16 @@ void main(uint3 tid : SV_DispatchThreadID)
                 uint2 pix = uint2(ip);
                 uint baseIdx = (pix.y * W + pix.x) * 4u;
 
-                BiomeSample stroke_biome = sample_biome(particle_world_pos, plant_radius);
-                float3 baseCol = saturate(pow(stroke_biome.color, float3(0.88f, 0.90f, 0.92f)));
-                baseCol *= (0.70f + 0.60f * brush_field);
+                BiomeSample stroke_color_biome = sample_biome(particle_world_pos, plant_radius);
+                float3 baseCol = saturate(pow(stroke_color_biome.color, float3(0.88f, 0.90f, 0.92f)));
+                if (water_stroke > 0.01f) {
+                    float3 stroke_water_tint = float3(0.18f, 0.34f, 0.62f);
+                    baseCol = lerp(baseCol, stroke_water_tint, water_stroke * 0.75f);
+                }
+                baseCol *= (0.65f + 0.65f * lerp(brush_field, 1.0f, water_stroke));
                 baseCol = saturate(baseCol * max(push_constants.brightness, 0.0f));
 
-                float alpha_boost = 0.60f + 0.40f * brush_field;
+                float alpha_boost = (0.45f + 0.55f * brush_field) * lerp(0.55f, 1.1f, water_stroke);
                 uint addR = (uint)(baseCol.r * dirt_blend * COLOR_SCALE);
                 uint addG = (uint)(baseCol.g * dirt_blend * COLOR_SCALE);
                 uint addB = (uint)(baseCol.b * dirt_blend * COLOR_SCALE);
