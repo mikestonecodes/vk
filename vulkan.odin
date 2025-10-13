@@ -494,6 +494,7 @@ create_logical_device :: proc() -> bool {
 		ppEnabledLayerNames     = ENABLE_VALIDATION ? raw_data(layer_names[:]) : nil,
 		enabledExtensionCount   = len(device_extension_names),
 		ppEnabledExtensionNames = raw_data(device_extension_names[:]),
+		pEnabledFeatures        = &features2.features,
 	}
 
 	result := vk.CreateDevice(phys_device, &device_create_info, nil, &device)
@@ -732,6 +733,10 @@ check_shader_reload :: proc() -> bool {
 	// Full rebuild
 	vk.QueueWaitIdle(queue)
 	destroy_render_pipeline_state(render_pipeline_states[:])
+	if !init_render_resources() {
+		fmt.println("Shader reload failed during resource init")
+		return false
+	}
 
 	if !init_render_pipeline_state(render_pipeline_specs[:], render_pipeline_states[:]) {
 		fmt.println("Shader reload failed during init")

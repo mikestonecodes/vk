@@ -329,7 +329,8 @@ void main(uint3 tid : SV_DispatchThreadID)
     // Dirt layer (brush strokes following biome flow)
     if (dirt_blend > 0.0f) {
         float water_presence = biome_here.water;
-        float movement_scale = water_presence > 0.3f ? saturate(water_presence) : 0.0f;
+        float base_movement = 0.12f;
+        float movement_scale = saturate(max(base_movement, water_presence));
 
         float2 temporal_offset = float2(push_constants.time * 0.03f, -push_constants.time * 0.017f) * movement_scale;
         float brush_field = fbm(world_pos * 0.00085f + temporal_offset, 4, 1.85f, 0.55f, 601u);
@@ -342,16 +343,20 @@ void main(uint3 tid : SV_DispatchThreadID)
 
             BiomeSample stroke_biome = sample_biome(flow_origin, plant_radius);
             float water_stroke = stroke_biome.water;
-            if (movement_scale <= 0.0f) {
-                water_stroke = 0.0f;
-            }
+            float dry_factor = 1.0f - saturate(water_stroke * 1.5f);
+            float dry_phase = hash11(world_hash * 211u) * TWO_PI;
+            float dry_wave = sin(push_constants.time * 0.45f + dry_phase);
+
             float angle_anim = water_stroke * push_constants.time * 0.6f;
-            float flow_angle = base_angle + angle_anim;
+            float flow_angle = base_angle + angle_anim + dry_wave * dry_factor * 0.18f;
             float2 dir = float2(cos(flow_angle), sin(flow_angle));
 
             float jitter = (hash11(world_hash * 313u) - 0.5f) * lerp(0.35f, 0.65f, water_stroke);
+            jitter += dry_wave * dry_factor * 0.05f;
             float pulse_speed = lerp(0.15f, 0.85f, water_stroke);
-            float pulse = water_stroke * sin(push_constants.time * pulse_speed + hash11(world_hash * 127u) * TWO_PI);
+            float base_pulse = dry_wave * dry_factor * (0.08f + 0.12f * movement_scale);
+            float water_pulse = sin(push_constants.time * pulse_speed + hash11(world_hash * 127u) * TWO_PI);
+            float pulse = base_pulse + water_stroke * water_pulse;
             float stroke_length_base = lerp(12.0f, 48.0f, brush_field);
             float stroke_length = lerp(stroke_length_base * 0.7f, stroke_length_base * 1.6f, water_stroke);
 
