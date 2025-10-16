@@ -126,7 +126,7 @@ float4 fs_main(VertexOutput input) : SV_Target {
     uint w = push_constants.screen_width;
     uint h = push_constants.screen_height;
 
-    float2 uv = saturate(input.uv * 0.5f);
+    float2 uv = saturate(input.uv);
     uint2 p = uint2(uv * float2(w, h));
     p = min(p, uint2(w - 1, h - 1));
 

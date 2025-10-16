@@ -300,3 +300,154 @@ Window resized to 1856x1016
 compiling shader:
 compiling shader:
 compiling shader:
+Window resized to 1856x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling compute.hlsl
+compiling shader:
+compute.hlsl:217:23: error: use of undeclared identifier 'center'
+    float2 rel = uv - center;
+                      ^
+compute.hlsl:384:20: error: no matching function for call to 'solve_fluid'
+            data = solve_fluid(1, read_offset, uv, ix, iy, W, H, stepSize, mouse_vec, prev_mouse_vec, center);
+                   ^~~~~~~~~~~
+compute.hlsl:167:8: note: candidate function not viable: requires 12 arguments, but 11 were provided
+float4 solve_fluid(
+       ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader:
+compute.hlsl:405:20: error: no matching function for call to 'solve_fluid'
+            data = solve_fluid(1, read_offset, uv, ix, iy, W, H, stepSize, mouse_vec, prev_mouse_vec, center);
+                   ^~~~~~~~~~~
+compute.hlsl:167:8: note: candidate function not viable: requires 12 arguments, but 11 were provided
+float4 solve_fluid(
+       ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader:
+compute.hlsl:407:20: error: no matching function for call to 'solve_fluid'
+            data = solve_fluid(1, read_offset, uv, ix, iy, W, H, stepSize, mouse_vec, prev_mouse_vec, center);
+                   ^~~~~~~~~~~
+compute.hlsl:167:8: note: candidate function not viable: requires 12 arguments, but 11 were provided
+float4 solve_fluid(
+       ^
+compute.hlsl:428:20: error: no matching function for call to 'update_color'
+    float4 color = update_color(1, write_offset, 2, color_read_offset, uv, stepSize, W, H, push_constants.time, frame, mouse_vec, prev_mouse_vec);
+                   ^~~~~~~~~~~~
+compute.hlsl:276:8: note: candidate function not viable: requires 14 arguments, but 12 were provided
+float4 update_color(
+       ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader:
+compute.hlsl:316:63: error: use of undeclared identifier 'radius'
+                             palette_secondary(time * 0.09f - radius * 2.6f),
+                                                              ^
+compute.hlsl:409:20: error: no matching function for call to 'solve_fluid'
+            data = solve_fluid(1, read_offset, uv, ix, iy, W, H, stepSize, mouse_vec, prev_mouse_vec, center);
+                   ^~~~~~~~~~~
+compute.hlsl:167:8: note: candidate function not viable: requires 12 arguments, but 11 were provided
+float4 solve_fluid(
+       ^
+compute.hlsl:430:20: error: no matching function for call to 'update_color'
+    float4 color = update_color(1, write_offset, 2, color_read_offset, uv, stepSize, W, H, push_constants.time, frame, mouse_vec, prev_mouse_vec);
+                   ^~~~~~~~~~~~
+compute.hlsl:276:8: note: candidate function not viable: requires 14 arguments, but 12 were provided
+float4 update_color(
+       ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader:
+compute.hlsl:316:63: error: use of undeclared identifier 'radius'
+                             palette_secondary(time * 0.09f - radius * 2.6f),
+                                                              ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader:
+compute.hlsl:316:63: error: use of undeclared identifier 'radius'
+                             palette_secondary(time * 0.09f - radius * 2.6f),
+                                                              ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader:
+compute.hlsl:316:63: error: use of undeclared identifier 'radius'
+                             palette_secondary(time * 0.09f - radius * 2.6f),
+                                                              ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling compute.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 3736x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 1856x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 3736x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 1856x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 3736x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 1856x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling graphics.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 3736x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 1856x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 3736x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 1856x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 1856x1016
+compiling shader:
+compiling shader:
+compiling shader:

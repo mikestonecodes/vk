@@ -175,7 +175,8 @@ float4 solve_fluid(
     float2 stepSize,
     float4 mouse_vec,
     float4 prev_mouse_vec,
-    float2 center)
+    float2 center_uv,
+    float2 resolution)
 {
     const float dt = 0.15f;
     const float vorticityThreshold = 0.25f;
@@ -213,23 +214,44 @@ float4 solve_fluid(
         extForce += 0.001f / max(dot(p, p), 1e-5f) * dragDir;
     }
 
-    float2 rel = uv - center;
-    float radius = length(rel) + 1e-5f;
-    float2 swirl_dir = float2(-rel.y, rel.x);
-    float swirl_gauss = exp(-pow(radius * 3.0f, 2.0f));
-    float swirl_strength = 0.0009f * swirl_gauss;
-    float obstacle_radius = 0.018f;
-    float obstacle_softness = 0.028f;
-    float obstacle_region = 1.0f - smoothstep(obstacle_radius, obstacle_radius + obstacle_softness, radius);
-    float2 radial_dir = rel / radius;
-    extForce += swirl_dir * (swirl_strength + obstacle_region * 0.0024f);
-    extForce -= radial_dir * obstacle_region * 0.0011f;
+    float2 rel_uv = uv - center_uv;
+    float2 rel_px = rel_uv * resolution;
+    float radius_px = length(rel_px);
+    float minDim = min(resolution.x, resolution.y);
+    float radius_norm = radius_px / max(minDim, 1.0f);
+
+    float obstacle_radius_px = max(minDim * 0.016f, 5.0f);
+    float obstacle_softness_px = obstacle_radius_px * 0.9f;
+    float core_radius_px = obstacle_radius_px * 0.55f;
+
+    float obstacle_region = 1.0f - smoothstep(obstacle_radius_px, obstacle_radius_px + obstacle_softness_px, radius_px);
+    float core_region = 1.0f - smoothstep(core_radius_px * 0.75f, core_radius_px, radius_px);
+
+    float inv_radius_px = (radius_px > 1e-4f) ? (1.0f / radius_px) : 0.0f;
+    float2 radial_dir = rel_px * inv_radius_px;
+    float2 swirl_dir = float2(-radial_dir.y, radial_dir.x);
+
+    float swirl_gauss = exp(-pow(radius_norm * 3.0f, 2.0f));
+    float swirl_strength = 0.0007f * swirl_gauss + obstacle_region * 0.0019f;
+    extForce += swirl_dir * swirl_strength;
+    if (radius_px > 1e-4f) {
+        extForce -= radial_dir * obstacle_region * 0.0014f;
+    }
 
     fluidData.xy += dt * (viscosityForce - s * densityDiff + extForce);
     fluidData.xy = max(float2(0.0f, 0.0f), abs(fluidData.xy) - 5e-6f) * sign(fluidData.xy);
-    float radial_component = dot(fluidData.xy, radial_dir);
-    float2 tangential_component = fluidData.xy - radial_dir * radial_component;
-    fluidData.xy = lerp(fluidData.xy, tangential_component * 1.15f, obstacle_region);
+
+    if (radius_px > 1e-4f) {
+        float radial_component = dot(fluidData.xy, radial_dir);
+        float2 tangential_component = fluidData.xy - radial_dir * radial_component;
+        fluidData.xy = lerp(fluidData.xy, tangential_component * 1.18f, obstacle_region);
+    }
+
+    if (core_region > 0.0f) {
+        float damp = saturate(core_region * 0.85f);
+        fluidData.xy *= (1.0f - damp);
+        fluidData.z  *= (1.0f - core_region * 0.9f);
+    }
 
     fluidData.w = (fd.x - ft.x + fr.y - fl.y);
     float2 vorticity = float2(abs(ft.w) - abs(fd.w), abs(fl.w) - abs(fr.w));
@@ -263,7 +285,9 @@ float4 update_color(
     float time,
     float frame,
     float4 mouse_vec,
-    float4 prev_mouse_vec)
+    float4 prev_mouse_vec,
+    float2 center_uv,
+    float2 resolution)
 {
     const float dt = 0.15f;
 
@@ -275,19 +299,21 @@ float4 update_color(
         : sample_buffer_linear(color_buffer_index, color_read_offset, W, H, uv - dt * velo * stepSize * 3.0f);
 
     float4 col = col_prev;
-    float2 center = float2(0.5f, 0.5f);
-    float2 rel = uv - center;
-    float radius = length(rel);
-    float angle = atan2(rel.y, rel.x);
+    float2 rel_uv = uv - center_uv;
+    float2 rel_px = rel_uv * resolution;
+    float radius_px = length(rel_px);
+    float minDim = min(resolution.x, resolution.y);
+    float radius_norm = radius_px / max(minDim, 1.0f);
+    float angle = atan2(rel_px.y, rel_px.x);
 
     float swirl_wave = sin(time * 0.35f + angle * 2.9f);
-    float ring = exp(-pow(radius * 1.9f, 2.3f));
-    float hollow = exp(-pow(max(radius - 0.20f, 0.0f) * 4.3f, 2.0f));
-    float base_strength = (0.0028f + 0.0016f * swirl_wave) * (ring + hollow * 0.85f);
+    float ring = exp(-pow(radius_norm * 1.9f, 2.3f));
+    float hollow = exp(-pow(max(radius_norm - 0.20f, 0.0f) * 4.3f, 2.0f));
+    float base_strength = (0.0026f + 0.0015f * swirl_wave) * (ring + hollow * 0.85f);
 
     float palette_mix = fbm(uv * 8.0f + time * 0.12f, 3, 2.3f, 0.55f, 211u);
     float3 base_color = lerp(palette_primary(time * 0.05f + angle * 0.2f),
-                             palette_secondary(time * 0.09f - radius * 2.6f),
+                             palette_secondary(time * 0.09f - radius_norm * 2.6f),
                              saturate(palette_mix));
 
     col.rgb += base_color * base_strength * 2.2f;
@@ -312,10 +338,10 @@ float4 update_color(
     col.rgb += 0.0015f / (0.0006f + pow(length(uv - p2), 1.7f)) * dt * 0.12f * palette_secondary(time * 0.05f + 0.675f);
     col.a   += dens_boost;
 
-    float circle_mask = 1.0f - smoothstep(0.018f, 0.030f, radius);
-    float circle_emission = circle_mask * 0.75f;
+    float circle_mask = 1.0f - smoothstep(0.010f, 0.0175f, radius_norm);
+    float circle_emission = circle_mask * 0.85f;
     col.rgb = lerp(col.rgb, palette_primary(time * 0.13f), circle_emission);
-    col.a   = max(col.a, circle_mask * 1.6f);
+    col.a   = max(col.a, circle_mask * 2.0f);
 
     col = clamp(col, 0.0f, 5.0f);
     col = max(col - (col * 0.005f), 0.0f);
@@ -367,7 +393,7 @@ void main(uint3 tid : SV_DispatchThreadID)
         prev_mouse_vec = mouse_vec;
     }
 
-    const float2 center = float2(0.5f, 0.5f);
+    const float2 center_uv = float2(0.5f, 0.5f);
     float2 stepSize = invResolution;
     int ix = int(id % W);
     int iy = int(id / W);
@@ -380,7 +406,7 @@ void main(uint3 tid : SV_DispatchThreadID)
         if (iy == 0) {
             data = mouse_vec;
         } else {
-            data = solve_fluid(1, read_offset, uv, ix, iy, W, H, stepSize, mouse_vec, prev_mouse_vec, center);
+            data = solve_fluid(1, read_offset, uv, ix, iy, W, H, stepSize, mouse_vec, prev_mouse_vec, center_uv, resolution);
             if (frame < 0.5f) {
                 data = float4(0.0f, 0.0f, 0.0f, 0.0f);
             }
@@ -401,7 +427,7 @@ void main(uint3 tid : SV_DispatchThreadID)
         }
     }
 
-    float4 color = update_color(1, write_offset, 2, color_read_offset, uv, stepSize, W, H, push_constants.time, frame, mouse_vec, prev_mouse_vec);
+    float4 color = update_color(1, write_offset, 2, color_read_offset, uv, stepSize, W, H, push_constants.time, frame, mouse_vec, prev_mouse_vec, center_uv, resolution);
 
     if (iy == 0) {
         if (ix == 0) {
