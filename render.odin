@@ -9,13 +9,13 @@ import "vendor:glfw"
 import vk "vendor:vulkan"
 
 PARTICLE_COUNT :: u32(5000)
-// Dynamic particle count based on screen size for consistent performance
+MAX_ASTEROIDS :: u32(48)
+GAME_STATE_CAPACITY :: u32(1 + MAX_ASTEROIDS)
+// One thread per screen pixel for direct compute-driven image synthesis
 get_adaptive_particle_count :: proc() -> u32 {
-	pixel_count := window_width * window_height
-	base_count : u32 = 1_000_000
-	// Scale particle count to maintain consistent density regardless of resolution
-	scale_factor := f32(pixel_count) / f32(1920 * 1080) // Scale proportionally to screen area
-	return u32(f32(base_count) * scale_factor)
+	width := u32(window_width)
+	height := u32(window_height)
+	return width * height
 }
 COMPUTE_GROUP_SIZE :: u32(128)
 PIPELINE_COUNT :: 2
@@ -58,11 +58,9 @@ ComputePushConstants :: struct {
 	key_e:          u32,
 }
 
-GlobalData :: struct {
-	camPos_x: f32,
-	camPos_y: f32,
-	zoom:     f32,
-	padding:  f32,
+GameStateEntry :: struct {
+	data0: [4]f32,
+	data1: [4]f32,
 }
 
 compute_push_constants: ComputePushConstants
@@ -85,9 +83,8 @@ init_render_resources :: proc() -> bool {
 
 	create_buffer(
 		&extra_data_buffer,
-		vk.DeviceSize(window_width) *
-		vk.DeviceSize(window_height) *
-		vk.DeviceSize(size_of(GlobalData)), // 4 channels
+		vk.DeviceSize(GAME_STATE_CAPACITY) *
+		vk.DeviceSize(size_of(GameStateEntry)),
 		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
 	)
 
@@ -173,7 +170,6 @@ simulate_particles :: proc(frame: FrameInputs) {
 
 // accumulation_buffer -> post_process.hlsl -> swapchain framebuffer
 composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) {
-
 	apply_compute_to_fragment_barrier(frame.cmd, &accumulation_buffer)
 	begin_render_pass(frame, framebuffer)
 	post_process_push_constants.screen_width = u32(window_width)
