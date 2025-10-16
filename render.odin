@@ -77,8 +77,8 @@ init_render_resources :: proc() -> bool {
 		&accumulation_buffer,
 		vk.DeviceSize(window_width) *
 		vk.DeviceSize(window_height) *
-		2 *
-		vk.DeviceSize(size_of(u32)), // 4 channels
+		4 *
+		vk.DeviceSize(size_of(u32)), // 4 channels (RGBA)
 		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
 	)
 
@@ -130,15 +130,15 @@ init_render_resources :: proc() -> bool {
 
 	adaptive_count := get_adaptive_particle_count()
 	compute_push_constants = ComputePushConstants {
-		screen_width   = u32(width),
-		screen_height  = u32(height),
+		screen_width   = u32(window_width),
+		screen_height  = u32(window_height),
 		particle_count = adaptive_count,
 		brightness     = 1.0,
 	}
 
 	post_process_push_constants = PostProcessPushConstants {
-		screen_width  = u32(width),
-		screen_height = u32(height),
+		screen_width  = u32(window_width),
+		screen_height = u32(window_height),
 	}
 
     bind_resource(0, &accumulation_buffer)

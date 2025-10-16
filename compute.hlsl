@@ -304,6 +304,7 @@ float4 update_color(
     float radius_px = length(rel_px);
     float minDim = min(resolution.x, resolution.y);
     float radius_norm = radius_px / max(minDim, 1.0f);
+    float radius_uv = length(rel_uv);
     float angle = atan2(rel_px.y, rel_px.x);
 
     float swirl_wave = sin(time * 0.35f + angle * 2.9f);
