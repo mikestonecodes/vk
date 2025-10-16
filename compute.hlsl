@@ -155,12 +155,12 @@ float3 palette_secondary(float x) {
 }
 
 float2 point1(float t) {
-    t *= 0.62f;
+    t *= 0.34f;
     return float2(0.18f, 0.5f + sin(t) * 0.25f);
 }
 
 float2 point2(float t) {
-    t *= 0.62f;
+    t *= 0.34f;
     return float2(0.82f, 0.5f + cos(t + 1.5708f) * 0.25f);
 }
 
@@ -218,10 +218,18 @@ float4 solve_fluid(
     float2 swirl_dir = float2(-rel.y, rel.x);
     float swirl_gauss = exp(-pow(radius * 3.0f, 2.0f));
     float swirl_strength = 0.0009f * swirl_gauss;
-    extForce += swirl_dir * swirl_strength;
+    float obstacle_radius = 0.018f;
+    float obstacle_softness = 0.028f;
+    float obstacle_region = 1.0f - smoothstep(obstacle_radius, obstacle_radius + obstacle_softness, radius);
+    float2 radial_dir = rel / radius;
+    extForce += swirl_dir * (swirl_strength + obstacle_region * 0.0024f);
+    extForce -= radial_dir * obstacle_region * 0.0011f;
 
     fluidData.xy += dt * (viscosityForce - s * densityDiff + extForce);
     fluidData.xy = max(float2(0.0f, 0.0f), abs(fluidData.xy) - 5e-6f) * sign(fluidData.xy);
+    float radial_component = dot(fluidData.xy, radial_dir);
+    float2 tangential_component = fluidData.xy - radial_dir * radial_component;
+    fluidData.xy = lerp(fluidData.xy, tangential_component * 1.15f, obstacle_region);
 
     fluidData.w = (fd.x - ft.x + fr.y - fl.y);
     float2 vorticity = float2(abs(ft.w) - abs(fd.w), abs(fl.w) - abs(fr.w));
@@ -272,12 +280,12 @@ float4 update_color(
     float radius = length(rel);
     float angle = atan2(rel.y, rel.x);
 
-    float swirl_wave = sin(time * 0.65f + angle * 2.9f);
+    float swirl_wave = sin(time * 0.35f + angle * 2.9f);
     float ring = exp(-pow(radius * 1.9f, 2.3f));
     float hollow = exp(-pow(max(radius - 0.20f, 0.0f) * 4.3f, 2.0f));
     float base_strength = (0.0028f + 0.0016f * swirl_wave) * (ring + hollow * 0.85f);
 
-    float palette_mix = fbm(uv * 8.0f + time * 0.22f, 3, 2.3f, 0.55f, 211u);
+    float palette_mix = fbm(uv * 8.0f + time * 0.12f, 3, 2.3f, 0.55f, 211u);
     float3 base_color = lerp(palette_primary(time * 0.05f + angle * 0.2f),
                              palette_secondary(time * 0.09f - radius * 2.6f),
                              saturate(palette_mix));
@@ -304,10 +312,10 @@ float4 update_color(
     col.rgb += 0.0015f / (0.0006f + pow(length(uv - p2), 1.7f)) * dt * 0.12f * palette_secondary(time * 0.05f + 0.675f);
     col.a   += dens_boost;
 
-    float circle_mask = 1.0f - smoothstep(0.26f, 0.38f, radius);
-    float circle_emission = circle_mask * 0.55f;
+    float circle_mask = 1.0f - smoothstep(0.018f, 0.030f, radius);
+    float circle_emission = circle_mask * 0.75f;
     col.rgb = lerp(col.rgb, palette_primary(time * 0.13f), circle_emission);
-    col.a   = max(col.a, circle_mask * 1.1f);
+    col.a   = max(col.a, circle_mask * 1.6f);
 
     col = clamp(col, 0.0f, 5.0f);
     col = max(col - (col * 0.005f), 0.0f);
