@@ -1,7 +1,7 @@
 // Detailed fluid-based smoke inspired by GPU Pro 2 "Simple and Fast Fluids"
 
 static const float COLOR_SCALE = 4096.0f;
-static const int   PASSES = 3;
+static const int   PASSES = 4;
 
 struct PushConstants {
     float time;
@@ -215,8 +215,9 @@ float4 solve_fluid(
 
     float2 rel = uv - center;
     float radius = length(rel) + 1e-5f;
-    float swirl_strength = 0.0008f / (0.08f + radius * 4.0f);
     float2 swirl_dir = float2(-rel.y, rel.x);
+    float swirl_gauss = exp(-pow(radius * 3.0f, 2.0f));
+    float swirl_strength = 0.0009f * swirl_gauss;
     extForce += swirl_dir * swirl_strength;
 
     fluidData.xy += dt * (viscosityForce - s * densityDiff + extForce);
@@ -271,43 +272,45 @@ float4 update_color(
     float radius = length(rel);
     float angle = atan2(rel.y, rel.x);
 
-    float swirl_wave = sin(time * 0.9f + angle * 3.5f);
-    float ring = exp(-pow(radius * 2.2f, 2.0f));
-    float hollow = exp(-pow(max(radius - 0.18f, 0.0f) * 4.5f, 2.0f));
-    float base_strength = (0.0065f + 0.0035f * swirl_wave) * (ring + hollow);
+    float swirl_wave = sin(time * 0.65f + angle * 2.9f);
+    float ring = exp(-pow(radius * 1.9f, 2.3f));
+    float hollow = exp(-pow(max(radius - 0.20f, 0.0f) * 4.3f, 2.0f));
+    float base_strength = (0.0028f + 0.0016f * swirl_wave) * (ring + hollow * 0.85f);
 
     float palette_mix = fbm(uv * 8.0f + time * 0.22f, 3, 2.3f, 0.55f, 211u);
     float3 base_color = lerp(palette_primary(time * 0.05f + angle * 0.2f),
                              palette_secondary(time * 0.09f - radius * 2.6f),
                              saturate(palette_mix));
 
-    col.rgb += base_color * base_strength * 3.2f;
-    col.a   += base_strength * 2.6f;
+    col.rgb += base_color * base_strength * 2.2f;
+    col.a   += base_strength * 1.8f;
 
     float2 mouse_uv = mouse_vec.xy * stepSize;
     float2 prev_mouse_uv = prev_mouse_vec.xy * stepSize;
 
     if (mouse_vec.z > 1.0f && prev_mouse_vec.z > 1.0f) {
         float hue = hash11(asuint(mouse_vec.z + mouse_vec.x + mouse_vec.y + time));
-        float3 mouse_color = lerp(palette_secondary(time * 0.2f + hue),
-                                  palette_primary(time * 0.11f - hue * 0.5f), 0.65f);
-        float bloom = smoothstep(-0.5f, 0.5f, length(mouse_uv - prev_mouse_uv));
-        float dist = pow(length(uv - mouse_vec.xy * stepSize), 1.6f);
-        col += float4(mouse_color, 1.0f) * (bloom * 0.0008f) / (dist + 0.0002f);
+        float3 mouse_color = lerp(palette_secondary(time * 0.18f + hue * 0.5f),
+                                  palette_primary(time * 0.11f - hue * 0.35f), 0.55f);
+        float bloom = smoothstep(-0.4f, 0.6f, length(mouse_uv - prev_mouse_uv));
+        float dist = max(pow(length(uv - mouse_vec.xy * stepSize), 1.55f), 1e-4f);
+        col += float4(mouse_color, 1.0f) * (bloom * 0.0006f) / dist;
     }
 
     float2 p1 = point1(time);
     float2 p2 = point2(time);
-    col.rgb += 0.0025f / (0.0005f + pow(length(uv - p1), 1.75f)) * dt * 0.12f * palette_primary(time * 0.05f);
-    col.rgb += 0.0025f / (0.0005f + pow(length(uv - p2), 1.75f)) * dt * 0.12f * palette_secondary(time * 0.05f + 0.675f);
-    col.a   += 0.0012f * (ring + hollow);
+    float dens_boost = 0.0010f * (ring + hollow * 0.6f);
+    col.rgb += 0.0015f / (0.0006f + pow(length(uv - p1), 1.7f)) * dt * 0.12f * palette_primary(time * 0.05f);
+    col.rgb += 0.0015f / (0.0006f + pow(length(uv - p2), 1.7f)) * dt * 0.12f * palette_secondary(time * 0.05f + 0.675f);
+    col.a   += dens_boost;
 
-    float circle = smoothstep(0.18f, 0.0f, radius);
-    col.rgb += palette_primary(time * 0.13f) * circle * 0.8f;
-    col.a   = max(col.a, circle * 1.2f);
+    float circle_mask = 1.0f - smoothstep(0.26f, 0.38f, radius);
+    float circle_emission = circle_mask * 0.55f;
+    col.rgb = lerp(col.rgb, palette_primary(time * 0.13f), circle_emission);
+    col.a   = max(col.a, circle_mask * 1.1f);
 
     col = clamp(col, 0.0f, 5.0f);
-    col = max(col - (col * 0.008f), 0.0f);
+    col = max(col - (col * 0.005f), 0.0f);
 
     return col;
 }

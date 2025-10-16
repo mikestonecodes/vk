@@ -145,8 +145,6 @@ float4 fs_main(VertexOutput input) : SV_Target {
     float3 smoke = saturate(blended);
 
     float2 grain_uv = frac(input.uv * 0.35f);
-    float3 grain = textures[0].Sample(samplers[0], grain_uv).rgb;
-    smoke = lerp(smoke, smoke * grain, 0.18f);
 
     float backlight = pow(accumDensity, 1.4f);
     float3 tint_low = float3(0.16f, 0.18f, 0.22f);
