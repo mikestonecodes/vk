@@ -1,4 +1,8 @@
-// --- Push constants: match host layout ---
+// Detailed fluid-based smoke inspired by GPU Pro 2 "Simple and Fast Fluids"
+
+static const float COLOR_SCALE = 4096.0f;
+static const int   PASSES = 3;
+
 struct PushConstants {
     float time;
     float delta_time;
@@ -7,59 +11,34 @@ struct PushConstants {
     uint  screen_width;
     uint  screen_height;
     float brightness;
-	    float mouse_x;
-	    float mouse_y;
-	    uint  mouse_left;
-	    uint  mouse_right;
-	    uint  key_h;
-	    uint  key_j;
-	    uint  key_k;
-	    uint  key_l;
-	    uint  key_w;
-	    uint  key_a;
-	    uint  key_s;
-	    uint  key_d;
-	    uint  key_q;
-	    uint  key_e;
-
+    float mouse_x;
+    float mouse_y;
+    uint  mouse_left;
+    uint  mouse_right;
+    uint  _pad1;
 };
 [[vk::push_constant]] PushConstants push_constants;
 
-// Global array of storage buffers
 [[vk::binding(0, 0)]] RWStructuredBuffer<uint> buffers[];
 
 struct GlobalData {
-	float2 camPos;
-	float zoom;
-	float pad;
+    float2 prevMouseUv;
+    float  prevMouseDown;
+    float  frameCount;
+    uint   ping;
+    float  pad0;
+    float  pad1;
+    float  pad2;
 };
-
 [[vk::binding(3, 0)]] RWStructuredBuffer<GlobalData> globalData;
 
-
-static const float COLOR_SCALE = 4096.0f;
-static const float TWO_PI      = 6.28318530718f;
-
-// --- Hash helpers ---
 float hash11(uint n) {
     n ^= n * 0x27d4eb2d;
     n ^= n >> 15;
     n *= 0x85ebca6b;
     n ^= n >> 13;
-    return (n & 0x00FFFFFF) / 16777215.0;
+    return (n & 0x00FFFFFFu) / 16777215.0f;
 }
-
-float2 rand2(uint n) {
-    n ^= n * 0x27d4eb2d;
-    n ^= n >> 15;
-    n *= 0x85ebca6b;
-    n ^= n >> 13;
-    return float2(
-        (n & 0xFFFF) * (1.0f/65535.0f),
-        ((n >> 16) & 0xFFFF) * (1.0f/65535.0f)
-    );
-}
-
 
 float2 fade2(float2 t) {
     return t * t * (3.0f - 2.0f * t);
@@ -107,291 +86,333 @@ float fbm(float2 p, int octaves, float lacunarity, float gain, uint seed) {
     return range > 0.0f ? value / range : 0.0f;
 }
 
-struct BiomeSample {
-    float3 color;
-    float  terrain;
-    float  moisture;
-    float  water;
-};
-
-BiomeSample sample_biome(float2 pos, float planet_radius) {
-    BiomeSample sample;
-
-    float2 coord = pos * 0.00018f;
-    float elevation = fbm(coord, 5, 1.85f, 0.55f, 127u);
-    float ridged    = fbm(coord * 1.8f + float2(12.3f, -7.5f), 4, 2.05f, 0.5f, 233u);
-    float macro     = fbm(coord * 0.45f + float2(-21.0f, 31.0f), 3, 1.7f, 0.65f, 389u);
-    float terrain   = saturate(0.55f * elevation + 0.35f * ridged + 0.10f * macro);
-
-    float moisture  = fbm(coord + float2(96.3f, -42.7f), 4, 1.9f, 0.58f, 491u);
-    float latitude  = abs(pos.y) / planet_radius;
-    float polar     = smoothstep(0.55f, 0.85f, latitude);
-
-    float ocean     = 1.0f - smoothstep(0.30f, 0.42f, terrain);
-    float shore     = smoothstep(0.30f, 0.42f, terrain) * (1.0f - smoothstep(0.42f, 0.50f, terrain));
-    float plains    = smoothstep(0.38f, 0.62f, terrain) * (1.0f - smoothstep(0.62f, 0.80f, terrain));
-    float mountain  = smoothstep(0.60f, 0.78f, terrain) * (1.0f - smoothstep(0.78f, 0.88f, terrain));
-    float snow      = smoothstep(0.85f, 0.95f, terrain) + polar * 0.6f;
-
-    float humid     = smoothstep(0.45f, 0.75f, moisture);
-    float arid      = 1.0f - smoothstep(0.35f, 0.65f, moisture);
-
-    float desert    = plains * arid;
-    float forest    = plains * humid;
-    float grass     = max(plains - desert - forest, 0.0f);
-
-    float total = ocean + shore + desert + forest + grass + mountain + snow + 1e-5f;
-
-    float3 color =
-        ocean    * float3(0.25f, 0.37f, 0.62f) +
-        shore    * float3(0.68f, 0.76f, 0.65f) +
-        desert   * float3(0.88f, 0.73f, 0.48f) +
-        forest   * float3(0.26f, 0.48f, 0.33f) +
-        grass    * float3(0.55f, 0.72f, 0.40f) +
-        mountain * float3(0.56f, 0.52f, 0.50f) +
-        snow     * float3(0.92f, 0.93f, 0.96f);
-
-    color /= total;
-
-    int2 jitter_cell = int2(floor(pos * 0.02f));
-    float hue_jitter = hash11(hash2d(jitter_cell, 0x9e3779b9u)) * 0.1f - 0.05f;
-    color = saturate(color + hue_jitter);
-
-    color = saturate(lerp(color, pow(color, float3(0.90f, 0.90f, 0.92f)), 0.6f));
-
-    sample.color = color;
-    sample.terrain = terrain;
-    sample.moisture = moisture;
-    sample.water = saturate(ocean + shore * 0.6f);
-    return sample;
+uint buffer_idx(uint base_offset, uint W, uint H, int ix, int iy) {
+    ix = clamp(ix, 0, int(W) - 1);
+    iy = clamp(iy, 0, int(H) - 1);
+    return base_offset + (uint(iy) * W + uint(ix)) * 4u;
 }
 
+float4 load_buffer(uint buffer_index, uint base_offset, uint W, uint H, int ix, int iy) {
+    uint idx = buffer_idx(base_offset, W, H, ix, iy);
+    return float4(
+        asfloat(buffers[buffer_index][idx + 0]),
+        asfloat(buffers[buffer_index][idx + 1]),
+        asfloat(buffers[buffer_index][idx + 2]),
+        asfloat(buffers[buffer_index][idx + 3])
+    );
+}
 
-[numthreads(128,1,1)]
+float4 sample_buffer_linear(uint buffer_index, uint base_offset, uint W, uint H, float2 uv) {
+    float2 clamped = clamp(uv, float2(0.0f, 0.0f), float2(1.0f, 1.0f));
+    float2 pos = clamped * float2(W, H) - 0.5f;
+    int2 i0 = int2(floor(pos));
+    float2 f = frac(pos);
+
+    float4 c00 = load_buffer(buffer_index, base_offset, W, H, i0.x,     i0.y);
+    float4 c10 = load_buffer(buffer_index, base_offset, W, H, i0.x + 1, i0.y);
+    float4 c01 = load_buffer(buffer_index, base_offset, W, H, i0.x,     i0.y + 1);
+    float4 c11 = load_buffer(buffer_index, base_offset, W, H, i0.x + 1, i0.y + 1);
+
+    float4 cx0 = lerp(c00, c10, f.x);
+    float4 cx1 = lerp(c01, c11, f.x);
+    return lerp(cx0, cx1, f.y);
+}
+
+void store_buffer(uint buffer_index, uint base_offset, uint W, uint H, int ix, int iy, float4 value) {
+    if (ix < 0 || iy < 0 || ix >= int(W) || iy >= int(H)) return;
+    uint idx = buffer_idx(base_offset, W, H, ix, iy);
+    buffers[buffer_index][idx + 0] = asuint(value.x);
+    buffers[buffer_index][idx + 1] = asuint(value.y);
+    buffers[buffer_index][idx + 2] = asuint(value.z);
+    buffers[buffer_index][idx + 3] = asuint(value.w);
+}
+
+float3 getPalette(float x, float3 c1, float3 c2, float3 p1, float3 p2) {
+    float x2 = frac(x / 2.0f);
+    x = frac(x);
+    float3 pws = float3((1.0f - x) * (1.0f - x), 2.0f * (1.0f - x) * x, x * x);
+    float3 palA = float3(
+        dot(float3(c1.x, p1.x, c2.x), pws),
+        dot(float3(c1.y, p1.y, c2.y), pws),
+        dot(float3(c1.z, p1.z, c2.z), pws)
+    );
+    float3 palB = float3(
+        dot(float3(c2.x, p2.x, c1.x), pws),
+        dot(float3(c2.y, p2.y, c1.y), pws),
+        dot(float3(c2.z, p2.z, c1.z), pws)
+    );
+    return clamp(lerp(palA, palB, step(0.5f, x2)), 0.0f, 1.0f);
+}
+
+float3 palette_primary(float x) {
+    return getPalette(-x, float3(0.20f, 0.48f, 0.74f), float3(0.92f, 0.42f, 0.16f),
+                      float3(1.0f, 1.10f, 0.60f), float3(1.0f, -0.40f, 0.05f));
+}
+
+float3 palette_secondary(float x) {
+    return getPalette(-x, float3(0.42f, 0.32f, 0.56f), float3(0.92f, 0.76f, 0.46f),
+                      float3(0.12f, 0.82f, 1.30f), float3(1.25f, -0.12f, 0.12f));
+}
+
+float2 point1(float t) {
+    t *= 0.62f;
+    return float2(0.18f, 0.5f + sin(t) * 0.25f);
+}
+
+float2 point2(float t) {
+    t *= 0.62f;
+    return float2(0.82f, 0.5f + cos(t + 1.5708f) * 0.25f);
+}
+
+float4 solve_fluid(
+    uint buffer_index,
+    uint base_offset,
+    float2 uv,
+    int ix,
+    int iy,
+    uint W,
+    uint H,
+    float2 stepSize,
+    float4 mouse_vec,
+    float4 prev_mouse_vec,
+    float2 center)
+{
+    const float dt = 0.15f;
+    const float vorticityThreshold = 0.25f;
+    const float velocityThreshold  = 24.0f;
+    const float viscosityThreshold = 0.64f;
+    const float k = 0.2f;
+    const float s = k / dt;
+
+    float4 fluidData = load_buffer(buffer_index, base_offset, W, H, ix, iy);
+    float4 fr = load_buffer(buffer_index, base_offset, W, H, ix + 1, iy);
+    float4 fl = load_buffer(buffer_index, base_offset, W, H, ix - 1, iy);
+    float4 ft = load_buffer(buffer_index, base_offset, W, H, ix, iy + 1);
+    float4 fd = load_buffer(buffer_index, base_offset, W, H, ix, iy - 1);
+
+    float3 ddx = (fr.xyz - fl.xyz) * 0.5f;
+    float3 ddy = (ft.xyz - fd.xyz) * 0.5f;
+    float divergence = ddx.x + ddy.y;
+    float2 densityDiff = float2(ddx.z, ddy.z);
+
+    fluidData.z -= dt * dot(float3(densityDiff, divergence), fluidData.xyz);
+
+    float2 laplacian = fr.xy + fl.xy + ft.xy + fd.xy - 4.0f * fluidData.xy;
+    float2 viscosityForce = viscosityThreshold * laplacian;
+
+    float2 uvHistory = uv - dt * fluidData.xy * stepSize;
+    float4 advect = sample_buffer_linear(buffer_index, base_offset, W, H, uvHistory);
+    fluidData.x = advect.x;
+    fluidData.y = advect.y;
+    fluidData.w = advect.w;
+
+    float2 extForce = float2(0.0f, 0.0f);
+    if (mouse_vec.z > 1.0f && prev_mouse_vec.z > 1.0f) {
+        float2 dragDir = clamp((mouse_vec.xy - prev_mouse_vec.xy) * stepSize * 600.0f, -10.0f, 10.0f);
+        float2 p = uv - mouse_vec.xy * stepSize;
+        extForce += 0.001f / max(dot(p, p), 1e-5f) * dragDir;
+    }
+
+    float2 rel = uv - center;
+    float radius = length(rel) + 1e-5f;
+    float swirl_strength = 0.0008f / (0.08f + radius * 4.0f);
+    float2 swirl_dir = float2(-rel.y, rel.x);
+    extForce += swirl_dir * swirl_strength;
+
+    fluidData.xy += dt * (viscosityForce - s * densityDiff + extForce);
+    fluidData.xy = max(float2(0.0f, 0.0f), abs(fluidData.xy) - 5e-6f) * sign(fluidData.xy);
+
+    fluidData.w = (fd.x - ft.x + fr.y - fl.y);
+    float2 vorticity = float2(abs(ft.w) - abs(fd.w), abs(fl.w) - abs(fr.w));
+    float vort_len = length(vorticity) + 1e-5f;
+    vorticity = vorticity * (vorticityThreshold / vort_len) * fluidData.w;
+    fluidData.xy += vorticity;
+
+    fluidData.y *= smoothstep(0.5f, 0.48f, abs(uv.y - 0.5f));
+    fluidData.x *= smoothstep(0.5f, 0.49f, abs(uv.x - 0.5f));
+
+    float minW = -vorticityThreshold;
+    float maxW = vorticityThreshold;
+    fluidData = clamp(
+        fluidData,
+        float4(float2(-velocityThreshold, -velocityThreshold), 0.5f, minW),
+        float4(float2(velocityThreshold, velocityThreshold), 3.0f, maxW)
+    );
+
+    return fluidData;
+}
+
+float4 update_color(
+    uint fluid_buffer_index,
+    uint fluid_offset,
+    uint color_buffer_index,
+    uint color_read_offset,
+    float2 uv,
+    float2 stepSize,
+    uint W,
+    uint H,
+    float time,
+    float frame,
+    float4 mouse_vec,
+    float4 prev_mouse_vec)
+{
+    const float dt = 0.15f;
+
+    float4 fluid = sample_buffer_linear(fluid_buffer_index, fluid_offset, W, H, uv);
+    float2 velo = fluid.xy;
+
+    float4 col_prev = (frame < 0.5f)
+        ? float4(0.0f, 0.0f, 0.0f, 0.0f)
+        : sample_buffer_linear(color_buffer_index, color_read_offset, W, H, uv - dt * velo * stepSize * 3.0f);
+
+    float4 col = col_prev;
+    float2 center = float2(0.5f, 0.5f);
+    float2 rel = uv - center;
+    float radius = length(rel);
+    float angle = atan2(rel.y, rel.x);
+
+    float swirl_wave = sin(time * 0.9f + angle * 3.5f);
+    float ring = exp(-pow(radius * 2.2f, 2.0f));
+    float hollow = exp(-pow(max(radius - 0.18f, 0.0f) * 4.5f, 2.0f));
+    float base_strength = (0.0065f + 0.0035f * swirl_wave) * (ring + hollow);
+
+    float palette_mix = fbm(uv * 8.0f + time * 0.22f, 3, 2.3f, 0.55f, 211u);
+    float3 base_color = lerp(palette_primary(time * 0.05f + angle * 0.2f),
+                             palette_secondary(time * 0.09f - radius * 2.6f),
+                             saturate(palette_mix));
+
+    col.rgb += base_color * base_strength * 3.2f;
+    col.a   += base_strength * 2.6f;
+
+    float2 mouse_uv = mouse_vec.xy * stepSize;
+    float2 prev_mouse_uv = prev_mouse_vec.xy * stepSize;
+
+    if (mouse_vec.z > 1.0f && prev_mouse_vec.z > 1.0f) {
+        float hue = hash11(asuint(mouse_vec.z + mouse_vec.x + mouse_vec.y + time));
+        float3 mouse_color = lerp(palette_secondary(time * 0.2f + hue),
+                                  palette_primary(time * 0.11f - hue * 0.5f), 0.65f);
+        float bloom = smoothstep(-0.5f, 0.5f, length(mouse_uv - prev_mouse_uv));
+        float dist = pow(length(uv - mouse_vec.xy * stepSize), 1.6f);
+        col += float4(mouse_color, 1.0f) * (bloom * 0.0008f) / (dist + 0.0002f);
+    }
+
+    float2 p1 = point1(time);
+    float2 p2 = point2(time);
+    col.rgb += 0.0025f / (0.0005f + pow(length(uv - p1), 1.75f)) * dt * 0.12f * palette_primary(time * 0.05f);
+    col.rgb += 0.0025f / (0.0005f + pow(length(uv - p2), 1.75f)) * dt * 0.12f * palette_secondary(time * 0.05f + 0.675f);
+    col.a   += 0.0012f * (ring + hollow);
+
+    float circle = smoothstep(0.18f, 0.0f, radius);
+    col.rgb += palette_primary(time * 0.13f) * circle * 0.8f;
+    col.a   = max(col.a, circle * 1.2f);
+
+    col = clamp(col, 0.0f, 5.0f);
+    col = max(col - (col * 0.008f), 0.0f);
+
+    return col;
+}
+
+[numthreads(128, 1, 1)]
 void main(uint3 tid : SV_DispatchThreadID)
 {
     uint id = tid.x;
     const uint W = push_constants.screen_width;
     const uint H = push_constants.screen_height;
+    const uint total_pixels = W * H;
+    if (id >= total_pixels) return;
 
-    RWStructuredBuffer<uint> accum_buffer = buffers[0];
+    float2 resolution = float2(float(W), float(H));
+    float2 invResolution = 1.0f / resolution;
+    float2 uv = (float2(id % W, id / W) + 0.5f) * invResolution;
 
-    // --- Load persisted camera state as floats ---
-    float2 camPos = float2(globalData[0].camPos);
-    float current_zoom = globalData[0].zoom;
-
-    // Initialize zoom to 1.0 if it's 0 or invalid
-    if (current_zoom <= 0.0) current_zoom = 1.0;
-
-    // --- Input delta (normalize so diagonals aren't faster) ---
-    float2 delta = float2(
-        (push_constants.key_d ? 1.0 : 0.0) - (push_constants.key_a ? 1.0 : 0.0),
-        (push_constants.key_s ? 1.0 : 0.0) - (push_constants.key_w ? 1.0 : 0.0)
-    );
-    float len2 = dot(delta, delta);
-    if (len2 > 0.0) delta /= sqrt(len2);
-
-    // --- Zoom input (E = zoom in, Q = zoom out) ---
-    float zoom_delta = (push_constants.key_e ? 1.0 : 0.0) - (push_constants.key_q ? 1.0 : 0.0);
-    float zoom_speed = 1.5;
-    float zoom_factor = current_zoom * exp(zoom_delta * zoom_speed * push_constants.delta_time);
-
-    // Remove zoom limits for infinite zoom
-    zoom_factor = max(zoom_factor, 1e-10);
-
-    float camera_speed = 400.0 / zoom_factor;
-    camPos += delta * camera_speed * push_constants.delta_time;
-
-    // Generate particle positions that cover the screen
-    float2 screen_center = float2(W, H) * 0.5;
-    float2 particle_uv = rand2(id + 12345u);
-    float2 screen_pos = particle_uv * float2(W, H);
-    float2 world_pos = (screen_pos - screen_center) / zoom_factor + camPos;
-
-    // Early culling - skip particles outside visible area with margin
-    float margin = 32.0; // pixels
-    if (screen_pos.x < -margin || screen_pos.x >= W + margin ||
-        screen_pos.y < -margin || screen_pos.y >= H + margin) {
-        return; // Skip this particle entirely
+    GlobalData state = globalData[0];
+    float frame = state.frameCount;
+    if (!(frame >= 0.0f && frame < 1e9f)) {
+        frame = 0.0f;
+        state.ping = 0u;
+        state.prevMouseUv = uv;
+        state.prevMouseDown = 0.0f;
+        state.frameCount = 0.0f;
     }
 
-    // Generate particles based on world position for infinite detail
-    uint world_hash = asuint(world_pos.x * 1000.0) ^ asuint(world_pos.y * 1000.0);
+    uint ping = state.ping & 1u;
+    uint next_ping = 1u - ping;
+    uint stride = total_pixels * 4u;
 
-    // Scale-dependent rendering
-    float scale = 1.0 / zoom_factor;
+    uint fluid_read_offset  = ping * stride;
+    uint fluid_write_offset = next_ping * stride;
+    uint color_read_offset  = ping * stride;
+    uint color_write_offset = next_ping * stride;
 
-    // Smooth transition - calculate blend factors
-    float transition_start = 1.0;
-    float transition_end = 3.0;
-    float planet_blend = saturate((scale - transition_start) / (transition_end - transition_start));
-    float dirt_blend = 1.0 - planet_blend;
+    float2 mouse_px = float2(push_constants.mouse_x, push_constants.mouse_y);
+    float2 mouse_uv = clamp(mouse_px * invResolution, float2(0.0f, 0.0f), float2(1.0f, 1.0f));
+    bool mouse_add = (push_constants.mouse_left != 0u);
+    bool mouse_erase = (push_constants.mouse_right != 0u);
+    float4 mouse_vec = float4(mouse_px, mouse_add ? 2.0f : 0.0f, mouse_erase ? 2.0f : 0.0f);
 
-    // Planet layer - make it huge so it fills the screen when zoomed out
-    float2 plant_center = float2(0.0f, 0.0f);
-    float plant_radius = 10000.0f; // Much larger radius
-    float dist_to_center = length(world_pos - plant_center);
-
-    BiomeSample biome_here = sample_biome(world_pos, plant_radius);
-
-    if (dist_to_center < plant_radius && planet_blend > 0.0f) {
-        // Inside planet - render varied terrain
-        uint2 screen_pos_uint = uint2(screen_pos);
-        screen_pos_uint = min(screen_pos_uint, uint2(W-1, H-1));
-        uint baseIdx = (screen_pos_uint.y * W + screen_pos_uint.x) * 4u;
-
-        float3 plant_color = biome_here.color;
-
-        // Painterly-friendly variation with soft brush accents
-        float micro_variation = fbm(world_pos * 0.0012f + float2(17.0f, -9.3f), 2, 2.15f, 0.6f, 877u);
-        plant_color *= lerp(0.88f, 1.08f, micro_variation);
-
-        float water_emphasis = biome_here.water;
-        if (water_emphasis > 0.0f) {
-            float3 deep_water = float3(0.16f, 0.28f, 0.58f);
-            float3 foam_tint = float3(0.36f, 0.48f, 0.72f);
-            float crest = saturate(0.5f + 0.5f * sin(world_pos.x * 0.0009f - world_pos.y * 0.0006f + push_constants.time * 0.35f));
-            float3 target = lerp(deep_water, foam_tint, crest);
-            plant_color = lerp(plant_color, target, water_emphasis * 0.65f);
-        }
-
-        float edge_fade = 1.0f - saturate(dist_to_center / (plant_radius * 0.86f));
-
-        float sphere_z = sqrt(max(plant_radius * plant_radius - dist_to_center * dist_to_center, 0.0f));
-        float3 normal = normalize(float3(world_pos - plant_center, sphere_z));
-        float3 light_dir = normalize(float3(-0.45f, 0.62f, 0.64f));
-        float lambert = saturate(dot(normal, light_dir));
-        float ambient = 0.48f;
-        float shading = ambient + lambert * 0.52f;
-
-        float rim = pow(saturate(1.0f - dot(normal, float3(0.0f, 0.0f, 1.0f))), 2.5f);
-        shading *= lerp(1.0f, 0.92f, rim);
-        shading = max(shading, 0.55f);
-
-        plant_color *= shading;
-        plant_color *= (0.70f + 0.30f * edge_fade);
-
-        float water_wave = biome_here.water * 0.05f * sin(push_constants.time * 0.45f + world_pos.x * 0.0007f - world_pos.y * 0.0009f);
-        plant_color *= (1.0f + water_wave);
-
-        plant_color = saturate(plant_color * max(push_constants.brightness * 0.9f, 0.0f));
-
-        // Batch color values to reduce atomic operations
-        uint addR = (uint)(plant_color.r * planet_blend * COLOR_SCALE);
-        uint addG = (uint)(plant_color.g * planet_blend * COLOR_SCALE);
-        uint addB = (uint)(plant_color.b * planet_blend * COLOR_SCALE);
-        uint addA = (uint)(COLOR_SCALE * planet_blend);
-
-        // Only add if contribution is significant
-        if (addA > COLOR_SCALE * 0.01f) {
-            InterlockedAdd(accum_buffer[baseIdx+0], addR);
-            InterlockedAdd(accum_buffer[baseIdx+1], addG);
-            InterlockedAdd(accum_buffer[baseIdx+2], addB);
-            InterlockedAdd(accum_buffer[baseIdx+3], addA);
-        }
+    float2 prev_mouse_uv = (frame > 0.5f) ? state.prevMouseUv : mouse_uv;
+    float4 prev_mouse_vec = load_buffer(1, fluid_read_offset, W, H, 0, 0);
+    if (frame < 0.5f) {
+        prev_mouse_vec = mouse_vec;
     }
-    // Stars in space (outside planet)
-    else if (planet_blend > 0.0) {
-        // Create stars based on world position - very sparse since they splat
-        uint star_hash = asuint(world_pos.x * 0.01) ^ asuint(world_pos.y * 0.01);
-        if (hash11(star_hash) > 0.993) { // Very sparse stars for splatting
-            uint2 screen_pos_uint = uint2(screen_pos);
-            screen_pos_uint = min(screen_pos_uint, uint2(W-1, H-1));
-            uint baseIdx = (screen_pos_uint.y * W + screen_pos_uint.x) * 4u;
 
-            // Make stars bright with color variation
-            float star_variation = hash11(star_hash * 123u);
-            float3 star_color;
-            if (star_variation < 0.1) {
-                star_color = float3(15.0, 12.0, 8.0); // Orange giant
-            } else if (star_variation < 0.3) {
-                star_color = float3(8.0, 12.0, 18.0); // Blue star
-            } else if (star_variation < 0.6) {
-                star_color = float3(18.0, 15.0, 12.0); // White star
-            } else {
-                star_color = float3(12.0, 18.0, 14.0); // Green-white
+    const float2 center = float2(0.5f, 0.5f);
+    float2 stepSize = invResolution;
+    int ix = int(id % W);
+    int iy = int(id / W);
+
+    uint read_offset = fluid_read_offset;
+    uint write_offset = fluid_write_offset;
+
+    for (int pass = 0; pass < PASSES; ++pass) {
+        float4 data;
+        if (iy == 0) {
+            data = mouse_vec;
+        } else {
+            data = solve_fluid(1, read_offset, uv, ix, iy, W, H, stepSize, mouse_vec, prev_mouse_vec, center);
+            if (frame < 0.5f) {
+                data = float4(0.0f, 0.0f, 0.0f, 0.0f);
             }
-
-            uint addR = (uint)(saturate(star_color.r * planet_blend) * COLOR_SCALE);
-            uint addG = (uint)(saturate(star_color.g * planet_blend) * COLOR_SCALE);
-            uint addB = (uint)(saturate(star_color.b * planet_blend) * COLOR_SCALE);
-            uint addA = (uint)(COLOR_SCALE * planet_blend);
-
-            if (addA > COLOR_SCALE * 0.01) {
-                InterlockedAdd(accum_buffer[baseIdx+0], addR);
-                InterlockedAdd(accum_buffer[baseIdx+1], addG);
-                InterlockedAdd(accum_buffer[baseIdx+2], addB);
-                InterlockedAdd(accum_buffer[baseIdx+3], addA);
+            if (mouse_erase) {
+                float dist2 = dot(uv - mouse_uv, uv - mouse_uv);
+                float erase = exp(-dist2 * 1200.0f);
+                data.z = max(data.z - erase * 2.0f, 0.0f);
+                data.xy *= (1.0f - erase * 0.4f);
             }
+        }
+
+        store_buffer(1, write_offset, W, H, ix, iy, data);
+
+        if (pass < PASSES - 1) {
+            uint tmp = read_offset;
+            read_offset = write_offset;
+            write_offset = tmp;
         }
     }
 
-    // Dirt layer (brush strokes following biome flow)
-    if (dirt_blend > 0.0f) {
-        float water_presence = biome_here.water;
-        float movement_scale = water_presence > 0.3f ? saturate(water_presence) : 0.0f;
+    float4 color = update_color(1, write_offset, 2, color_read_offset, uv, stepSize, W, H, push_constants.time, frame, mouse_vec, prev_mouse_vec);
 
-        float2 temporal_offset = float2(push_constants.time * 0.03f, -push_constants.time * 0.017f) * movement_scale;
-        float brush_field = fbm(world_pos * 0.00085f + temporal_offset, 4, 1.85f, 0.55f, 601u);
-        float scatter = hash11(world_hash * 977u);
-        float threshold = lerp(0.78f, 0.42f, movement_scale);
-
-        if (brush_field > scatter * threshold) {
-            float2 flow_origin = world_pos + (rand2(world_hash + 999u) - 0.5f) * 80.0f;
-            float base_angle = fbm(flow_origin * 0.0006f, 3, 1.9f, 0.6f, 811u) * TWO_PI;
-
-            BiomeSample stroke_biome = sample_biome(flow_origin, plant_radius);
-            float water_stroke = stroke_biome.water;
-            if (movement_scale <= 0.0f) {
-                water_stroke = 0.0f;
-            }
-            float angle_anim = water_stroke * push_constants.time * 0.6f;
-            float flow_angle = base_angle + angle_anim;
-            float2 dir = float2(cos(flow_angle), sin(flow_angle));
-
-            float jitter = (hash11(world_hash * 313u) - 0.5f) * lerp(0.35f, 0.65f, water_stroke);
-            float pulse_speed = lerp(0.15f, 0.85f, water_stroke);
-            float pulse = water_stroke * sin(push_constants.time * pulse_speed + hash11(world_hash * 127u) * TWO_PI);
-            float stroke_length_base = lerp(12.0f, 48.0f, brush_field);
-            float stroke_length = lerp(stroke_length_base * 0.7f, stroke_length_base * 1.6f, water_stroke);
-
-            float2 particle_world_pos = flow_origin + dir * stroke_length * pulse + float2(-dir.y, dir.x) * jitter * stroke_length * 0.35f;
-            float2 screen_particle_pos = (particle_world_pos - camPos) * zoom_factor + screen_center;
-            int2 ip = int2(floor(screen_particle_pos + 0.5f));
-
-            // Check if particle is visible on screen
-            if (ip.x >= 0 && ip.x < int(W) && ip.y >= 0 && ip.y < int(H)) {
-                uint2 pix = uint2(ip);
-                uint baseIdx = (pix.y * W + pix.x) * 4u;
-
-                BiomeSample stroke_color_biome = sample_biome(particle_world_pos, plant_radius);
-                float3 baseCol = saturate(pow(stroke_color_biome.color, float3(0.88f, 0.90f, 0.92f)));
-                if (water_stroke > 0.01f) {
-                    float3 stroke_water_tint = float3(0.18f, 0.34f, 0.62f);
-                    baseCol = lerp(baseCol, stroke_water_tint, water_stroke * 0.75f);
-                }
-                baseCol *= (0.65f + 0.65f * lerp(brush_field, 1.0f, water_stroke));
-                baseCol = saturate(baseCol * max(push_constants.brightness, 0.0f));
-
-                float alpha_boost = (0.45f + 0.55f * brush_field) * lerp(0.55f, 1.1f, water_stroke);
-                uint addR = (uint)(baseCol.r * dirt_blend * COLOR_SCALE);
-                uint addG = (uint)(baseCol.g * dirt_blend * COLOR_SCALE);
-                uint addB = (uint)(baseCol.b * dirt_blend * COLOR_SCALE);
-                uint addA = (uint)(COLOR_SCALE * dirt_blend * alpha_boost);
-
-                if (addA > COLOR_SCALE * 0.01f) {
-                    InterlockedAdd(accum_buffer[baseIdx+0], addR);
-                    InterlockedAdd(accum_buffer[baseIdx+1], addG);
-                    InterlockedAdd(accum_buffer[baseIdx+2], addB);
-                    InterlockedAdd(accum_buffer[baseIdx+3], addA);
-                }
-            }
+    if (iy == 0) {
+        if (ix == 0) {
+            color = mouse_vec;
+        } else {
+            color = float4(0.0f, 0.0f, 0.0f, 0.0f);
         }
     }
 
-    // Persist exactly once per dispatch
+    store_buffer(2, color_write_offset, W, H, ix, iy, color);
+
+    uint accum_idx = id * 4u;
+    buffers[0][accum_idx + 0] = (uint)(saturate(color.r / 5.0f) * COLOR_SCALE * push_constants.brightness);
+    buffers[0][accum_idx + 1] = (uint)(saturate(color.g / 5.0f) * COLOR_SCALE * push_constants.brightness);
+    buffers[0][accum_idx + 2] = (uint)(saturate(color.b / 5.0f) * COLOR_SCALE * push_constants.brightness);
+    buffers[0][accum_idx + 3] = (uint)(saturate(color.a / 5.0f) * COLOR_SCALE);
+
     if (id == 0) {
-        globalData[0].camPos = camPos;
-        globalData[0].zoom = zoom_factor;
+        state.prevMouseUv = mouse_uv;
+        state.prevMouseDown = mouse_add ? 1.0f : 0.0f;
+        state.frameCount = frame + 1.0f;
+        state.ping = next_ping;
+        globalData[0] = state;
     }
 }

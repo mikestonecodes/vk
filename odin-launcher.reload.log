@@ -29,8 +29,8 @@ Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: Removing driver /usr/lib/libvulkan_intel.so due to not having any physical devices
 Validation layer: Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
-Validation layer: Inserted device layer "VK_LAYER_KHRONOS_validation" (libVkLayer_khronos_validation.so)
-Validation layer: Failed to find vkGetDeviceProcAddr in layer "libVkLayer_MESA_device_select.so"
+Validation layer: Inserted device layer "VK_LAYER_KHRONOS_validation" (/usr/lib/libVkLayer_khronos_validation.so)
+Validation layer: Failed to find vkGetDeviceProcAddr in layer "/usr/lib/libVkLayer_MESA_device_select.so"
 Validation layer: vkCreateDevice layer callstack setup to:
 Validation layer:    <Application>
 Validation layer:      ||
@@ -40,241 +40,15 @@ Validation layer:    VK_LAYER_KHRONOS_validation
 Validation layer:            Type: Explicit
 Validation layer:            Enabled By: By the Application
 Validation layer:            Manifest: /usr/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json
-Validation layer:            Library:  libVkLayer_khronos_validation.so
+Validation layer:            Library:  /usr/lib/libVkLayer_khronos_validation.so
 Validation layer:      ||
 Validation layer:    <Device>
-Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "libGLX_nvidia.so.0"
+Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "/usr/lib/libGLX_nvidia.so.0"
 compiling shader:
 compiling shader:
 compiling shader:
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
-The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)
-Discovered 2 shaders: graphics.hlsl compute.hlsl 
-Window resized to 1866x2056
-compiling shader:
-compiling shader:
-compiling shader:
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
-The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)
-Recompiling graphics.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
-The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)
-Recompiling graphics.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
-The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)
-Recompiling graphics.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
-The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)
-Recompiling graphics.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
-The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)
-Recompiling graphics.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
-The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)
-Recompiling graphics.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
-The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)
-Recompiling graphics.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Validation layer: vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
-The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)
-Recompiling graphics.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Validation layer: (Warning - This VUID has now been reported 10 times, which is the duplicated_message_limit value, this will be the last time reporting it).
-vkCreateGraphicsPipelines(): pCreateInfos[0].pStages[1] SPIR-V (VK_SHADER_STAGE_FRAGMENT_BIT) uses descriptor [Set 0, Binding 3, variable "globalData"] (type VK_DESCRIPTOR_TYPE_STORAGE_BUFFER or VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) which is not marked with NonWritable, but fragmentStoresAndAtomics was not enabled.
-The Vulkan spec states: If the fragmentStoresAndAtomics feature is not enabled, then all storage image, storage texel buffer, and storage buffer variables in the fragment stage must be decorated with the NonWritable decoration (https://docs.vulkan.org/spec/latest/appendices/spirvenv.html#VUID-RuntimeSpirv-NonWritable-06340)
-Recompiling graphics.hlsl
-compiling shader:
-graphics.hlsl:109:39: error: too many elements in vector initialization (expected 1 element, have 2)
-    float step = sector_width / float(ANGLE_SAMPLES * 2 + 1);
-                                      ^
-graphics.hlsl:120:18: warning: implicit truncation of vector type [-Wconversion]
-        for (int s = -ANGLE_SAMPLES; s <= ANGLE_SAMPLES; ++s) {
-                 ^
-graphics.hlsl:126:65: error: too many elements in vector initialization (expected 1 element, have 2)
-            float angular_weight = 1.0f - abs(float(s)) / float(ANGLE_SAMPLES + 1);
-                                                                ^
-graphics.hlsl:120:38: error: for statement conditional expressions must evaluate to a scalar
-        for (int s = -ANGLE_SAMPLES; s <= ANGLE_SAMPLES; ++s) {
-                                     ^
-
-graphics.hlsl:109:39: error: too many elements in vector initialization (expected 1 element, have 2)
-    float step = sector_width / float(ANGLE_SAMPLES * 2 + 1);
-                                      ^
-graphics.hlsl:120:18: warning: implicit truncation of vector type [-Wconversion]
-        for (int s = -ANGLE_SAMPLES; s <= ANGLE_SAMPLES; ++s) {
-                 ^
-graphics.hlsl:126:65: error: too many elements in vector initialization (expected 1 element, have 2)
-            float angular_weight = 1.0f - abs(float(s)) / float(ANGLE_SAMPLES + 1);
-                                                                ^
-graphics.hlsl:120:38: error: for statement conditional expressions must evaluate to a scalar
-        for (int s = -ANGLE_SAMPLES; s <= ANGLE_SAMPLES; ++s) {
-                                     ^
-
-Failed: graphics.hlsl
-Window resized to 1866x1026
-compiling shader:
-compiling shader:
-graphics.hlsl:109:39: error: too many elements in vector initialization (expected 1 element, have 2)
-    float step = sector_width / float(ANGLE_SAMPLES * 2 + 1);
-                                      ^
-graphics.hlsl:120:18: warning: implicit truncation of vector type [-Wconversion]
-        for (int s = -ANGLE_SAMPLES; s <= ANGLE_SAMPLES; ++s) {
-                 ^
-graphics.hlsl:126:65: error: too many elements in vector initialization (expected 1 element, have 2)
-            float angular_weight = 1.0f - abs(float(s)) / float(ANGLE_SAMPLES + 1);
-                                                                ^
-graphics.hlsl:120:38: error: for statement conditional expressions must evaluate to a scalar
-        for (int s = -ANGLE_SAMPLES; s <= ANGLE_SAMPLES; ++s) {
-                                     ^
-
-graphics.hlsl:109:39: error: too many elements in vector initialization (expected 1 element, have 2)
-    float step = sector_width / float(ANGLE_SAMPLES * 2 + 1);
-                                      ^
-graphics.hlsl:120:18: warning: implicit truncation of vector type [-Wconversion]
-        for (int s = -ANGLE_SAMPLES; s <= ANGLE_SAMPLES; ++s) {
-                 ^
-graphics.hlsl:126:65: error: too many elements in vector initialization (expected 1 element, have 2)
-            float angular_weight = 1.0f - abs(float(s)) / float(ANGLE_SAMPLES + 1);
-                                                                ^
-graphics.hlsl:120:38: error: for statement conditional expressions must evaluate to a scalar
-        for (int s = -ANGLE_SAMPLES; s <= ANGLE_SAMPLES; ++s) {
-                                     ^
-
-Shader compilation failed: graphics.hlsl
-compiling shader:
-graphics.hlsl:109:39: error: too many elements in vector initialization (expected 1 element, have 2)
-    float step = sector_width / float(ANGLE_SAMPLES * 2 + 1);
-                                      ^
-graphics.hlsl:120:18: warning: implicit truncation of vector type [-Wconversion]
-        for (int s = -ANGLE_SAMPLES; s <= ANGLE_SAMPLES; ++s) {
-                 ^
-graphics.hlsl:126:65: error: too many elements in vector initialization (expected 1 element, have 2)
-            float angular_weight = 1.0f - abs(float(s)) / float(ANGLE_SAMPLES + 1);
-                                                                ^
-graphics.hlsl:120:38: error: for statement conditional expressions must evaluate to a scalar
-        for (int s = -ANGLE_SAMPLES; s <= ANGLE_SAMPLES; ++s) {
-                                     ^
-
-graphics.hlsl:109:39: error: too many elements in vector initialization (expected 1 element, have 2)
-    float step = sector_width / float(ANGLE_SAMPLES * 2 + 1);
-                                      ^
-graphics.hlsl:120:18: warning: implicit truncation of vector type [-Wconversion]
-        for (int s = -ANGLE_SAMPLES; s <= ANGLE_SAMPLES; ++s) {
-                 ^
-graphics.hlsl:126:65: error: too many elements in vector initialization (expected 1 element, have 2)
-            float angular_weight = 1.0f - abs(float(s)) / float(ANGLE_SAMPLES + 1);
-                                                                ^
-graphics.hlsl:120:38: error: for statement conditional expressions must evaluate to a scalar
-        for (int s = -ANGLE_SAMPLES; s <= ANGLE_SAMPLES; ++s) {
-                                     ^
-
-Shader compilation failed: graphics.hlsl
-Recompiling graphics.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling graphics.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling graphics.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Window resized to 1866x2056
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling graphics.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling graphics.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Shader source missing: graphics.hlsl
-Warning: graphics.hlsl not in registry
-Window resized to 3736x2056
-compiling shader:
-compiling shader:
-compiling shader:
-Window resized to 1866x2056
+Discovered 2 shaders: compute.hlsl graphics.hlsl 
+Window resized to 1856x1016
 compiling shader:
 compiling shader:
 compiling shader:
@@ -282,4 +56,19 @@ Window resized to 3736x2056
 compiling shader:
 compiling shader:
 compiling shader:
-Cleaning up GLFW...
+Window resized to 1856x1016
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 1856x696
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 3736x2056
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 1856x696
+compiling shader:
+compiling shader:
+compiling shader:

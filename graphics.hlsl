@@ -1,42 +1,34 @@
 struct PushConstants {
-    uint  screen_width;
-    uint  screen_height;
+    uint screen_width;
+    uint screen_height;
 };
 [[vk::push_constant]] PushConstants push_constants;
 
-// 🔑 Use bindless arrays
 [[vk::binding(0, 0)]] StructuredBuffer<uint> buffers[];
 [[vk::binding(1, 0)]] Texture2D<float4>     textures[];
 [[vk::binding(2, 0)]] SamplerState          samplers[];
 
 static const float2 POSITIONS[3] = {
-    float2(-1,-1), float2(3,-1), float2(-1,3)
+    float2(-1.0f, -1.0f), float2(3.0f, -1.0f), float2(-1.0f, 3.0f)
 };
 static const float2 UVS[3] = {
-    float2(0,0), float2(2,0), float2(0,2)
+    float2(0.0f, 0.0f), float2(2.0f, 0.0f), float2(0.0f, 2.0f)
 };
 
 struct VertexOutput { float4 clip_position:SV_POSITION; float2 uv:TEXCOORD0; };
 
 VertexOutput vs_main(uint vid:SV_VertexID) {
     VertexOutput o;
-    o.clip_position = float4(POSITIONS[vid],0,1);
+    o.clip_position = float4(POSITIONS[vid], 0.0f, 1.0f);
     o.uv = UVS[vid];
     return o;
 }
 
 static const float COLOR_SCALE = 4096.0f;
-struct GlobalData {
-	float2 camPos;
-	float zoom;
-};
-
-[[vk::binding(3, 0)]] RWStructuredBuffer<GlobalData> globalData;
-
-
 static const float3 LUMA = float3(0.299f, 0.587f, 0.114f);
-static const int    SECTOR_COUNT  = 1;
-static const float  TWO_PI        = 6.28318530718f;
+static const int    KERNEL_RADIUS = 6;
+static const int    ANGLE_SAMPLES = 2;
+static const float  TWO_PI = 6.28318530718f;
 
 float3 ACESFilm(float3 x) {
     const float a = 2.51f;
@@ -52,23 +44,6 @@ float3 adjust_saturation(float3 rgb, float adjustment) {
     return lerp(float3(intensity, intensity, intensity), rgb, adjustment);
 }
 
-float quantize_luminance(float luminance, float levels) {
-    float q = floor(luminance * (levels - 1.0f) + 0.5f) / (levels - 1.0f);
-    return clamp(q, 0.18f, 0.74f);
-}
-
-float3 painterly_shade(float3 color, float q) {
-    if (q < 0.5f) {
-        return lerp(float3(0.12f, 0.12f, 0.12f), color, q * 2.0f);
-    }
-    return lerp(color, float3(1.0f, 1.0f, 1.0f), (q - 0.5f) * 2.0f);
-}
-
-float3 apply_paper_texture(float3 color, float3 paper, float strength) {
-    float3 paper_mix = lerp(float3(1.0f, 1.0f, 1.0f), paper, strength);
-    return color * paper_mix;
-}
-
 float gaussian_weight(float distance, float sigma) {
     return exp(-(distance * distance) / (2.0f * sigma * sigma));
 }
@@ -79,11 +54,11 @@ float4 sample_accum(int2 coord, uint w, uint h) {
     coord.x = clamp(coord.x, 0, max_x);
     coord.y = clamp(coord.y, 0, max_y);
 
-    uint index = uint(coord.y * int(w) + coord.x) * 4u;
-    float3 col = float3(buffers[0][index+0],
-                        buffers[0][index+1],
-                        buffers[0][index+2]) / COLOR_SCALE;
-    float density = (float)buffers[0][index+3] / COLOR_SCALE;
+    uint index = (uint(coord.y) * w + uint(coord.x)) * 4u;
+    float3 col = float3(buffers[0][index + 0],
+                        buffers[0][index + 1],
+                        buffers[0][index + 2]) / COLOR_SCALE;
+    float density = float(buffers[0][index + 3]) / COLOR_SCALE;
     return float4(col, density);
 }
 
@@ -94,21 +69,15 @@ struct SectorStats {
 };
 
 void compute_sector_stats(int2 center, uint w, uint h, float base_angle, out SectorStats stats) {
-
-	int    KERNEL_RADIUS = max(4, min(16, int(5.0f / globalData[0].zoom)));
-
-	int    ANGLE_SAMPLES = max(1, min(3, int(5.0f / globalData[0].zoom)));
-
     float3 weighted_color_sum = float3(0.0f, 0.0f, 0.0f);
     float3 weighted_color_sq_sum = float3(0.0f, 0.0f, 0.0f);
     float  weighted_density_sum = 0.0f;
     float  total_weight = 0.0f;
 
     float sigma = float(KERNEL_RADIUS) * 0.66f;
-    float sector_width = TWO_PI / float(SECTOR_COUNT);
+    float sector_width = TWO_PI;
     float step = sector_width / float(ANGLE_SAMPLES * 2 + 1);
 
-    // Always include the center sample so fine detail isn't lost
     float4 center_sample = sample_accum(center, w, h);
     weighted_color_sum    += center_sample.rgb;
     weighted_color_sq_sum += center_sample.rgb * center_sample.rgb;
@@ -148,67 +117,47 @@ void compute_sector_stats(int2 center, uint w, uint h, float base_angle, out Sec
 }
 
 float4 kuwahara_filter(int2 coord, uint w, uint h) {
-    SectorStats sectors[SECTOR_COUNT];
-    [unroll]
-    for (int i = 0; i < SECTOR_COUNT; ++i) {
-        float base_angle = (float(i) / float(SECTOR_COUNT)) * TWO_PI;
-        compute_sector_stats(coord, w, h, base_angle, sectors[i]);
-    }
-
-    SectorStats best = sectors[0];
-    [unroll]
-    for (int i = 1; i < SECTOR_COUNT; ++i) {
-        bool better_variance = sectors[i].variance < best.variance - 1e-6f;
-        bool similar_variance = abs(sectors[i].variance - best.variance) <= 1e-6f;
-        bool better_density = sectors[i].avgDensity > best.avgDensity;
-        if (better_variance || (similar_variance && better_density)) {
-            best = sectors[i];
-        }
-    }
-
-    return float4(best.avgColor, best.avgDensity);
+    SectorStats sector;
+    compute_sector_stats(coord, w, h, 0.0f, sector);
+    return float4(sector.avgColor, sector.avgDensity);
 }
-
-
 
 float4 fs_main(VertexOutput input) : SV_Target {
     uint w = push_constants.screen_width;
     uint h = push_constants.screen_height;
 
     float2 uv = saturate(input.uv * 0.5f);
-    uint2 p = uint2(uv * float2(w,h));
-    p = min(p, uint2(w-1,h-1));
+    uint2 p = uint2(uv * float2(w, h));
+    p = min(p, uint2(w - 1, h - 1));
 
     int2 pixel = int2(p);
     float4 center_sample = sample_accum(pixel, w, h);
     float4 filtered = kuwahara_filter(pixel, w, h);
 
-    float accumDensity = max(center_sample.a, filtered.a);
-    if (accumDensity < 1e-6f) return float4(0,0,0,1);
+    float accumDensity = saturate(max(center_sample.a, filtered.a));
+    if (accumDensity < 1e-6f) {
+        return float4(0.0f, 0.0f, 0.0f, 1.0f);
+    }
 
-    float kuwahara_weight = 0.9f;
-    float3 baseColor = lerp(center_sample.rgb, filtered.rgb, kuwahara_weight);
+    float3 blended = lerp(center_sample.rgb, filtered.rgb, 0.7f);
+    float blend_density = smoothstep(0.0f, 0.7f, accumDensity);
 
-    // Start from a slightly boosted base to keep particle highlights visible
-    float3 color = saturate(baseColor * 1.35f);
+    float3 smoke = saturate(blended);
 
-    // Luminance driven quantization for painterly banding
-    float luminance = dot(color, LUMA);
-    float q = quantize_luminance(luminance, 10.0f);
-    color = painterly_shade(color, q);
+    float2 grain_uv = frac(input.uv * 0.35f);
+    float3 grain = textures[0].Sample(samplers[0], grain_uv).rgb;
+    smoke = lerp(smoke, smoke * grain, 0.18f);
 
-    // Subtle watercolor texture to add paper grain to the strokes
-    float2 paper_uv = frac(input.uv * 0.5f);
-    float3 paper = textures[0].Sample(samplers[0], paper_uv).rgb;
-    color = apply_paper_texture(color, paper, 0.45f);
+    float backlight = pow(accumDensity, 1.4f);
+    float3 tint_low = float3(0.16f, 0.18f, 0.22f);
+    float3 tint_high = float3(0.85f, 0.90f, 0.98f);
+    float3 tint = lerp(tint_low, tint_high, backlight);
+    smoke = saturate(smoke * (0.6f + 0.4f * blend_density) + tint * 0.25f * blend_density);
 
-    // Density driven contrast tweak keeps faint regions readable
-    float density_factor = saturate(accumDensity * 1.7f);
-    color = lerp(float3(0.04f, 0.04f, 0.04f), color, density_factor);
+    smoke = adjust_saturation(smoke, 0.55f);
+    smoke = ACESFilm(smoke);
 
-    // Enhanced saturation followed by ACES tone mapping for filmic response
-    color = adjust_saturation(color, 1.6f);
-    color = ACESFilm(color);
+    float alpha = saturate(accumDensity * 1.2f);
 
-    return float4(color, accumDensity);
+    return float4(smoke, alpha);
 }
