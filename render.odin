@@ -107,8 +107,7 @@ init_render_resources :: proc() -> bool {
 
 	sprite_texture = create_texture_from_png("test3.png") or_return
 
-	render_pipeline_specs[0] = {
-		name = "particles",
+	render_shader_configs[0] = {
 		compute_module = "compute.spv",
 		push = PushConstantInfo {
 			label = "ComputePushConstants",
@@ -117,9 +116,8 @@ init_render_resources :: proc() -> bool {
 		},
 	}
 
-	render_pipeline_specs[1] = {
-		name = "graphics",
-		vertex_module = "graphics_vs.spv",
+	render_shader_configs[1] = {
+		vertex_module   = "graphics_vs.spv",
 		fragment_module = "graphics_fs.spv",
 		push = PushConstantInfo {
 			label = "PostProcessPushConstants",
@@ -178,7 +176,7 @@ simulate_particles :: proc(frame: FrameInputs) {
 	adaptive_count := get_adaptive_particle_count()
 	compute_push_constants.particle_count = adaptive_count
 
-	bind(frame, &render_pipeline_states[0], .COMPUTE, &compute_push_constants)
+	bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
 	vk.CmdDispatch(frame.cmd, (adaptive_count + 128 - 1) / 128, 1, 1)
 }
 
@@ -190,7 +188,25 @@ composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) 
 	begin_render_pass(frame, framebuffer)
 	post_process_push_constants.screen_width = u32(window_width)
 	post_process_push_constants.screen_height = u32(window_height)
-	bind(frame, &render_pipeline_states[1], .GRAPHICS, &post_process_push_constants)
+
+	viewport := vk.Viewport {
+		x        = 0,
+		y        = 0,
+		width    = f32(window_width),
+		height   = f32(window_height),
+		minDepth = 0,
+		maxDepth = 1,
+	}
+	scissor := vk.Rect2D {
+		offset = {0, 0},
+		extent = {u32(window_width), u32(window_height)},
+	}
+	vk.CmdSetViewport(frame.cmd, 0, 1, &viewport)
+	vk.CmdSetScissor(frame.cmd, 0, 1, &scissor)
+	vk.CmdSetPrimitiveTopology(frame.cmd, vk.PrimitiveTopology.TRIANGLE_LIST)
+	vk.CmdSetFrontFace(frame.cmd, vk.FrontFace.CLOCKWISE)
+
+	bind(frame, &render_shader_states[1], .GRAPHICS, &post_process_push_constants)
 	vk.CmdDraw(frame.cmd, 3, 1, 0, 0)
 	vk.CmdEndRenderPass(frame.cmd)
 }

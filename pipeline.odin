@@ -16,10 +16,12 @@ FrameInputs :: struct {
 	delta_time: f32,
 }
 
-PipelineState :: struct {
-	pipeline:   vk.Pipeline,
-	layout:     vk.PipelineLayout,
-	push_stage: vk.ShaderStageFlags,
+ShaderProgram :: struct {
+	layout:      vk.PipelineLayout,
+	push_stage:  vk.ShaderStageFlags,
+	stage_count: u32,
+	stages:      [3]vk.ShaderStageFlags,
+	shaders:     [3]vk.ShaderEXT,
 }
 
 
@@ -29,23 +31,17 @@ PushConstantInfo :: struct {
 	size:  u32,
 }
 
-
-PipelineSpec :: struct {
-	name:            string,
-	push:            union {
-		PushConstantInfo,
-		typeid,
-	},
+ShaderProgramConfig :: struct {
 	compute_module:  string,
 	vertex_module:   string,
 	fragment_module: string,
+	push:            PushConstantInfo,
 }
 
 last_frame_time: f32
-pipelines_ready: bool
-
-render_pipeline_specs: [PIPELINE_COUNT]PipelineSpec
-render_pipeline_states: [PIPELINE_COUNT]PipelineState
+shaders_ready: bool
+render_shader_states: [PIPELINE_COUNT]ShaderProgram
+render_shader_configs: [PIPELINE_COUNT]ShaderProgramConfig
 
 
 //tiny wrapper proc --- would like to avoid this
@@ -64,20 +60,6 @@ begin_render_pass :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) {
 		.INLINE,
 	)
 }
-
-make_stage :: proc(
-	stage: vk.ShaderStageFlag,
-	module: vk.ShaderModule,
-	name: cstring,
-) -> vk.PipelineShaderStageCreateInfo {
-	return vk.PipelineShaderStageCreateInfo {
-		sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {stage},
-		module = module,
-		pName = name,
-	}
-}
-
 
 begin_frame_commands :: proc(
 	element: ^SwapchainElement,
@@ -111,15 +93,19 @@ begin_frame_commands :: proc(
 
 bind :: proc(
 	frame: FrameInputs,
-	state: ^PipelineState,
+	state: ^ShaderProgram,
 	bind_point: vk.PipelineBindPoint,
 	push_constants: ^$T,
 ) {
 	push_size := u32(size_of(T))
 
-	vk.CmdBindPipeline(frame.cmd, bind_point, state.pipeline)
+	if state.stage_count > 0 {
+		vk.CmdBindShadersEXT(frame.cmd, state.stage_count, &state.stages[0], &state.shaders[0])
+	}
 	vk.CmdBindDescriptorSets(frame.cmd, bind_point, state.layout, 0, 1, &global_desc_set, 0, nil)
-	vk.CmdPushConstants(frame.cmd, state.layout, state.push_stage, 0, push_size, push_constants)
+	if push_size > 0 && state.push_stage != {} {
+		vk.CmdPushConstants(frame.cmd, state.layout, state.push_stage, 0, push_size, push_constants)
+	}
 }
 
 
@@ -238,25 +224,10 @@ init_global_descriptors :: proc() -> bool {
 	return true
 }
 
-build_pipelines :: proc(specs: []PipelineSpec, states: []PipelineState) -> bool {
-	assert(len(specs) == len(states), "pipeline spec/state length mismatch")
-	if len(specs) == 0 do return true
-	for idx in 0 ..< len(specs) {
-		build_pipeline(&specs[idx], &states[idx]) or_return
-	}
-	return true
-}
-
-make_pipeline_layout :: proc(
-	_: vk.DescriptorSetLayout,
-	spec: ^PipelineSpec,
-) -> (
-	layout: vk.PipelineLayout,
-	ok: bool,
-) {
+make_shader_layout :: proc(push: ^PushConstantInfo) -> (layout: vk.PipelineLayout, ok: bool) {
 	ranges: [1]vk.PushConstantRange
 	count: u32 = 0
-	if push, ok2 := spec.push.(PushConstantInfo); ok2 && push.size > 0 {
+	if push != nil && push.size > 0 {
 		ranges[0] = {
 			stageFlags = push.stage,
 			size       = push.size,
@@ -270,170 +241,200 @@ make_pipeline_layout :: proc(
 		vk.CreatePipelineLayout,
 		device,
 		&vk.PipelineLayoutCreateInfo {
-			sType = .PIPELINE_LAYOUT_CREATE_INFO,
-			setLayoutCount = 1,
-			pSetLayouts = &layouts[0],
+			sType                 = .PIPELINE_LAYOUT_CREATE_INFO,
+			setLayoutCount        = 1,
+			pSetLayouts           = &layouts[0],
 			pushConstantRangeCount = count,
-			pPushConstantRanges = count > 0 ? &ranges[0] : nil,
+			pPushConstantRanges   = count > 0 ? &ranges[0] : nil,
 		},
-		"pipeline layout",
+		"shader layout",
 		vk.PipelineLayout,
 	)
 }
 
-make_compute_pipeline :: proc(
+shader_stage_enabled :: proc(flags: vk.ShaderStageFlags, stage: vk.ShaderStageFlag) -> bool {
+	return (flags & {stage}) != {}
+}
+
+create_shader_object :: proc(
 	path: string,
-	layout: vk.PipelineLayout,
-) -> (
-	pipe: vk.Pipeline,
-	ok: bool,
-) {
-	sh, loaded := load_shader_module(path)
-	if !loaded do return {}, false
-	defer vk.DestroyShaderModule(device, sh, nil)
+	stage: vk.ShaderStageFlag,
+	entry: cstring,
+	layouts: []vk.DescriptorSetLayout,
+	push_range: ^vk.PushConstantRange,
+	push_range_count: u32,
+) -> (shader: vk.ShaderEXT, ok: bool) {
+	code := load_shader_code_words(path) or_return
 
-	result := vk.CreateComputePipelines(
-		device,
-		vk.PipelineCache{},
-		1,
-		&vk.ComputePipelineCreateInfo {
-			sType = .COMPUTE_PIPELINE_CREATE_INFO,
-			stage = make_stage(.COMPUTE, sh, "main"),
-			layout = layout,
-		},
-		nil,
-		&pipe,
-	)
-	ok = (result == .SUCCESS)
-	return
-}
-
-make_graphics_pipeline :: proc(
-	vert_path, frag_path: string,
-	layout: vk.PipelineLayout,
-) -> (
-	pipe: vk.Pipeline,
-	ok: bool,
-) {
-	vsh := load_shader_module(vert_path) or_return
-	fsh := load_shader_module(frag_path) or_return
-	defer vk.DestroyShaderModule(device, vsh, nil)
-	defer vk.DestroyShaderModule(device, fsh, nil)
-
-
-	result := vk.CreateGraphicsPipelines(
-		device,
-		vk.PipelineCache{},
-		1,
-		&vk.GraphicsPipelineCreateInfo {
-			sType = .GRAPHICS_PIPELINE_CREATE_INFO,
-			stageCount = 2,
-			pStages = raw_data(
-				[]vk.PipelineShaderStageCreateInfo {
-					{
-						sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
-						stage = {.VERTEX},
-						module = vsh,
-						pName = "vs_main",
-					},
-					{
-						sType = vk.StructureType.PIPELINE_SHADER_STAGE_CREATE_INFO,
-						stage = {.FRAGMENT},
-						module = fsh,
-						pName = "fs_main",
-					},
-				},
-			),
-			pVertexInputState = &vk.PipelineVertexInputStateCreateInfo {
-				sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-			},
-			pInputAssemblyState = &vk.PipelineInputAssemblyStateCreateInfo {
-				sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-				topology = .TRIANGLE_LIST,
-			},
-			pViewportState = &vk.PipelineViewportStateCreateInfo {
-				sType = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-				viewportCount = 1,
-				pViewports = &vk.Viewport {
-					x = 0,
-					y = 0,
-					width = f32(window_width),
-					height = f32(window_height),
-					minDepth = 0,
-					maxDepth = 1,
-				},
-				scissorCount = 1,
-				pScissors = &vk.Rect2D {
-					offset = {0, 0},
-					extent = {u32(window_width), u32(window_height)},
-				},
-			},
-			pRasterizationState = &vk.PipelineRasterizationStateCreateInfo {
-				sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-				polygonMode = .FILL,
-				frontFace = .CLOCKWISE,
-				lineWidth = 1,
-			},
-			pMultisampleState = &vk.PipelineMultisampleStateCreateInfo {
-				sType = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-				rasterizationSamples = {._1},
-			},
-			pColorBlendState = &vk.PipelineColorBlendStateCreateInfo {
-				sType = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-				attachmentCount = 1,
-				pAttachments = &vk.PipelineColorBlendAttachmentState {
-					colorWriteMask = {.R, .G, .B, .A},
-				},
-			},
-			layout = layout,
-			renderPass = render_pass,
-		},
-		nil,
-		&pipe,
-	)
-	ok = (result == .SUCCESS)
-	return
-}
-
-
-// ========================================================
-// MAIN PIPELINE BUILDER
-// ========================================================
-
-build_pipeline :: proc(spec: ^PipelineSpec, state: ^PipelineState) -> bool {
-	// Layout uses global_desc_layout internally (see make_pipeline_layout)
-	pipe_layout := make_pipeline_layout({}, spec) or_return
-
-	pipe: vk.Pipeline
-	if spec.compute_module != "" {
-		pipe = make_compute_pipeline(spec.compute_module, pipe_layout) or_return
-	} else {
-		pipe = make_graphics_pipeline(
-			spec.vertex_module,
-			spec.fragment_module,
-			pipe_layout,
-		) or_return
+	info := vk.ShaderCreateInfoEXT {
+		sType               = vk.StructureType.SHADER_CREATE_INFO_EXT,
+		flags               = {},
+		stage               = {stage},
+		nextStage           = {},
+		codeType            = vk.ShaderCodeTypeEXT.SPIRV,
+		codeSize            = len(code) * size_of(u32),
+		pCode               = raw_data(code),
+		pName               = entry,
+		setLayoutCount      = u32(len(layouts)),
+		pSetLayouts         = len(layouts) > 0 ? &layouts[0] : nil,
+		pushConstantRangeCount = push_range_count,
+		pPushConstantRanges = push_range_count > 0 ? push_range : nil,
+		pSpecializationInfo = nil,
 	}
 
+	result := vk.CreateShadersEXT(device, 1, &info, nil, &shader)
+	if result != .SUCCESS {
+		fmt.printf("Failed to create shader object for %s (err=%d)\n", path, result)
+		return {}, false
+	}
+	return shader, true
+}
+
+create_shader_program :: proc(config: ^ShaderProgramConfig, state: ^ShaderProgram) -> bool {
+	layout := make_shader_layout(&config.push) or_return
+
+	layouts := [1]vk.DescriptorSetLayout{global_desc_layout}
+
+	stage_count: u32 = 0
+	shaders: [3]vk.ShaderEXT
+	stages: [3]vk.ShaderStageFlags
 	push_stage: vk.ShaderStageFlags
 
-	if push, ok := spec.push.(PushConstantInfo); ok {
-		push_stage = push.stage
+	range := vk.PushConstantRange {
+		offset     = 0,
+		size       = 0,
+		stageFlags = {},
 	}
 
-	state^ = PipelineState {
-		pipeline   = pipe,
-		layout     = pipe_layout,
-		push_stage = push_stage,
+	if config.push.size > 0 {
+		range.stageFlags = config.push.stage
+		range.size = config.push.size
+		push_stage = config.push.stage
+	}
+
+	shader_handles := [3]vk.ShaderEXT{}
+	created: int = 0
+	success := false
+	defer if !success {
+		for i in 0 ..< created {
+			if shader_handles[i] != {} {
+				vk.DestroyShaderEXT(device, shader_handles[i], nil)
+			}
+		}
+		if layout != {} {
+			vk.DestroyPipelineLayout(device, layout, nil)
+		}
+	}
+
+	if config.compute_module != "" {
+		range_ptr: ^vk.PushConstantRange = nil
+		range_count: u32 = 0
+		if range.size > 0 && shader_stage_enabled(range.stageFlags, vk.ShaderStageFlag.COMPUTE) {
+			range_ptr = &range
+			range_count = 1
+		}
+
+		shader := create_shader_object(
+			config.compute_module,
+			vk.ShaderStageFlag.COMPUTE,
+			cstring("main"),
+			layouts[:],
+			range_ptr,
+			range_count,
+		) or_return
+
+		shader_handles[created] = shader
+		created += 1
+
+		stage_count = 1
+		stages[0] = {vk.ShaderStageFlag.COMPUTE}
+		shaders[0] = shader
+	} else {
+		vertex_shader := create_shader_object(
+			config.vertex_module,
+			vk.ShaderStageFlag.VERTEX,
+			cstring("vs_main"),
+			layouts[:],
+			nil,
+			0,
+		) or_return
+
+		shader_handles[created] = vertex_shader
+		created += 1
+
+		stages[0] = {vk.ShaderStageFlag.VERTEX}
+		shaders[0] = vertex_shader
+		stage_count = 1
+
+		range_ptr: ^vk.PushConstantRange = nil
+		range_count: u32 = 0
+		if range.size > 0 && shader_stage_enabled(range.stageFlags, vk.ShaderStageFlag.FRAGMENT) {
+			range_ptr = &range
+			range_count = 1
+		}
+
+		fragment_shader := create_shader_object(
+			config.fragment_module,
+			vk.ShaderStageFlag.FRAGMENT,
+			cstring("fs_main"),
+			layouts[:],
+			range_ptr,
+			range_count,
+		) or_return
+
+		shader_handles[created] = fragment_shader
+		created += 1
+
+		stages[1] = {vk.ShaderStageFlag.FRAGMENT}
+		shaders[1] = fragment_shader
+		stage_count = 2
+	}
+
+	success = true
+	state^ = ShaderProgram {
+		layout      = layout,
+		push_stage  = push_stage,
+		stage_count = stage_count,
+		stages      = stages,
+		shaders     = shaders,
 	}
 	return true
 }
 
-reset_pipeline_state :: proc(state: ^PipelineState) {
-	if state.pipeline != {} {
-		vk.DestroyPipeline(device, state.pipeline, nil)
-		state.pipeline = {}
+build_shader_programs :: proc(configs: []ShaderProgramConfig, states: []ShaderProgram) -> bool {
+	assert(len(configs) == len(states), "shader config/state length mismatch")
+	if len(configs) == 0 {
+		shaders_ready = true
+		return true
 	}
+
+	for idx in 0 ..< len(states) {
+		reset_shader_program(&states[idx])
+	}
+
+	for idx in 0 ..< len(configs) {
+		if !create_shader_program(&configs[idx], &states[idx]) {
+			for j in 0 ..< len(states) {
+				reset_shader_program(&states[j])
+			}
+			shaders_ready = false
+			return false
+		}
+	}
+
+	shaders_ready = true
+	return true
+}
+
+reset_shader_program :: proc(state: ^ShaderProgram) {
+	for idx in 0 ..< int(state.stage_count) {
+		if state.shaders[idx] != {} {
+			vk.DestroyShaderEXT(device, state.shaders[idx], nil)
+		}
+		state.shaders[idx] = {}
+		state.stages[idx] = {}
+	}
+	state.stage_count = 0
 	if state.layout != {} {
 		vk.DestroyPipelineLayout(device, state.layout, nil)
 		state.layout = {}
@@ -441,11 +442,11 @@ reset_pipeline_state :: proc(state: ^PipelineState) {
 	state.push_stage = {}
 }
 
-destroy_render_pipeline_state :: proc(states: []PipelineState) {
-	pipelines_ready = false
+destroy_render_shader_state :: proc(states: []ShaderProgram) {
 	for idx in 0 ..< len(states) {
-		reset_pipeline_state(&states[idx])
+		reset_shader_program(&states[idx])
 	}
+	shaders_ready = false
 }
 begin_encoding :: proc(element: ^SwapchainElement) -> CommandEncoder {
 	encoder := CommandEncoder {
