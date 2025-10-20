@@ -183,13 +183,13 @@ init_global_descriptors :: proc() -> bool {
 			descriptorCount = 2,
 			stageFlags = {vk.ShaderStageFlag.FRAGMENT},
 		},
-		{
-			binding         = 3,
-			descriptorType  = .STORAGE_BUFFER,
-			descriptorCount = 1, // global state (camera, etc.)
-			stageFlags      = {vk.ShaderStageFlag.COMPUTE},
-		},
-	}
+	{
+		binding         = 3,
+		descriptorType  = .STORAGE_BUFFER,
+		descriptorCount = 1, // global state (camera, etc.)
+		stageFlags      = {vk.ShaderStageFlag.COMPUTE, vk.ShaderStageFlag.FRAGMENT},
+	},
+}
 
 	global_desc_layout = vkw(
 		vk.CreateDescriptorSetLayout,

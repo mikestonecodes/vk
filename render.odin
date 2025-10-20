@@ -48,7 +48,7 @@ ComputePushConstants :: struct {
 	mouse_y:        f32,
 	mouse_left:     u32,
 	mouse_right:    u32,
-	_pad1:          u32,
+	zoom_flags:     u32,
 }
 
 GlobalData :: struct {
@@ -57,9 +57,9 @@ GlobalData :: struct {
 	prev_mouse_down: f32,
 	frame_count:     f32,
 	ping:            u32,
+	zoom:            f32,
 	pad0:            f32,
 	pad1:            f32,
-	pad2:            f32,
 }
 
 compute_push_constants: ComputePushConstants
@@ -169,11 +169,21 @@ simulate_particles :: proc(frame: FrameInputs) {
 
 	mouse_left_pressed := is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT)
 	mouse_right_pressed := is_mouse_button_pressed(glfw.MOUSE_BUTTON_RIGHT)
+	zoom_in_pressed := is_key_pressed(glfw.KEY_Q)
+	zoom_out_pressed := is_key_pressed(glfw.KEY_E)
 
 	compute_push_constants.mouse_x = f32(mouse_x)
 	compute_push_constants.mouse_y = f32(mouse_y)
 	compute_push_constants.mouse_left = u32(mouse_left_pressed)
 	compute_push_constants.mouse_right = u32(mouse_right_pressed)
+	zoom_flags := u32(0)
+	if zoom_in_pressed {
+		zoom_flags |= 1
+	}
+	if zoom_out_pressed {
+		zoom_flags |= 2
+	}
+	compute_push_constants.zoom_flags = zoom_flags
 
 	adaptive_count := get_adaptive_particle_count()
 	compute_push_constants.particle_count = adaptive_count

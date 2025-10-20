@@ -7,6 +7,16 @@ struct PushConstants {
 [[vk::binding(0, 0)]] StructuredBuffer<uint> buffers[];
 [[vk::binding(1, 0)]] Texture2D<float4>     textures[];
 [[vk::binding(2, 0)]] SamplerState          samplers[];
+struct GlobalData {
+    float2 prevMouseUv;
+    float  prevMouseDown;
+    float  frameCount;
+    uint   ping;
+    float  zoom;
+    float  pad0;
+    float  pad1;
+};
+[[vk::binding(3, 0)]] StructuredBuffer<GlobalData> globalData;
 
 static const float2 POSITIONS[3] = {
     float2(-1.0f, -1.0f), float2(3.0f, -1.0f), float2(-1.0f, 3.0f)
@@ -126,8 +136,7 @@ float4 fs_main(VertexOutput input) : SV_Target {
     uint w = push_constants.screen_width;
     uint h = push_constants.screen_height;
 
-    float2 uv = saturate(input.uv);
-    uint2 p = uint2(uv * float2(w, h));
+    uint2 p = uint2(input.uv * float2(w, h));
     p = min(p, uint2(w - 1, h - 1));
 
     int2 pixel = int2(p);

@@ -15,7 +15,7 @@ struct PushConstants {
     float mouse_y;
     uint  mouse_left;
     uint  mouse_right;
-    uint  _pad1;
+    uint  zoom_flags;
 };
 [[vk::push_constant]] PushConstants push_constants;
 
@@ -26,9 +26,9 @@ struct GlobalData {
     float  prevMouseDown;
     float  frameCount;
     uint   ping;
+    float  zoom;
     float  pad0;
     float  pad1;
-    float  pad2;
 };
 [[vk::binding(3, 0)]] RWStructuredBuffer<GlobalData> globalData;
 
@@ -154,6 +154,21 @@ float3 palette_secondary(float x) {
                       float3(0.12f, 0.82f, 1.30f), float3(1.25f, -0.12f, 0.12f));
 }
 
+float2 get_circle_center(int circle_id) {
+    // Generate pseudo-random circle positions in a grid pattern
+    int grid_x = circle_id % 5 - 2;  // -2, -1, 0, 1, 2
+    int grid_y = circle_id / 5 - 2;
+
+    float2 base_pos = float2(grid_x, grid_y);
+
+    // Add some randomness using hash
+    uint seed = uint(circle_id) * 12345u;
+    float offset_x = hash11(seed) * 0.4f - 0.2f;
+    float offset_y = hash11(seed + 1000u) * 0.4f - 0.2f;
+
+    return float2(0.5f, 0.5f) + base_pos + float2(offset_x, offset_y);
+}
+
 float2 point1(float t) {
     t *= 0.34f;
     return float2(0.18f, 0.5f + sin(t) * 0.25f);
@@ -214,7 +229,22 @@ float4 solve_fluid(
         extForce += 0.001f / max(dot(p, p), 1e-5f) * dragDir;
     }
 
-    float2 rel_uv = uv - center_uv;
+    // Find nearest circle and apply forces
+    const int NUM_CIRCLES = 25;
+    float min_dist_sq = 1e10f;
+    float2 nearest_center = center_uv;
+
+    for (int i = 0; i < NUM_CIRCLES; ++i) {
+        float2 circle_center = get_circle_center(i);
+        float2 to_circle = uv - circle_center;
+        float dist_sq = dot(to_circle, to_circle);
+        if (dist_sq < min_dist_sq) {
+            min_dist_sq = dist_sq;
+            nearest_center = circle_center;
+        }
+    }
+
+    float2 rel_uv = uv - nearest_center;
     float2 rel_px = rel_uv * resolution;
     float radius_px = length(rel_px);
     float minDim = min(resolution.x, resolution.y);
@@ -299,26 +329,35 @@ float4 update_color(
         : sample_buffer_linear(color_buffer_index, color_read_offset, W, H, uv - dt * velo * stepSize * 3.0f);
 
     float4 col = col_prev;
-    float2 rel_uv = uv - center_uv;
-    float2 rel_px = rel_uv * resolution;
-    float radius_px = length(rel_px);
-    float minDim = min(resolution.x, resolution.y);
-    float radius_norm = radius_px / max(minDim, 1.0f);
-    float radius_uv = length(rel_uv);
-    float angle = atan2(rel_px.y, rel_px.x);
 
-    float swirl_wave = sin(time * 0.35f + angle * 2.9f);
-    float ring = exp(-pow(radius_norm * 1.9f, 2.3f));
-    float hollow = exp(-pow(max(radius_norm - 0.20f, 0.0f) * 4.3f, 2.0f));
-    float base_strength = (0.0026f + 0.0015f * swirl_wave) * (ring + hollow * 0.85f);
+    // Add smoke from all nearby circles
+    const int NUM_CIRCLES = 25;
+    for (int i = 0; i < NUM_CIRCLES; ++i) {
+        float2 circle_center = get_circle_center(i);
+        float2 rel_uv = uv - circle_center;
+        float2 rel_px = rel_uv * resolution;
+        float radius_px = length(rel_px);
+        float minDim = min(resolution.x, resolution.y);
+        float radius_norm = radius_px / max(minDim, 1.0f);
 
-    float palette_mix = fbm(uv * 8.0f + time * 0.12f, 3, 2.3f, 0.55f, 211u);
-    float3 base_color = lerp(palette_primary(time * 0.05f + angle * 0.2f),
-                             palette_secondary(time * 0.09f - radius_norm * 2.6f),
-                             saturate(palette_mix));
+        // Only process if close enough
+        if (radius_norm > 0.5f) continue;
 
-    col.rgb += base_color * base_strength * 2.2f;
-    col.a   += base_strength * 1.8f;
+        float angle = atan2(rel_px.y, rel_px.x);
+
+        float swirl_wave = sin(time * 0.35f + angle * 2.9f + float(i) * 0.7f);
+        float ring = exp(-pow(radius_norm * 1.9f, 2.3f));
+        float hollow = exp(-pow(max(radius_norm - 0.20f, 0.0f) * 4.3f, 2.0f));
+        float base_strength = (0.0026f + 0.0015f * swirl_wave) * (ring + hollow * 0.85f);
+
+        float palette_mix = fbm(uv * 8.0f + time * 0.12f, 3, 2.3f, 0.55f, 211u + uint(i) * 97u);
+        float3 base_color = lerp(palette_primary(time * 0.05f + angle * 0.2f + float(i) * 0.3f),
+                                 palette_secondary(time * 0.09f - radius_norm * 2.6f + float(i) * 0.4f),
+                                 saturate(palette_mix));
+
+        col.rgb += base_color * base_strength * 2.2f;
+        col.a   += base_strength * 1.8f;
+    }
 
     float2 mouse_uv = mouse_vec.xy * stepSize;
     float2 prev_mouse_uv = prev_mouse_vec.xy * stepSize;
@@ -332,17 +371,22 @@ float4 update_color(
         col += float4(mouse_color, 1.0f) * (bloom * 0.0006f) / dist;
     }
 
-    float2 p1 = point1(time);
-    float2 p2 = point2(time);
-    float dens_boost = 0.0010f * (ring + hollow * 0.6f);
-    col.rgb += 0.0015f / (0.0006f + pow(length(uv - p1), 1.7f)) * dt * 0.12f * palette_primary(time * 0.05f);
-    col.rgb += 0.0015f / (0.0006f + pow(length(uv - p2), 1.7f)) * dt * 0.12f * palette_secondary(time * 0.05f + 0.675f);
-    col.a   += dens_boost;
+    // Add circle visual for each circle
+    for (int i = 0; i < NUM_CIRCLES; ++i) {
+        float2 circle_center = get_circle_center(i);
+        float2 rel_uv = uv - circle_center;
+        float2 rel_px = rel_uv * resolution;
+        float radius_px = length(rel_px);
+        float minDim = min(resolution.x, resolution.y);
+        float radius_norm = radius_px / max(minDim, 1.0f);
 
-    float circle_mask = 1.0f - smoothstep(0.010f, 0.0175f, radius_norm);
-    float circle_emission = circle_mask * 0.85f;
-    col.rgb = lerp(col.rgb, palette_primary(time * 0.13f), circle_emission);
-    col.a   = max(col.a, circle_mask * 2.0f);
+        if (radius_norm > 0.05f) continue;
+
+        float circle_mask = 1.0f - smoothstep(0.010f, 0.0175f, radius_norm);
+        float circle_emission = circle_mask * 0.85f;
+        col.rgb = lerp(col.rgb, palette_primary(time * 0.13f + float(i) * 0.2f), circle_emission);
+        col.a   = max(col.a, circle_mask * 2.0f);
+    }
 
     col = clamp(col, 0.0f, 5.0f);
     col = max(col - (col * 0.005f), 0.0f);
@@ -361,17 +405,50 @@ void main(uint3 tid : SV_DispatchThreadID)
 
     float2 resolution = float2(float(W), float(H));
     float2 invResolution = 1.0f / resolution;
-    float2 uv = (float2(id % W, id / W) + 0.5f) * invResolution;
+    float2 screen_uv = (float2(id % W, id / W) + 0.5f) * invResolution;
 
     GlobalData state = globalData[0];
     float frame = state.frameCount;
+    float zoom = state.pad0;
     if (!(frame >= 0.0f && frame < 1e9f)) {
         frame = 0.0f;
         state.ping = 0u;
-        state.prevMouseUv = uv;
+        state.prevMouseUv = float2(0.5f, 0.5f);
         state.prevMouseDown = 0.0f;
         state.frameCount = 0.0f;
+        zoom = 1.0f;
+        state.pad0 = 1.0f;
+        state.zoom = 1.0f;
     }
+
+    if (!(zoom > 0.0f)) {
+        zoom = 1.0f;
+    }
+
+    float safe_zoom = max(zoom, 1e-4f);
+
+    // Transform screen UV to world space based on zoom (no tiling)
+    float2 world_uv = (screen_uv - 0.5f) / safe_zoom + 0.5f;
+    float2 uv = world_uv;
+
+    uint zoom_flags = push_constants.zoom_flags;
+    bool zoom_in = (zoom_flags & 1u) != 0u;
+    bool zoom_out = (zoom_flags & 2u) != 0u;
+    float zoom_speed = 0.3f;
+    float zoom_min = 0.02f;
+    float zoom_max = 240.0f;
+    float delta_time = push_constants.delta_time;
+    int zoom_dir = (zoom_in ? 1 : 0) - (zoom_out ? 1 : 0);
+    if (zoom_dir != 0) {
+        float scale = max(zoom, 1.0f);
+        zoom += float(zoom_dir) * zoom_speed * scale * delta_time;
+    }
+    zoom = clamp(zoom, zoom_min, zoom_max);
+
+    // Calculate world-space parameters
+    float2 world_resolution = resolution * safe_zoom;
+    float2 stepSize = invResolution / safe_zoom;
+    const float2 center_uv = float2(0.5f, 0.5f);
 
     uint ping = state.ping & 1u;
     uint next_ping = 1u - ping;
@@ -382,61 +459,51 @@ void main(uint3 tid : SV_DispatchThreadID)
     uint color_read_offset  = ping * stride;
     uint color_write_offset = next_ping * stride;
 
-    float2 mouse_px = float2(push_constants.mouse_x, push_constants.mouse_y);
-    float2 mouse_uv = clamp(mouse_px * invResolution, float2(0.0f, 0.0f), float2(1.0f, 1.0f));
+    float2 mouse_screen_px = float2(push_constants.mouse_x, push_constants.mouse_y);
+    float2 mouse_screen_uv = mouse_screen_px * invResolution;
+    float2 mouse_world_uv = (mouse_screen_uv - 0.5f) / safe_zoom + 0.5f;
+    float2 mouse_uv = mouse_world_uv;
     bool mouse_add = (push_constants.mouse_left != 0u);
     bool mouse_erase = (push_constants.mouse_right != 0u);
-    float4 mouse_vec = float4(mouse_px, mouse_add ? 2.0f : 0.0f, mouse_erase ? 2.0f : 0.0f);
+
+    float4 mouse_vec = float4(mouse_uv * world_resolution, mouse_add ? 2.0f : 0.0f, mouse_erase ? 2.0f : 0.0f);
 
     float2 prev_mouse_uv = (frame > 0.5f) ? state.prevMouseUv : mouse_uv;
-    float4 prev_mouse_vec = load_buffer(1, fluid_read_offset, W, H, 0, 0);
+    float prev_mouse_down = state.prevMouseDown;
+    float4 prev_mouse_vec = float4(prev_mouse_uv * world_resolution, prev_mouse_down * 2.0f, 0.0f);
     if (frame < 0.5f) {
         prev_mouse_vec = mouse_vec;
     }
-
-    const float2 center_uv = float2(0.5f, 0.5f);
-    float2 stepSize = invResolution;
     int ix = int(id % W);
     int iy = int(id / W);
 
     uint read_offset = fluid_read_offset;
     uint write_offset = fluid_write_offset;
 
-    for (int pass = 0; pass < PASSES; ++pass) {
-        float4 data;
-        if (iy == 0) {
-            data = mouse_vec;
-        } else {
-            data = solve_fluid(1, read_offset, uv, ix, iy, W, H, stepSize, mouse_vec, prev_mouse_vec, center_uv, resolution);
-            if (frame < 0.5f) {
-                data = float4(0.0f, 0.0f, 0.0f, 0.0f);
-            }
-            if (mouse_erase) {
-                float dist2 = dot(uv - mouse_uv, uv - mouse_uv);
-                float erase = exp(-dist2 * 1200.0f);
-                data.z = max(data.z - erase * 2.0f, 0.0f);
-                data.xy *= (1.0f - erase * 0.4f);
-            }
+    int pass_count = PASSES;
+
+    for (int pass = 0; pass < pass_count; ++pass) {
+        float4 data = solve_fluid(1, read_offset, uv, ix, iy, W, H, stepSize, mouse_vec, prev_mouse_vec, center_uv, world_resolution);
+        if (frame < 0.5f) {
+            data = float4(0.0f, 0.0f, 0.0f, 0.0f);
+        }
+        if (mouse_erase) {
+            float dist2 = dot(uv - mouse_uv, uv - mouse_uv);
+            float erase = exp(-dist2 * 1200.0f);
+            data.z = max(data.z - erase * 2.0f, 0.0f);
+            data.xy *= (1.0f - erase * 0.4f);
         }
 
         store_buffer(1, write_offset, W, H, ix, iy, data);
 
-        if (pass < PASSES - 1) {
+        if (pass < pass_count - 1) {
             uint tmp = read_offset;
             read_offset = write_offset;
             write_offset = tmp;
         }
     }
 
-    float4 color = update_color(1, write_offset, 2, color_read_offset, uv, stepSize, W, H, push_constants.time, frame, mouse_vec, prev_mouse_vec, center_uv, resolution);
-
-    if (iy == 0) {
-        if (ix == 0) {
-            color = mouse_vec;
-        } else {
-            color = float4(0.0f, 0.0f, 0.0f, 0.0f);
-        }
-    }
+    float4 color = update_color(1, write_offset, 2, color_read_offset, uv, stepSize, W, H, push_constants.time, frame, mouse_vec, prev_mouse_vec, center_uv, world_resolution);
 
     store_buffer(2, color_write_offset, W, H, ix, iy, color);
 
@@ -451,6 +518,8 @@ void main(uint3 tid : SV_DispatchThreadID)
         state.prevMouseDown = mouse_add ? 1.0f : 0.0f;
         state.frameCount = frame + 1.0f;
         state.ping = next_ping;
+        state.zoom = 1.0f;
+        state.pad0 = zoom;
         globalData[0] = state;
     }
 }
