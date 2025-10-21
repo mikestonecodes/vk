@@ -24,7 +24,6 @@ queue_family_index: c.uint32_t
 queue: vk.Queue
 command_pool: vk.CommandPool
 swapchain: vk.SwapchainKHR
-render_pass: vk.RenderPass
 format: vk.Format = vk.Format.UNDEFINED
 width: c.uint32_t = 800
 height: c.uint32_t = 600
@@ -49,7 +48,6 @@ SwapchainElement :: struct {
 	commandBuffer: vk.CommandBuffer,
 	image:         vk.Image,
 	imageView:     vk.ImageView,
-	framebuffer:   vk.Framebuffer,
 	last_value:    c.uint64_t,
 }
 
@@ -458,9 +456,15 @@ create_logical_device :: proc() -> bool {
 		extendedDynamicState = false,
 	}
 
+	rendering_features := vk.PhysicalDeviceDynamicRenderingFeatures {
+		sType            = .PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+		pNext            = &extended_dynamic_state,
+		dynamicRendering = false,
+	}
+
 	timeline := vk.PhysicalDeviceTimelineSemaphoreFeatures {
 		sType             = .PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
-		pNext             = &extended_dynamic_state,
+		pNext             = &rendering_features,
 		timelineSemaphore = true,
 	}
 
@@ -488,6 +492,11 @@ create_logical_device :: proc() -> bool {
 		return false
 	}
 
+	if rendering_features.dynamicRendering == false {
+		fmt.println("VK_KHR_dynamic_rendering not supported on this device")
+		return false
+	}
+
 	if sync2.synchronization2 == false {
 		fmt.println("VK_KHR_synchronization2 not supported on this device")
 		return false
@@ -495,6 +504,7 @@ create_logical_device :: proc() -> bool {
 
 	shader_object_features.shaderObject = true
 	extended_dynamic_state.extendedDynamicState = true
+	rendering_features.dynamicRendering = true
 	sync2.synchronization2 = true
 
 	device_extension_names := [?]cstring {
@@ -507,6 +517,7 @@ create_logical_device :: proc() -> bool {
 		"VK_EXT_extended_dynamic_state3",
 		"VK_KHR_dedicated_allocation",
 		"VK_KHR_get_memory_requirements2",
+		"VK_KHR_dynamic_rendering",
 	}
 
 	device_create_info := vk.DeviceCreateInfo {
@@ -845,34 +856,6 @@ create_swapchain :: proc() -> bool {
 		vk.SwapchainKHR,
 	) or_return
 
-	// Create render pass
-	render_pass = vkw(
-		vk.CreateRenderPass,
-		device,
-		&vk.RenderPassCreateInfo {
-			sType = vk.StructureType.RENDER_PASS_CREATE_INFO,
-			attachmentCount = 1,
-			pAttachments = &vk.AttachmentDescription {
-				format = format,
-				samples = {vk.SampleCountFlag._1},
-				loadOp = vk.AttachmentLoadOp.CLEAR,
-				storeOp = vk.AttachmentStoreOp.STORE,
-				initialLayout = vk.ImageLayout.UNDEFINED,
-				finalLayout = vk.ImageLayout.PRESENT_SRC_KHR,
-			},
-			subpassCount = 1,
-			pSubpasses = &vk.SubpassDescription {
-				pipelineBindPoint = vk.PipelineBindPoint.GRAPHICS,
-				colorAttachmentCount = 1,
-				pColorAttachments = &vk.AttachmentReference {
-					attachment = 0,
-					layout = vk.ImageLayout.COLOR_ATTACHMENT_OPTIMAL,
-				},
-			},
-		},
-		"render pass",
-		vk.RenderPass,
-	) or_return
 
 	// Get swapchain images
 	image_count = desired
@@ -905,22 +888,6 @@ create_swapchain :: proc() -> bool {
 			},
 			"image view",
 			vk.ImageView,
-		) or_return
-
-		elements[i].framebuffer = vkw(
-			vk.CreateFramebuffer,
-			device,
-			&vk.FramebufferCreateInfo {
-				sType = vk.StructureType.FRAMEBUFFER_CREATE_INFO,
-				renderPass = render_pass,
-				attachmentCount = 1,
-				pAttachments = &elements[i].imageView,
-				width = width,
-				height = height,
-				layers = 1,
-			},
-			"framebuffer",
-			vk.Framebuffer,
 		) or_return
 
 		vk.AllocateCommandBuffers(
@@ -1273,7 +1240,6 @@ destroy_all_sync_objects :: proc() {
 }
 destroy_swapchain :: proc() {
 	for i in 0 ..< MAX_SWAPCHAIN_IMAGES {
-		if elements[i].framebuffer != {} do vk.DestroyFramebuffer(device, elements[i].framebuffer, nil)
 		if elements[i].imageView != {} do vk.DestroyImageView(device, elements[i].imageView, nil)
 		if elements[i].commandBuffer != {} do vk.ResetCommandBuffer(elements[i].commandBuffer, {})
 
@@ -1287,8 +1253,6 @@ destroy_swapchain :: proc() {
 		frame_slot_values[i] = 0
 	}
 
-	if render_pass != {} do vk.DestroyRenderPass(device, render_pass, nil)
-	render_pass = {}
 	if swapchain != {} do vk.DestroySwapchainKHR(device, swapchain, nil)
 	swapchain = {}
 }
@@ -1296,7 +1260,7 @@ destroy_swapchain :: proc() {
 vulkan_cleanup :: proc() {
 
 	vk.DeviceWaitIdle(device)
-	// Swapchain + framebuffers
+	// Swapchain
 	destroy_swapchain()
 	destroy_all_sync_objects()
 

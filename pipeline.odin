@@ -43,24 +43,6 @@ shaders_ready: bool
 render_shader_states: [PIPELINE_COUNT]ShaderProgram
 render_shader_configs: [PIPELINE_COUNT]ShaderProgramConfig
 
-
-//tiny wrapper proc --- would like to avoid this
-
-begin_render_pass :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) {
-	vk.CmdBeginRenderPass(
-		frame.cmd,
-		&vk.RenderPassBeginInfo {
-			sType = vk.StructureType.RENDER_PASS_BEGIN_INFO,
-			renderPass = render_pass,
-			framebuffer = framebuffer,
-			renderArea = {{0, 0}, {width, height}},
-			clearValueCount = 1,
-			pClearValues = &vk.ClearValue{color = {float32 = {0, 0, 0, 1}}},
-		},
-		.INLINE,
-	)
-}
-
 begin_frame_commands :: proc(
 	element: ^SwapchainElement,
 	start_time: time.Time,

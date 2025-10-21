@@ -153,7 +153,7 @@ init_render_resources :: proc() -> bool {
 
 record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
 	simulate_particles(frame)
-	composite_to_swapchain(frame, element.framebuffer)
+	composite_to_swapchain(frame, element)
 }
 
 // compute.hlsl -> accumulation_buffer
@@ -181,11 +181,48 @@ simulate_particles :: proc(frame: FrameInputs) {
 }
 
 
-// accumulation_buffer -> post_process.hlsl -> swapchain framebuffer
-composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) {
+// accumulation_buffer -> post_process.hlsl -> swapchain image
+composite_to_swapchain :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 
 	apply_compute_to_fragment_barrier(frame.cmd, &accumulation_buffer)
-	begin_render_pass(frame, framebuffer)
+
+	to_attachment := vk.ImageMemoryBarrier2 {
+		sType               = .IMAGE_MEMORY_BARRIER_2,
+		srcStageMask        = {.TOP_OF_PIPE},
+		srcAccessMask       = {},
+		dstStageMask        = {.COLOR_ATTACHMENT_OUTPUT},
+		dstAccessMask       = {.COLOR_ATTACHMENT_WRITE},
+		oldLayout           = .PRESENT_SRC_KHR,
+		newLayout           = .ATTACHMENT_OPTIMAL,
+		image               = element.image,
+		subresourceRange    = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+	}
+	vk.CmdPipelineBarrier2(
+		frame.cmd,
+		&vk.DependencyInfo {
+			sType                 = .DEPENDENCY_INFO,
+			imageMemoryBarrierCount = 1,
+			pImageMemoryBarriers  = &to_attachment,
+		},
+	)
+
+	color_attachment := vk.RenderingAttachmentInfo {
+		sType       = .RENDERING_ATTACHMENT_INFO,
+		imageView   = element.imageView,
+		imageLayout = .ATTACHMENT_OPTIMAL,
+		loadOp      = .CLEAR,
+		storeOp     = .STORE,
+		clearValue  = vk.ClearValue{color = {float32 = {0, 0, 0, 1}}},
+	}
+	render_info := vk.RenderingInfo {
+		sType                = .RENDERING_INFO,
+		renderArea           = {{0, 0}, {width, height}},
+		layerCount           = 1,
+		colorAttachmentCount = 1,
+		pColorAttachments    = &color_attachment,
+	}
+	vk.CmdBeginRendering(frame.cmd, &render_info)
+
 	post_process_push_constants.screen_width = u32(window_width)
 	post_process_push_constants.screen_height = u32(window_height)
 
@@ -208,7 +245,27 @@ composite_to_swapchain :: proc(frame: FrameInputs, framebuffer: vk.Framebuffer) 
 
 	bind(frame, &render_shader_states[1], .GRAPHICS, &post_process_push_constants)
 	vk.CmdDraw(frame.cmd, 3, 1, 0, 0)
-	vk.CmdEndRenderPass(frame.cmd)
+	vk.CmdEndRendering(frame.cmd)
+
+	to_present := vk.ImageMemoryBarrier2 {
+		sType               = .IMAGE_MEMORY_BARRIER_2,
+		srcStageMask        = {.COLOR_ATTACHMENT_OUTPUT},
+		srcAccessMask       = {.COLOR_ATTACHMENT_WRITE},
+		dstStageMask        = {.ALL_COMMANDS},
+		dstAccessMask       = {},
+		oldLayout           = .ATTACHMENT_OPTIMAL,
+		newLayout           = .PRESENT_SRC_KHR,
+		image               = element.image,
+		subresourceRange    = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+	}
+	vk.CmdPipelineBarrier2(
+		frame.cmd,
+		&vk.DependencyInfo {
+			sType                 = .DEPENDENCY_INFO,
+			imageMemoryBarrierCount = 1,
+			pImageMemoryBarriers  = &to_present,
+		},
+	)
 }
 
 cleanup_render_resources :: proc() {
