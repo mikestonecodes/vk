@@ -38,10 +38,13 @@ ShaderProgramConfig :: struct {
 	push:            PushConstantInfo,
 }
 
+DeviceSize :: vk.DeviceSize
+
+buffers: Array(32, BufferResource)
 last_frame_time: f32
 shaders_ready: bool
+
 render_shader_states: [PIPELINE_COUNT]ShaderProgram
-render_shader_configs: [PIPELINE_COUNT]ShaderProgramConfig
 
 begin_frame_commands :: proc(
 	element: ^SwapchainElement,
@@ -67,6 +70,10 @@ begin_frame_commands :: proc(
 	return
 }
 
+
+zero_buffer :: proc(frame: FrameInputs, buffer: ^BufferResource) {
+	vk.CmdFillBuffer(frame.cmd, buffer.buffer, 0, buffer.size, 0)
+}
 
 bind :: proc(
 	frame: FrameInputs,
@@ -106,13 +113,6 @@ bind :: proc(
 	}
 }
 
-
-//BUILD PIPEZ
-
-// ========================================================
-// PIPELINE HELPERS
-// ========================================================
-
 // Global bindless set
 global_desc_layout: vk.DescriptorSetLayout
 global_desc_set: vk.DescriptorSet
@@ -121,12 +121,14 @@ global_desc_set: vk.DescriptorSet
 dispatch_compute :: proc(frame: FrameInputs, task: ComputeTask) {
 	compute_push_constants.dispatch_mode = u32(task.mode)
 	bind(frame, &render_shader_states[task.pipeline_index], .COMPUTE, &compute_push_constants)
+	vk.CmdDispatch(
+		frame.cmd,
+		task.group.x if task.group.x != 0 else 1,
+		task.group.y if task.group.y != 0 else 1,
+		task.group.z if task.group.z != 0 else 1,
+	)
+	compute_barrier(frame.cmd)
 
-	for i: u32 = 0; i < max(task.repeat_count, 1); i += 1 {
-		compute_push_constants.solver_iteration = i
-		vk.CmdDispatch(frame.cmd, task.group.x, task.group.y, task.group.z)
-		compute_barrier(frame.cmd)
-	}
 }
 
 bind_resource :: proc(slot: u32, resource: $T, dstBinding := u32(max(u32))) {
@@ -157,6 +159,7 @@ bind_resource :: proc(slot: u32, resource: $T, dstBinding := u32(max(u32))) {
 	vk.UpdateDescriptorSets(device, 1, &w, 0, nil)
 }
 global_desc_pool: vk.DescriptorPool
+
 
 init_global_descriptors :: proc() -> bool {
 	bindings := [16]vk.DescriptorSetLayoutBinding {
@@ -488,7 +491,13 @@ create_shader_program :: proc(config: ^ShaderProgramConfig, state: ^ShaderProgra
 	}
 	return true
 }
-
+init_render_resources :: proc() -> bool {
+	for spec, i in buffer_specs {
+		create_buffer(&buffers.data[i], spec.size, spec.flags)
+		bind_resource(0, &buffers.data[i], spec.binding)
+	}
+	return true
+}
 build_shader_programs :: proc(configs: []ShaderProgramConfig, states: []ShaderProgram) -> bool {
 	assert(len(configs) == len(states), "shader config/state length mismatch")
 	if len(configs) == 0 {
@@ -637,4 +646,10 @@ begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 		},
 	)
 	vk.CmdSetVertexInputEXT(frame.cmd, 0, nil, 0, nil)
+}
+
+cleanup_render_resources :: proc() {
+	for &buffer in buffers.data {
+		destroy_buffer(&buffer)
+	}
 }

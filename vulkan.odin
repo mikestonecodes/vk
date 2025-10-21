@@ -323,10 +323,10 @@ handle_resize :: proc() {
 		wait_for_timeline(timeline_value)
 
 		// Destroy old offscreen image resource (handled by render cleanup)
-//		cleanup_render_resources()
-//		destroy_render_shader_state(render_shader_states[:])
+		//		cleanup_render_resources()
+		//		destroy_render_shader_state(render_shader_states[:])
 
-	//	shaders_ready = false
+		//	shaders_ready = false
 		destroy_swapchain()
 		if !create_swapchain() {
 			return
@@ -337,7 +337,7 @@ handle_resize :: proc() {
 			return
 		}
 		// Recreate offscreen resources with new dimensions (handled by render init)
-//		init_render_resources()
+		//		init_render_resources()
 		resize()
 
 
@@ -358,7 +358,10 @@ get_instance_extensions :: proc() -> []cstring {
 	// Get required extensions from GLFW
 	glfw_extensions := glfw.GetRequiredInstanceExtensions()
 	instance_extensions.len = 0
-	runtime.assert(len(glfw_extensions) + 2 <= len(instance_extensions.data), "instance extension buffer too small")
+	runtime.assert(
+		len(glfw_extensions) + 2 <= len(instance_extensions.data),
+		"instance extension buffer too small",
+	)
 
 	for ext in glfw_extensions {
 		array_push(&instance_extensions, ext)
@@ -561,7 +564,10 @@ compile_shader :: proc(hlsl_file: string) -> bool {
 	vs_ok := compile_hlsl(hlsl_file, "vs_6_0", "vs_main", out0)
 	fs_ok := compile_hlsl(hlsl_file, "ps_6_0", "fs_main", out1)
 
-	fmt.println("compiled shader successfully! ignore previous compile errors for this file:", hlsl_file)
+	fmt.println(
+		"compiled shader successfully! ignore previous compile errors for this file:",
+		hlsl_file,
+	)
 	return vs_ok && fs_ok
 }
 
@@ -769,12 +775,7 @@ create_swapchain :: proc() -> bool {
 		count = surface_cap
 	}
 	formats_ptr := raw_data(surface_formats.data[:])
-	if vk.GetPhysicalDeviceSurfaceFormatsKHR(
-		   phys_device,
-		   vulkan_surface,
-		   &count,
-		   formats_ptr,
-	   ) !=
+	if vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &count, formats_ptr) !=
 	   .SUCCESS {
 		return false
 	}
@@ -818,13 +819,7 @@ create_swapchain :: proc() -> bool {
 		image_count = MAX_SWAPCHAIN_IMAGES
 	}
 	image_ptr := raw_data(swapchain_image_handles[:])
-	if vk.GetSwapchainImagesKHR(
-		   device,
-		   swapchain,
-		   &image_count,
-		   image_ptr,
-	   ) !=
-	   .SUCCESS {
+	if vk.GetSwapchainImagesKHR(device, swapchain, &image_count, image_ptr) != .SUCCESS {
 		return false
 	}
 	for i in 0 ..< int(image_count) {
@@ -949,7 +944,8 @@ init_vulkan :: proc() -> bool {
 	binary_info := vk.SemaphoreCreateInfo {
 		sType = vk.StructureType.SEMAPHORE_CREATE_INFO,
 	}
-	if vk.CreateSemaphore(device, &binary_info, nil, &image_available_semaphore) != vk.Result.SUCCESS {
+	if vk.CreateSemaphore(device, &binary_info, nil, &image_available_semaphore) !=
+	   vk.Result.SUCCESS {
 		vk.DestroySemaphore(device, timeline_semaphore, nil)
 		timeline_semaphore = {}
 		fmt.println("Failed to create image-available semaphore")
@@ -1011,12 +1007,7 @@ setup_physical_device :: proc() -> bool {
 	}
 
 	device_ptr := raw_data(physical_devices.data[:])
-	if vk.EnumeratePhysicalDevices(
-		   instance,
-		   &device_count,
-		   device_ptr,
-	   ) !=
-	   .SUCCESS {
+	if vk.EnumeratePhysicalDevices(instance, &device_count, device_ptr) != .SUCCESS {
 		fmt.println("Failed to enumerate physical devices")
 		return false
 	}
@@ -1036,11 +1027,7 @@ setup_physical_device :: proc() -> bool {
 	}
 
 	queue_ptr := raw_data(queue_families.data[:])
-	vk.GetPhysicalDeviceQueueFamilyProperties(
-		phys_device,
-		&queue_family_count,
-		queue_ptr,
-	)
+	vk.GetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_family_count, queue_ptr)
 	queue_families.len = i32(queue_family_count)
 
 	for idx in 0 ..< int(queue_family_count) {
@@ -1180,8 +1167,12 @@ compute_barrier :: proc(cmd: vk.CommandBuffer) {
 	vk.CmdPipelineBarrier2(cmd, &dependency)
 }
 
+
 transfer_to_compute_barrier :: proc(cmd: vk.CommandBuffer, buf: ^BufferResource) {
-	runtime.assert(buf.buffer != {}, "transfer/computation barrier requested before initialization")
+	runtime.assert(
+		buf.buffer != {},
+		"transfer/computation barrier requested before initialization",
+	)
 
 	barrier := vk.BufferMemoryBarrier2 {
 		sType         = .BUFFER_MEMORY_BARRIER_2,
@@ -1223,7 +1214,11 @@ apply_compute_to_fragment_barrier :: proc(cmd: vk.CommandBuffer, buf: ^BufferRes
 	vk.CmdPipelineBarrier2(cmd, &dep)
 }
 
-transition_swapchain_image_layout :: proc(cmd: vk.CommandBuffer, element: ^SwapchainElement, new_layout: vk.ImageLayout) {
+transition_swapchain_image_layout :: proc(
+	cmd: vk.CommandBuffer,
+	element: ^SwapchainElement,
+	new_layout: vk.ImageLayout,
+) {
 	runtime.assert(element.image != {}, "swapchain image missing before layout transition")
 
 	old_layout := element.layout
@@ -1255,9 +1250,9 @@ transition_swapchain_image_layout :: proc(cmd: vk.CommandBuffer, element: ^Swapc
 
 	if barrier_needed {
 		dependency := vk.DependencyInfo {
-			sType = .DEPENDENCY_INFO,
+			sType                   = .DEPENDENCY_INFO,
 			imageMemoryBarrierCount = 1,
-			pImageMemoryBarriers = &barrier,
+			pImageMemoryBarriers    = &barrier,
 		}
 
 		vk.CmdPipelineBarrier2(cmd, &dependency)
@@ -1407,17 +1402,17 @@ create_texture_from_png :: proc(path: string) -> (TextureResource, bool) {
 	vk.BeginCommandBuffer(transition_cmd, &begin_info)
 
 	barrier := vk.ImageMemoryBarrier2 {
-		sType               = .IMAGE_MEMORY_BARRIER_2,
-		srcStageMask        = {vk.PipelineStageFlag2.HOST},
-		srcAccessMask       = {vk.AccessFlag2.HOST_WRITE},
-		dstStageMask        = {vk.PipelineStageFlag2.FRAGMENT_SHADER},
-		dstAccessMask       = {vk.AccessFlag2.SHADER_READ},
-		oldLayout           = vk.ImageLayout.PREINITIALIZED,
-		newLayout           = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
+		sType = .IMAGE_MEMORY_BARRIER_2,
+		srcStageMask = {vk.PipelineStageFlag2.HOST},
+		srcAccessMask = {vk.AccessFlag2.HOST_WRITE},
+		dstStageMask = {vk.PipelineStageFlag2.FRAGMENT_SHADER},
+		dstAccessMask = {vk.AccessFlag2.SHADER_READ},
+		oldLayout = vk.ImageLayout.PREINITIALIZED,
+		newLayout = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
 		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
 		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
-		image               = tex.image,
-		subresourceRange    = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+		image = tex.image,
+		subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
 	}
 	dependency := vk.DependencyInfo {
 		sType                   = .DEPENDENCY_INFO,
