@@ -120,33 +120,30 @@ SpawnStateGPU :: struct {
 	events:             [EXPLOSION_EVENT_CAPACITY]ExplosionEventGPU,
 }
 
-physics_initialized: bool
 
 ComputeTask :: struct {
 	mode:           DispatchMode,
-	pipeline_index: u32,
 	group:          [3]u32,
-	repeat_count:   u32,
-	label:          string,
+	pipeline_index: u32,
 }
 
 DispatchMode :: enum u32 {
-	CAMERA_UPDATE      = 0,
-	INITIALIZE         = 1,
-	CLEAR_GRID         = 2,
-	SPAWN_PROJECTILE   = 3,
-	INTEGRATE          = 4,
-	HISTOGRAM          = 5,
-	PREFIX_COPY        = 6,
-	PREFIX_SCAN        = 7,
-	PREFIX_COPY_SOURCE = 8,
-	PREFIX_FINALIZE    = 9,
-	SCATTER            = 10,
-	ZERO_DELTAS        = 11,
-	CONSTRAINTS        = 12,
-	APPLY_DELTAS       = 13,
-	FINALIZE           = 14,
-	RENDER             = 15,
+	CAMERA_UPDATE,
+	INITIALIZE,
+	CLEAR_GRID,
+	SPAWN_PROJECTILE,
+	INTEGRATE,
+	HISTOGRAM,
+	PREFIX_COPY,
+	PREFIX_SCAN,
+	PREFIX_COPY_SOURCE,
+	PREFIX_FINALIZE,
+	SCATTER,
+	ZERO_DELTAS,
+	CONSTRAINTS,
+	APPLY_DELTAS,
+	FINALIZE,
+	RENDER,
 }
 
 body_vec2_size := DeviceSize(size_of(f32) * 2)
@@ -154,7 +151,6 @@ body_scalar_size := DeviceSize(size_of(f32))
 body_uint_size := DeviceSize(size_of(u32))
 body_capacity_size := DeviceSize(PHYS_MAX_BODIES)
 grid_cell_size := DeviceSize(GRID_CELL_COUNT)
-
 
 
 buffer_specs := []struct {
@@ -190,14 +186,9 @@ DescriptorBindingSpec :: struct {
 	descriptor_count: u32,
 	stage_flags:      vk.ShaderStageFlags,
 }
-global_descriptor_extras := []DescriptorBindingSpec {
-	{
-		binding = 1,
-		descriptor_type = .SAMPLED_IMAGE,
-		descriptor_count = 2,
-		stage_flags = {.FRAGMENT},
-	},
-	{binding = 2, descriptor_type = .SAMPLER, descriptor_count = 2, stage_flags = {.FRAGMENT}},
+global_descriptor_extras :: []DescriptorBindingSpec {
+	{1, .SAMPLED_IMAGE, 2, {.FRAGMENT}},
+	{2, .SAMPLER, 2, {.FRAGMENT}},
 }
 
 
@@ -205,7 +196,6 @@ render_shader_configs := []ShaderProgramConfig {
 	{
 		compute_module = "compute.spv",
 		push = {
-			label = "ComputePushConstants",
 			stage = {.COMPUTE},
 			size = u32(size_of(ComputePushConstants)),
 		},
@@ -214,7 +204,6 @@ render_shader_configs := []ShaderProgramConfig {
 		vertex_module = "graphics_vs.spv",
 		fragment_module = "graphics_fs.spv",
 		push = {
-			label = "PostProcessPushConstants",
 			stage = {.VERTEX, .FRAGMENT},
 			size = u32(size_of(PostProcessPushConstants)),
 		},
@@ -237,6 +226,7 @@ record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
 	composite_to_swapchain(frame, element)
 }
 
+physics_initialized: bool
 // compute.hlsl -> accumulation_buffer
 simulate_particles :: proc(frame: FrameInputs) {
 	mouse_x, mouse_y := get_mouse_position()
@@ -304,7 +294,7 @@ simulate_particles :: proc(frame: FrameInputs) {
 			compute_push_constants.scan_offset = offset
 			compute_push_constants.scan_source = parity
 			bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-			vk.CmdDispatch(frame.cmd, grid_dispatch, 1, 1)
+			command_dispatch(frame.cmd, grid_dispatch, 1, 1)
 			compute_barrier(frame.cmd)
 			parity = 1 - parity
 			offset <<= 1
