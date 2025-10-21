@@ -37,6 +37,8 @@ DISPATCH_APPLY_DELTAS :: u32(13)
 DISPATCH_FINALIZE :: u32(14)
 DISPATCH_RENDER :: u32(15)
 
+EXPLOSION_EVENT_CAPACITY :: u32(256)
+
 CameraStateGPU :: struct {
 	position:   [2]f32,
 	zoom:       f32,
@@ -66,8 +68,8 @@ PostProcessPushConstants :: struct {
 }
 
 ComputePushConstants :: struct {
-	time:          f32,
-	delta_time:    f32,
+    time:          f32,
+    delta_time:    f32,
 	screen_width:  u32,
 	screen_height: u32,
 	brightness:    f32,
@@ -100,8 +102,27 @@ ComputePushConstants :: struct {
 	spawn_projectile: u32,
 	mouse_ndc_x:   f32,
 	mouse_ndc_y:   f32,
-	projectile_pool: u32,
-	_pad0:         u32,
+    projectile_pool: u32,
+    _pad0:         u32,
+}
+
+ExplosionEventGPU :: struct {
+    center: [2]f32,
+    radius: f32,
+    energy: f32,
+    start_time: f32,
+    target_id: u32,
+    processed: u32,
+    reserved0: u32,
+    reserved1: u32,
+}
+
+SpawnStateGPU :: struct {
+    next_projectile: u32,
+    next_explosion: u32,
+    explosion_head: u32,
+    pad0: u32,
+    events: [EXPLOSION_EVENT_CAPACITY]ExplosionEventGPU,
 }
 
 compute_push_constants: ComputePushConstants
@@ -203,7 +224,7 @@ init_render_resources :: proc() -> bool {
 	)
 	create_buffer(
 		&spawn_state_buffer,
-		vk.DeviceSize(size_of(u32) * 4),
+		vk.DeviceSize(size_of(SpawnStateGPU)),
 		{vk.BufferUsageFlag.STORAGE_BUFFER},
 	)
 

@@ -45,23 +45,187 @@ Validation layer:      ||
 Validation layer:    <Device>
 Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "/usr/lib/libGLX_nvidia.so.0"
 compiling shader: compute.hlsl
+compute.hlsl:391:8: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+    ev.center_radius_energy = float4(center, radius, max(energy, 0.0f));
+    ~~ ^
+compute.hlsl:392:8: error: no member named 'meta' in 'ExplosionEvent'
+    ev.meta = float4(start_time, 0.0f, 0.0f, 0.0f);
+    ~~ ^
+compute.hlsl:526:38: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+            spawn_state[0].events[e].center_radius_energy = float4(0.0f, 0.0f, 0.0f, 0.0f);
+            ~~~~~~~~~~~~~~~~~~~~~~~~ ^
+compute.hlsl:527:38: error: no member named 'meta' in 'ExplosionEvent'
+            spawn_state[0].events[e].meta = float4(0.0f, 0.0f, 0.0f, 0.0f);
+            ~~~~~~~~~~~~~~~~~~~~~~~~ ^
+compute.hlsl:979:30: error: no member named 'meta' in 'ExplosionEvent'
+        float born_time = ev.meta.x;
+                          ~~ ^
+compute.hlsl:985:28: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float2 center = ev.center_radius_energy.xy;
+                        ~~ ^
+compute.hlsl:986:32: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float base_radius = ev.center_radius_energy.z;
+                            ~~ ^
+compute.hlsl:987:31: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float energy = max(ev.center_radius_energy.w, 0.1f);
+                           ~~ ^
+
 compiling shader: graphics.hlsl
 compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 compiling shader: graphics.hlsl
 compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 compiling shader: compute.hlsl
+compute.hlsl:391:8: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+    ev.center_radius_energy = float4(center, radius, max(energy, 0.0f));
+    ~~ ^
+compute.hlsl:392:8: error: no member named 'meta' in 'ExplosionEvent'
+    ev.meta = float4(start_time, 0.0f, 0.0f, 0.0f);
+    ~~ ^
+compute.hlsl:526:38: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+            spawn_state[0].events[e].center_radius_energy = float4(0.0f, 0.0f, 0.0f, 0.0f);
+            ~~~~~~~~~~~~~~~~~~~~~~~~ ^
+compute.hlsl:527:38: error: no member named 'meta' in 'ExplosionEvent'
+            spawn_state[0].events[e].meta = float4(0.0f, 0.0f, 0.0f, 0.0f);
+            ~~~~~~~~~~~~~~~~~~~~~~~~ ^
+compute.hlsl:979:30: error: no member named 'meta' in 'ExplosionEvent'
+        float born_time = ev.meta.x;
+                          ~~ ^
+compute.hlsl:985:28: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float2 center = ev.center_radius_energy.xy;
+                        ~~ ^
+compute.hlsl:986:32: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float base_radius = ev.center_radius_energy.z;
+                            ~~ ^
+compute.hlsl:987:31: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float energy = max(ev.center_radius_energy.w, 0.1f);
+                           ~~ ^
+
+Shader compilation failed: compute.hlsl
 compiling shader: graphics.hlsl
 compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 compiling shader: graphics.hlsl
 compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 Discovered 2 shaders: compute.hlsl graphics.hlsl 
+Window resized to 1856x2056
+compiling shader: compute.hlsl
+compute.hlsl:391:8: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+    ev.center_radius_energy = float4(center, radius, max(energy, 0.0f));
+    ~~ ^
+compute.hlsl:392:8: error: no member named 'meta' in 'ExplosionEvent'
+    ev.meta = float4(start_time, 0.0f, 0.0f, 0.0f);
+    ~~ ^
+compute.hlsl:526:38: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+            spawn_state[0].events[e].center_radius_energy = float4(0.0f, 0.0f, 0.0f, 0.0f);
+            ~~~~~~~~~~~~~~~~~~~~~~~~ ^
+compute.hlsl:527:38: error: no member named 'meta' in 'ExplosionEvent'
+            spawn_state[0].events[e].meta = float4(0.0f, 0.0f, 0.0f, 0.0f);
+            ~~~~~~~~~~~~~~~~~~~~~~~~ ^
+compute.hlsl:979:30: error: no member named 'meta' in 'ExplosionEvent'
+        float born_time = ev.meta.x;
+                          ~~ ^
+compute.hlsl:985:28: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float2 center = ev.center_radius_energy.xy;
+                        ~~ ^
+compute.hlsl:986:32: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float base_radius = ev.center_radius_energy.z;
+                            ~~ ^
+compute.hlsl:987:31: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float energy = max(ev.center_radius_energy.w, 0.1f);
+                           ~~ ^
+
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: compute.hlsl
+compute.hlsl:391:8: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+    ev.center_radius_energy = float4(center, radius, max(energy, 0.0f));
+    ~~ ^
+compute.hlsl:392:8: error: no member named 'meta' in 'ExplosionEvent'
+    ev.meta = float4(start_time, 0.0f, 0.0f, 0.0f);
+    ~~ ^
+compute.hlsl:526:38: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+            spawn_state[0].events[e].center_radius_energy = float4(0.0f, 0.0f, 0.0f, 0.0f);
+            ~~~~~~~~~~~~~~~~~~~~~~~~ ^
+compute.hlsl:527:38: error: no member named 'meta' in 'ExplosionEvent'
+            spawn_state[0].events[e].meta = float4(0.0f, 0.0f, 0.0f, 0.0f);
+            ~~~~~~~~~~~~~~~~~~~~~~~~ ^
+compute.hlsl:979:30: error: no member named 'meta' in 'ExplosionEvent'
+        float born_time = ev.meta.x;
+                          ~~ ^
+compute.hlsl:985:28: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float2 center = ev.center_radius_energy.xy;
+                        ~~ ^
+compute.hlsl:986:32: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float base_radius = ev.center_radius_energy.z;
+                            ~~ ^
+compute.hlsl:987:31: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float energy = max(ev.center_radius_energy.w, 0.1f);
+                           ~~ ^
+
+Shader compilation failed: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 Window resized to 1856x1016
 compiling shader: compute.hlsl
+compute.hlsl:391:8: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+    ev.center_radius_energy = float4(center, radius, max(energy, 0.0f));
+    ~~ ^
+compute.hlsl:392:8: error: no member named 'meta' in 'ExplosionEvent'
+    ev.meta = float4(start_time, 0.0f, 0.0f, 0.0f);
+    ~~ ^
+compute.hlsl:526:38: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+            spawn_state[0].events[e].center_radius_energy = float4(0.0f, 0.0f, 0.0f, 0.0f);
+            ~~~~~~~~~~~~~~~~~~~~~~~~ ^
+compute.hlsl:527:38: error: no member named 'meta' in 'ExplosionEvent'
+            spawn_state[0].events[e].meta = float4(0.0f, 0.0f, 0.0f, 0.0f);
+            ~~~~~~~~~~~~~~~~~~~~~~~~ ^
+compute.hlsl:979:30: error: no member named 'meta' in 'ExplosionEvent'
+        float born_time = ev.meta.x;
+                          ~~ ^
+compute.hlsl:985:28: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float2 center = ev.center_radius_energy.xy;
+                        ~~ ^
+compute.hlsl:986:32: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float base_radius = ev.center_radius_energy.z;
+                            ~~ ^
+compute.hlsl:987:31: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float energy = max(ev.center_radius_energy.w, 0.1f);
+                           ~~ ^
+
 compiling shader: graphics.hlsl
 compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 compiling shader: graphics.hlsl
 compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 compiling shader: compute.hlsl
+compute.hlsl:391:8: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+    ev.center_radius_energy = float4(center, radius, max(energy, 0.0f));
+    ~~ ^
+compute.hlsl:392:8: error: no member named 'meta' in 'ExplosionEvent'
+    ev.meta = float4(start_time, 0.0f, 0.0f, 0.0f);
+    ~~ ^
+compute.hlsl:526:38: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+            spawn_state[0].events[e].center_radius_energy = float4(0.0f, 0.0f, 0.0f, 0.0f);
+            ~~~~~~~~~~~~~~~~~~~~~~~~ ^
+compute.hlsl:527:38: error: no member named 'meta' in 'ExplosionEvent'
+            spawn_state[0].events[e].meta = float4(0.0f, 0.0f, 0.0f, 0.0f);
+            ~~~~~~~~~~~~~~~~~~~~~~~~ ^
+compute.hlsl:979:30: error: no member named 'meta' in 'ExplosionEvent'
+        float born_time = ev.meta.x;
+                          ~~ ^
+compute.hlsl:985:28: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float2 center = ev.center_radius_energy.xy;
+                        ~~ ^
+compute.hlsl:986:32: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float base_radius = ev.center_radius_energy.z;
+                            ~~ ^
+compute.hlsl:987:31: error: no member named 'center_radius_energy' in 'ExplosionEvent'
+        float energy = max(ev.center_radius_energy.w, 0.1f);
+                           ~~ ^
+
+Shader compilation failed: compute.hlsl
 compiling shader: graphics.hlsl
 compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 compiling shader: graphics.hlsl
