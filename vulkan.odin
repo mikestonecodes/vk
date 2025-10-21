@@ -38,6 +38,28 @@ MAX_FRAMES_IN_FLIGHT :: c.uint32_t(3)
 MAX_SWAPCHAIN_IMAGES :: c.uint32_t(4) // 4 keeps headroom for triple-buffer drivers
 elements: [MAX_SWAPCHAIN_IMAGES]SwapchainElement
 
+MAX_INSTANCE_EXTENSION_COUNT :: 16
+instance_extension_buffer: [MAX_INSTANCE_EXTENSION_COUNT]cstring
+
+MAX_PHYSICAL_DEVICE_COUNT :: u32(8)
+physical_device_buffer: [MAX_PHYSICAL_DEVICE_COUNT]vk.PhysicalDevice
+
+MAX_QUEUE_FAMILY_COUNT :: u32(16)
+queue_family_buffer: [MAX_QUEUE_FAMILY_COUNT]vk.QueueFamilyProperties
+
+MAX_SURFACE_FORMAT_COUNT :: u32(16)
+surface_format_buffer: [MAX_SURFACE_FORMAT_COUNT]vk.SurfaceFormatKHR
+
+swapchain_image_handles: [MAX_SWAPCHAIN_IMAGES]vk.Image
+
+MAX_SPIRV_BYTES :: 1 << 20
+MAX_SPIRV_WORDS :: MAX_SPIRV_BYTES / 4
+spirv_words_buffer: [MAX_SPIRV_WORDS]u32
+
+slice_to_vla :: proc(slice: []$T) -> [^]T {
+	return transmute([^]T)raw_data(slice)
+}
+
 //frame_timeline_values: [MAX_FRAMES_IN_FLIGHT]c.uint64_t
 frames_in_flight: c.uint32_t = 0
 current_frame: c.uint32_t = 0
@@ -93,77 +115,6 @@ vkw_create :: proc(
 	}
 	return out, true
 }
-// Array enumeration wrapper (get count, then get array)
-vkw_enumerate :: proc(call: $T, first_param: $P, msg: string, $Out: typeid) -> ([]Out, bool) {
-	count: u32
-	call(first_param, &count, nil)
-
-	if count == 0 {
-		return nil, true
-	}
-
-	array := make([]Out, count)
-	call(first_param, &count, raw_data(array))
-
-	return array, true
-}
-// Device enumeration wrapper (instance-specific)
-vkw_enumerate_device :: proc(
-	call: $T,
-	instance: vk.Instance,
-	msg: string,
-	$Out: typeid,
-) -> (
-	[]Out,
-	bool,
-) {
-	return vkw_enumerate(call, instance, msg, Out)
-}
-
-// Physical device specific enumeration
-vkw_enumerate_physical :: proc(
-	call: $T,
-	phys_device: vk.PhysicalDevice,
-	msg: string,
-	$Out: typeid,
-) -> (
-	[]Out,
-	bool,
-) {
-	return vkw_enumerate(call, phys_device, msg, Out)
-}
-
-// Surface-specific enumeration (with physical device and surface)
-vkw_enumerate_surface :: proc(
-	call: $T,
-	phys_device: vk.PhysicalDevice,
-	surface: vk.SurfaceKHR,
-	msg: string,
-	$Out: typeid,
-) -> (
-	[]Out,
-	bool,
-) {
-	count: u32
-	if call(phys_device, surface, &count, nil) != .SUCCESS {
-		fmt.printf("Failed to get count for %s\n", msg)
-		return nil, false
-	}
-
-	if count == 0 {
-		return nil, true
-	}
-
-	array := make([]Out, count)
-	if call(phys_device, surface, &count, raw_data(array)) != .SUCCESS {
-		fmt.printf("Failed to get array for %s\n", msg)
-		delete(array)
-		return nil, false
-	}
-
-	return array, true
-}
-
 // Get single property wrapper
 vkw_get_property :: proc(call: $T, first_param: $P, out: ^$Out, msg: string) -> bool {
 	call(first_param, out)
@@ -199,10 +150,6 @@ vkw_create_pipelines :: proc(
 // Generic overloaded wrapper
 vkw :: proc {
 	vkw_create,
-	vkw_enumerate,
-	vkw_enumerate_device,
-	vkw_enumerate_physical,
-	vkw_enumerate_surface,
 	vkw_get_property,
 	vkw_allocate,
 	vkw_create_pipelines,
@@ -429,13 +376,16 @@ vulkan_init :: proc() -> (ok: bool) {
 get_instance_extensions :: proc() -> []cstring {
 	// Get required extensions from GLFW
 	glfw_extensions := glfw.GetRequiredInstanceExtensions()
-	extensions := make([]cstring, len(glfw_extensions) + 2)
+	total := len(glfw_extensions) + 2
+	runtime.assert(total <= len(instance_extension_buffer), "instance extension buffer too small")
+
 	for i in 0 ..< len(glfw_extensions) {
-		extensions[i] = glfw_extensions[i]
+		instance_extension_buffer[i] = glfw_extensions[i]
 	}
-	extensions[len(glfw_extensions)] = "VK_EXT_debug_utils"
-	extensions[len(glfw_extensions) + 1] = "VK_EXT_validation_features" // optional but useful
-	return extensions
+
+	instance_extension_buffer[len(glfw_extensions)] = "VK_EXT_debug_utils"
+	instance_extension_buffer[len(glfw_extensions) + 1] = "VK_EXT_validation_features" // optional but useful
+	return instance_extension_buffer[:total]
 }
 layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
 
@@ -535,6 +485,7 @@ ShaderInfo :: struct {
 
 shader_registry: map[string]ShaderInfo
 shader_watch_initialized: bool
+MAX_TRACKED_SHADERS :: 32
 
 init_shader_times :: proc() {
 	discover_shaders()
@@ -543,10 +494,8 @@ init_shader_times :: proc() {
 
 discover_shaders :: proc() {
 	// Recreate registry
-	if shader_registry != nil {
-		delete(shader_registry)
-	}
-	shader_registry = make(map[string]ShaderInfo)
+	delete(shader_registry)
+	shader_registry = map[string]ShaderInfo{}
 
 	handle, err := os.open(".")
 	if err != nil {
@@ -653,10 +602,17 @@ load_shader_spirv :: proc(path: string) -> ([]u32, bool) {
 	if !ok || len(data) % 4 != 0 {
 		return nil, false
 	}
-	words := make([]u32, len(data) / 4)
-	for i in 0 ..< len(words) {
+	defer delete(data)
+
+	if len(data) > MAX_SPIRV_BYTES {
+		fmt.printf("SPIR-V file too large for staging buffer: %s\n", path)
+		return nil, false
+	}
+
+	word_count := len(data) / 4
+	for i in 0 ..< word_count {
 		idx := i * 4
-		words[i] =
+		spirv_words_buffer[i] =
 			u32(data[idx + 0]) |
 			(u32(data[idx + 1]) << 8) |
 			(u32(data[idx + 2]) << 16) |
@@ -664,10 +620,10 @@ load_shader_spirv :: proc(path: string) -> ([]u32, bool) {
 	}
 
 	// Optional: sanity check SPIR-V magic 0x07230203
-	if len(words) > 0 && words[0] != u32(0x07230203) {
-		fmt.printf("WARN: %s does not look like SPIR-V (magic=%#x)\n", path, words[0])
+	if word_count > 0 && spirv_words_buffer[0] != u32(0x07230203) {
+		fmt.printf("WARN: %s does not look like SPIR-V (magic=%#x)\n", path, spirv_words_buffer[0])
 	}
-	return words, true
+	return spirv_words_buffer[:word_count], true
 }
 
 load_shader_code_words :: proc(path: string) -> ([]u32, bool) {
@@ -726,27 +682,27 @@ check_shader_reload :: proc() -> bool {
 		return false
 	}
 
-	changed := make([dynamic]string, 0)
+	changed := Array(MAX_TRACKED_SHADERS, string){}
 	for name, &info in shader_registry {
 		st, err := os.stat(info.source_path)
 		if err != nil {
 			// File missing → drop it from registry
 			fmt.printf("Shader source missing: %s\n", info.source_path)
 			delete_key(&shader_registry, name) // correct form
-			append(&changed, name) // trigger rebuild
+			array_push(&changed, name) // trigger rebuild
 			continue
 		}
 
 		if st.modification_time != info.last_modified {
 			info.last_modified = st.modification_time
-			append(&changed, name)
+			array_push(&changed, name)
 		}
 	}
 
-	if len(changed) == 0 {
+	if changed.len == 0 {
 		return shaders_ready
 	}
-	if !compile_changed_shaders(changed[:]) {
+	if !compile_changed_shaders(array_slice(&changed)) {
 		return shaders_ready // keep old shaders if rebuild fails
 	}
 
@@ -794,13 +750,22 @@ create_swapchain :: proc() -> bool {
 	count: u32
 	vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &count, nil)
 	if count == 0 do return false
-	fmts := make([^]vk.SurfaceFormatKHR, count)
-	defer free(fmts)
-	vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &count, fmts)
-	fmt_count := cast(int)count
-	format = fmts[0].format
-	for i in 0 ..< fmt_count {
-		fmt := fmts[i]
+	if count > MAX_SURFACE_FORMAT_COUNT {
+		count = MAX_SURFACE_FORMAT_COUNT
+	}
+	surface_formats := slice_to_vla(surface_format_buffer[:int(count)])
+	if vk.GetPhysicalDeviceSurfaceFormatsKHR(
+		   phys_device,
+		   vulkan_surface,
+		   &count,
+		   surface_formats,
+	   ) !=
+	   .SUCCESS {
+		return false
+	}
+	format = surface_format_buffer[0].format
+	for i in 0 ..< int(count) {
+		fmt := surface_format_buffer[i]
 		if fmt.format == vk.Format.B8G8R8A8_SRGB {
 			format = fmt.format
 			break
@@ -830,16 +795,29 @@ create_swapchain :: proc() -> bool {
 
 	// Fetch images and make simple views / cmd buffers
 	vk.GetSwapchainImagesKHR(device, swapchain, &image_count, nil)
-	imgs := make([^]vk.Image, image_count)
-	defer free(imgs)
-	vk.GetSwapchainImagesKHR(device, swapchain, &image_count, imgs)
-	for i in 0 ..< image_count {
-		elements[i].image = imgs[i]
+	if image_count == 0 {
+		return false
+	}
+	if image_count > MAX_SWAPCHAIN_IMAGES {
+		image_count = MAX_SWAPCHAIN_IMAGES
+	}
+	image_slice := slice_to_vla(swapchain_image_handles[:int(image_count)])
+	if vk.GetSwapchainImagesKHR(
+		   device,
+		   swapchain,
+		   &image_count,
+		   image_slice,
+	   ) !=
+	   .SUCCESS {
+		return false
+	}
+	for i in 0 ..< int(image_count) {
+		elements[i].image = swapchain_image_handles[i]
 		vk.CreateImageView(
 			device,
 			&vk.ImageViewCreateInfo {
 				sType = .IMAGE_VIEW_CREATE_INFO,
-				image = imgs[i],
+				image = swapchain_image_handles[i],
 				viewType = .D2,
 				format = format,
 				subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
@@ -872,7 +850,6 @@ init_vulkan :: proc() -> bool {
 
 	// --- Create instance ---
 	instance_extensions := get_instance_extensions()
-	defer delete(instance_extensions)
 
 	app_info := vk.ApplicationInfo {
 		sType              = vk.StructureType.APPLICATION_INFO,
@@ -1006,40 +983,59 @@ setup_debug_messenger :: proc() -> bool {
 }
 
 setup_physical_device :: proc() -> bool {
-	devices, ok := vkw_enumerate_device(
-		vk.EnumeratePhysicalDevices,
-		instance,
-		"physical devices",
-		vk.PhysicalDevice,
-	)
-	if !ok || len(devices) == 0 {
+	device_count: u32
+	if vk.EnumeratePhysicalDevices(instance, &device_count, nil) != .SUCCESS || device_count == 0 {
 		fmt.println("No physical devices found")
 		return false
 	}
-	defer delete(devices)
-	phys_device = devices[0]
 
-	queue_families, qf_ok := vkw_enumerate_physical(
-		vk.GetPhysicalDeviceQueueFamilyProperties,
+	if device_count > MAX_PHYSICAL_DEVICE_COUNT {
+		device_count = MAX_PHYSICAL_DEVICE_COUNT
+	}
+
+	phys_devices := slice_to_vla(physical_device_buffer[:int(device_count)])
+	if vk.EnumeratePhysicalDevices(
+		   instance,
+		   &device_count,
+		   phys_devices,
+	   ) !=
+	   .SUCCESS {
+		fmt.println("Failed to enumerate physical devices")
+		return false
+	}
+
+	phys_device = physical_device_buffer[0]
+
+	queue_family_count: u32
+	vk.GetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_family_count, nil)
+	if queue_family_count == 0 {
+		fmt.println("No queue families found")
+		return false
+	}
+	if queue_family_count > MAX_QUEUE_FAMILY_COUNT {
+		queue_family_count = MAX_QUEUE_FAMILY_COUNT
+	}
+
+	queue_props := slice_to_vla(queue_family_buffer[:int(queue_family_count)])
+	vk.GetPhysicalDeviceQueueFamilyProperties(
 		phys_device,
-		"queue families",
-		vk.QueueFamilyProperties,
+		&queue_family_count,
+		queue_props,
 	)
-	if !qf_ok {return false}
-	defer delete(queue_families)
 
-	for qf, i in queue_families {
+	for idx in 0 ..< int(queue_family_count) {
+		qf := queue_family_buffer[idx]
 		present_support: b32
 		if vk.GetPhysicalDeviceSurfaceSupportKHR(
 			   phys_device,
-			   u32(i),
+			   u32(idx),
 			   vulkan_surface,
 			   &present_support,
 		   ) ==
 			   .SUCCESS &&
 		   present_support &&
 		   vk.QueueFlag.GRAPHICS in qf.queueFlags {
-			queue_family_index = u32(i)
+			queue_family_index = u32(idx)
 			return true
 		}
 	}

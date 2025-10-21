@@ -152,7 +152,7 @@ float4 fs_main(VertexOutput input) : SV_Target {
     float3 tint = lerp(tint_low, tint_high, backlight);
     smoke = saturate(smoke * (0.6f + 0.4f * blend_density) + tint * 0.25f * blend_density);
 
-    smoke = adjust_saturation(smoke, 0.55f);
+    smoke = adjust_saturation(smoke, 1.55f);
     smoke = ACESFilm(smoke);
 
     float alpha = saturate(accumDensity * 1.2f);

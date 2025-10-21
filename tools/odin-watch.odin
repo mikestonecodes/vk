@@ -82,7 +82,7 @@ main :: proc() {
 	fmt.printf("Watching .odin files in directory: %s\n", watch_dir)
 
 	// Ensure the map is allocated before use
-	last_times = make(map[string]time.Time)
+	last_times = map[string]time.Time{}
 
 	// Prime the map without triggering a build
 	handle, err := os.open(watch_dir)
