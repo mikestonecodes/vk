@@ -14,7 +14,7 @@ static const float WORLD_RANGE_LIMIT = 1e6f;
 static const uint  MAX_EXPLOSIONS = 256u;
 static const uint  MAX_CHAIN_EVENTS = 128u;
 static const uint  MAX_ACTIVE_PROJECTILES = 25000u;
-static const float EXPLOSION_LIFETIME = 0.6f;
+static const float EXPLOSION_LIFETIME = 1.0f;
 
 // GPU physics compute pipeline
 struct ComputePushConstants {

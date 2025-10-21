@@ -40,11 +40,11 @@ DISPATCH_RENDER :: u32(15)
 EXPLOSION_EVENT_CAPACITY :: u32(256)
 
 CameraStateGPU :: struct {
-	position:   [2]f32,
-	zoom:       f32,
-	pad0:       f32,
+	position:    [2]f32,
+	zoom:        f32,
+	pad0:        f32,
 	initialized: u32,
-	pad1:       [3]u32,
+	pad1:        [3]u32,
 }
 
 accumulation_buffer: BufferResource
@@ -68,61 +68,61 @@ PostProcessPushConstants :: struct {
 }
 
 ComputePushConstants :: struct {
-    time:          f32,
-    delta_time:    f32,
-	screen_width:  u32,
-	screen_height: u32,
-	brightness:    f32,
-	move_forward:  b32,
-	move_backward: b32,
-	move_right:    b32,
-	move_left:     b32,
-	zoom_in:       b32,
-	zoom_out:      b32,
-	speed:         b32,
-	reset_camera:  b32,
-	options:       u32,
-	dispatch_mode: u32,
-	scan_offset:   u32,
-	scan_source:   u32,
-	solver_iteration: u32,
-	substep_index: u32,
-	substep_count: u32,
-	body_capacity: u32,
-	grid_x:        u32,
-	grid_y:        u32,
+	time:                    f32,
+	delta_time:              f32,
+	screen_width:            u32,
+	screen_height:           u32,
+	brightness:              f32,
+	move_forward:            b32,
+	move_backward:           b32,
+	move_right:              b32,
+	move_left:               b32,
+	zoom_in:                 b32,
+	zoom_out:                b32,
+	speed:                   b32,
+	reset_camera:            b32,
+	options:                 u32,
+	dispatch_mode:           u32,
+	scan_offset:             u32,
+	scan_source:             u32,
+	solver_iteration:        u32,
+	substep_index:           u32,
+	substep_count:           u32,
+	body_capacity:           u32,
+	grid_x:                  u32,
+	grid_y:                  u32,
 	solver_iterations_total: u32,
-	relaxation:    f32,
-	dt_clamp:      f32,
-	projectile_speed: f32,
-	projectile_radius: f32,
+	relaxation:              f32,
+	dt_clamp:                f32,
+	projectile_speed:        f32,
+	projectile_radius:       f32,
 	projectile_max_distance: f32,
-	player_radius: f32,
-	player_damping: f32,
-	spawn_projectile: u32,
-	mouse_ndc_x:   f32,
-	mouse_ndc_y:   f32,
-    projectile_pool: u32,
-    _pad0:         u32,
+	player_radius:           f32,
+	player_damping:          f32,
+	spawn_projectile:        u32,
+	mouse_ndc_x:             f32,
+	mouse_ndc_y:             f32,
+	projectile_pool:         u32,
+	_pad0:                   u32,
 }
 
 ExplosionEventGPU :: struct {
-    center: [2]f32,
-    radius: f32,
-    energy: f32,
-    start_time: f32,
-    target_id: u32,
-    processed: u32,
-    reserved0: u32,
-    reserved1: u32,
+	center:     [2]f32,
+	radius:     f32,
+	energy:     f32,
+	start_time: f32,
+	target_id:  u32,
+	processed:  u32,
+	reserved0:  u32,
+	reserved1:  u32,
 }
 
 SpawnStateGPU :: struct {
-    next_projectile: u32,
-    next_explosion: u32,
-    explosion_head: u32,
-    active_projectiles: u32,
-    events: [EXPLOSION_EVENT_CAPACITY]ExplosionEventGPU,
+	next_projectile:    u32,
+	next_explosion:     u32,
+	explosion_head:     u32,
+	active_projectiles: u32,
+	events:             [EXPLOSION_EVENT_CAPACITY]ExplosionEventGPU,
 }
 
 compute_push_constants: ComputePushConstants
@@ -248,28 +248,24 @@ init_render_resources :: proc() -> bool {
 	}
 
 	compute_push_constants = ComputePushConstants {
-		screen_width   = u32(window_width),
-		screen_height  = u32(window_height),
-		brightness     = 1.0,
-		substep_count  = PHYS_SUBSTEPS,
-		body_capacity  = PHYS_MAX_BODIES,
-		grid_x         = GRID_X,
-		grid_y         = GRID_Y,
+		screen_width            = u32(window_width),
+		screen_height           = u32(window_height),
+		brightness              = 1.0,
+		substep_count           = PHYS_SUBSTEPS,
+		body_capacity           = PHYS_MAX_BODIES,
+		grid_x                  = GRID_X,
+		grid_y                  = GRID_Y,
 		solver_iterations_total = PHYS_SOLVER_ITERATIONS,
-		relaxation     = 1.0,
-		dt_clamp       = 1.0 / 30.0,
-		projectile_speed = 42.0,
-		projectile_radius = 0.20,
+		relaxation              = 1.0,
+		dt_clamp                = 1.0 / 30.0,
+		projectile_speed        = 42.0,
+		projectile_radius       = 0.20,
 		projectile_max_distance = 450.0,
-		player_radius  = 0.65,
-		player_damping = 0.02,
-		projectile_pool = PHYS_PROJECTILE_POOL,
+		player_radius           = 0.65,
+		player_damping          = 0.02,
+		projectile_pool         = PHYS_PROJECTILE_POOL,
 	}
 
-	post_process_push_constants = PostProcessPushConstants {
-		screen_width  = u32(window_width),
-		screen_height = u32(window_height),
-	}
 
 	bind_resource(0, &accumulation_buffer)
 	bind_resource(0, &camera_state_buffer, 3)
@@ -286,10 +282,27 @@ init_render_resources :: proc() -> bool {
 	bind_resource(0, &cell_scratch_buffer, 32)
 	bind_resource(0, &sorted_indices_buffer, 33)
 
+	post_process_push_constants = PostProcessPushConstants {
+		screen_width  = u32(window_width),
+		screen_height = u32(window_height),
+	}
 	physics_initialized = false
 
 	return true
 
+}
+
+resize :: proc() {
+	destroy_buffer(&accumulation_buffer)
+	create_buffer(
+		&accumulation_buffer,
+		vk.DeviceSize(window_width) *
+		vk.DeviceSize(window_height) *
+		4 *
+		vk.DeviceSize(size_of(u32)),
+		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
+	)
+	bind_resource(0, &accumulation_buffer)
 }
 
 record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
@@ -472,11 +485,16 @@ simulate_particles :: proc(frame: FrameInputs) {
 // accumulation_buffer -> post_process.hlsl -> swapchain image
 composite_to_swapchain :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 
-	begin_rendering(frame,element)
-	bind(frame, &render_shader_states[1], .GRAPHICS, &PostProcessPushConstants{
-		screen_width = u32(window_width),
-		screen_height = u32(window_height),
-	})
+	begin_rendering(frame, element)
+	bind(
+		frame,
+		&render_shader_states[1],
+		.GRAPHICS,
+		&PostProcessPushConstants {
+			screen_width = u32(window_width),
+			screen_height = u32(window_height),
+		},
+	)
 	vk.CmdDraw(frame.cmd, 3, 1, 0, 0)
 	vk.CmdEndRendering(frame.cmd)
 	transition_swapchain_image_layout(frame.cmd, element, vk.ImageLayout.PRESENT_SRC_KHR)

@@ -323,10 +323,10 @@ handle_resize :: proc() {
 		wait_for_timeline(timeline_value)
 
 		// Destroy old offscreen image resource (handled by render cleanup)
-		cleanup_render_resources()
-		destroy_render_shader_state(render_shader_states[:])
+//		cleanup_render_resources()
+//		destroy_render_shader_state(render_shader_states[:])
 
-		shaders_ready = false
+	//	shaders_ready = false
 		destroy_swapchain()
 		if !create_swapchain() {
 			return
@@ -337,15 +337,8 @@ handle_resize :: proc() {
 			return
 		}
 		// Recreate offscreen resources with new dimensions (handled by render init)
-		init_render_resources()
-		if !prepare_render_shaders(render_shader_configs[:]) {
-			fmt.println("Shader preparation failed during resize")
-			return
-		}
-		if !build_shader_programs(render_shader_configs[:], render_shader_states[:]) {
-			fmt.println("Shader rebuild failed during resize")
-			return
-		}
+//		init_render_resources()
+		resize()
 
 
 	}
