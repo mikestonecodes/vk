@@ -14,8 +14,8 @@ PARTICLE_COUNT :: u32(5000)
 get_adaptive_particle_count :: proc() -> u32 {
 	w := u32(window_width)
 	h := u32(window_height)
-	if w == 0 { w = 1 }
-	if h == 0 { h = 1 }
+	if w == 0 {w = 1}
+	if h == 0 {h = 1}
 	return w * h
 }
 COMPUTE_GROUP_SIZE :: u32(128)
@@ -25,11 +25,11 @@ PIPELINE_COUNT :: 2
 WORLD_WIDTH :: u32(1920)
 WORLD_HEIGHT :: u32(1080)
 
-accumulation_buffer:  BufferResource
-fluid_state_buffer:   BufferResource
+accumulation_buffer: BufferResource
+fluid_state_buffer: BufferResource
 color_history_buffer: BufferResource
-sprite_texture:       TextureResource
-extra_data_buffer:    BufferResource
+sprite_texture: TextureResource
+extra_data_buffer: BufferResource
 
 
 PostProcessPushConstants :: struct {
@@ -69,10 +69,10 @@ post_process_push_constants: PostProcessPushConstants
 init_render_resources :: proc() -> bool {
 
 	destroy_buffer(&accumulation_buffer)
-    destroy_buffer(&fluid_state_buffer)
-    destroy_buffer(&color_history_buffer)
-    destroy_buffer(&extra_data_buffer)
-    destroy_texture(&sprite_texture)
+	destroy_buffer(&fluid_state_buffer)
+	destroy_buffer(&color_history_buffer)
+	destroy_buffer(&extra_data_buffer)
+	destroy_texture(&sprite_texture)
 
 	create_buffer(
 		&accumulation_buffer,
@@ -83,21 +83,21 @@ init_render_resources :: proc() -> bool {
 		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
 	)
 
-    create_buffer(
-        &fluid_state_buffer,
-        vk.DeviceSize(window_width) *
-        vk.DeviceSize(window_height) *
-        vk.DeviceSize(size_of(f32) * 4 * 2),
-        {vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
-    )
+	create_buffer(
+		&fluid_state_buffer,
+		vk.DeviceSize(window_width) *
+		vk.DeviceSize(window_height) *
+		vk.DeviceSize(size_of(f32) * 4 * 2),
+		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
+	)
 
-    create_buffer(
-        &color_history_buffer,
-        vk.DeviceSize(window_width) *
-        vk.DeviceSize(window_height) *
-        vk.DeviceSize(size_of(f32) * 4 * 2),
-        {vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
-    )
+	create_buffer(
+		&color_history_buffer,
+		vk.DeviceSize(window_width) *
+		vk.DeviceSize(window_height) *
+		vk.DeviceSize(size_of(f32) * 4 * 2),
+		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
+	)
 
 	create_buffer(
 		&extra_data_buffer,
@@ -118,7 +118,7 @@ init_render_resources :: proc() -> bool {
 	}
 
 	render_shader_configs[1] = {
-		vertex_module   = "graphics_vs.spv",
+		vertex_module = "graphics_vs.spv",
 		fragment_module = "graphics_fs.spv",
 		push = PushConstantInfo {
 			label = "PostProcessPushConstants",
@@ -140,9 +140,9 @@ init_render_resources :: proc() -> bool {
 		screen_height = u32(window_height),
 	}
 
-    bind_resource(0, &accumulation_buffer)
-    bind_resource(1, &fluid_state_buffer)
-    bind_resource(2, &color_history_buffer)
+	bind_resource(0, &accumulation_buffer)
+	bind_resource(1, &fluid_state_buffer)
+	bind_resource(2, &color_history_buffer)
 	bind_resource(0, &sprite_texture)
 	bind_resource(0, &sprite_texture.sampler)
 	bind_resource(0, &extra_data_buffer, 3)
@@ -181,128 +181,16 @@ simulate_particles :: proc(frame: FrameInputs) {
 	vk.CmdDispatch(frame.cmd, (adaptive_count + 128 - 1) / 128, 1, 1)
 }
 
-
 // accumulation_buffer -> post_process.hlsl -> swapchain image
 composite_to_swapchain :: proc(frame: FrameInputs, element: ^SwapchainElement) {
-
-	apply_compute_to_fragment_barrier(frame.cmd, &accumulation_buffer)
-
-	old_layout := element.layout
-	to_attachment := vk.ImageMemoryBarrier2 {
-		sType               = .IMAGE_MEMORY_BARRIER_2,
-		srcStageMask        = {.TOP_OF_PIPE},
-		srcAccessMask       = {},
-		dstStageMask        = {.COLOR_ATTACHMENT_OUTPUT},
-		dstAccessMask       = {.COLOR_ATTACHMENT_WRITE},
-		oldLayout           = old_layout,
-		newLayout           = .ATTACHMENT_OPTIMAL,
-		image               = element.image,
-		subresourceRange    = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
-	}
-	vk.CmdPipelineBarrier2(
-		frame.cmd,
-		&vk.DependencyInfo {
-			sType                 = .DEPENDENCY_INFO,
-			imageMemoryBarrierCount = 1,
-			pImageMemoryBarriers  = &to_attachment,
-		},
-	)
 	element.layout = vk.ImageLayout.ATTACHMENT_OPTIMAL
-
-	color_attachment := vk.RenderingAttachmentInfo {
-		sType       = .RENDERING_ATTACHMENT_INFO,
-		imageView   = element.imageView,
-		imageLayout = .ATTACHMENT_OPTIMAL,
-		loadOp      = .CLEAR,
-		storeOp     = .STORE,
-		clearValue  = vk.ClearValue{color = {float32 = {0, 0, 0, 1}}},
-	}
-	render_info := vk.RenderingInfo {
-		sType                = .RENDERING_INFO,
-		renderArea           = {{0, 0}, {width, height}},
-		layerCount           = 1,
-		colorAttachmentCount = 1,
-		pColorAttachments    = &color_attachment,
-	}
-	vk.CmdBeginRendering(frame.cmd, &render_info)
-
-	post_process_push_constants.screen_width = u32(window_width)
-	post_process_push_constants.screen_height = u32(window_height)
-
-	viewport := vk.Viewport {
-		x        = 0,
-		y        = 0,
-		width    = f32(window_width),
-		height   = f32(window_height),
-		minDepth = 0,
-		maxDepth = 1,
-	}
-	scissor := vk.Rect2D {
-		offset = {0, 0},
-		extent = {u32(window_width), u32(window_height)},
-	}
-	vk.CmdSetViewportWithCount(frame.cmd, 1, &viewport)
-	vk.CmdSetScissorWithCount(frame.cmd, 1, &scissor)
-	vk.CmdSetPrimitiveTopology(frame.cmd, vk.PrimitiveTopology.TRIANGLE_LIST)
-	vk.CmdSetFrontFace(frame.cmd, vk.FrontFace.CLOCKWISE)
-	vk.CmdSetPolygonModeEXT(frame.cmd, vk.PolygonMode.FILL)
-	vk.CmdSetRasterizerDiscardEnable(frame.cmd, b32(false))
-	vk.CmdSetCullMode(frame.cmd, vk.CullModeFlags_NONE)
-	vk.CmdSetDepthClampEnableEXT(frame.cmd, b32(false))
-	vk.CmdSetDepthBiasEnable(frame.cmd, b32(false))
-	vk.CmdSetDepthTestEnable(frame.cmd, b32(false))
-	vk.CmdSetDepthWriteEnable(frame.cmd, b32(false))
-	vk.CmdSetDepthBoundsTestEnable(frame.cmd, b32(false))
-	vk.CmdSetDepthBounds(frame.cmd, 0.0, 1.0)
-	vk.CmdSetStencilTestEnable(frame.cmd, b32(false))
-	vk.CmdSetPrimitiveRestartEnable(frame.cmd, b32(false))
-
-	sample_flags := vk.SampleCountFlags{vk.SampleCountFlag._1}
-	vk.CmdSetRasterizationSamplesEXT(frame.cmd, sample_flags)
-	sample_mask := vk.SampleMask(0xffffffff)
-	vk.CmdSetSampleMaskEXT(frame.cmd, sample_flags, &sample_mask)
-	vk.CmdSetAlphaToCoverageEnableEXT(frame.cmd, b32(false))
-	vk.CmdSetAlphaToOneEnableEXT(frame.cmd, b32(false))
-	vk.CmdSetLogicOpEnableEXT(frame.cmd, b32(false))
-
-	color_blend_enable := b32(false)
-	vk.CmdSetColorBlendEnableEXT(frame.cmd, 0, 1, &color_blend_enable)
-	color_blend_equation := vk.ColorBlendEquationEXT {
-		srcColorBlendFactor  = vk.BlendFactor.ONE,
-		dstColorBlendFactor  = vk.BlendFactor.ZERO,
-		colorBlendOp         = vk.BlendOp.ADD,
-		srcAlphaBlendFactor  = vk.BlendFactor.ONE,
-		dstAlphaBlendFactor  = vk.BlendFactor.ZERO,
-		alphaBlendOp         = vk.BlendOp.ADD,
-	}
-	vk.CmdSetColorBlendEquationEXT(frame.cmd, 0, 1, &color_blend_equation)
-	color_write_mask := vk.ColorComponentFlags{vk.ColorComponentFlag.R, vk.ColorComponentFlag.G, vk.ColorComponentFlag.B, vk.ColorComponentFlag.A}
-	vk.CmdSetColorWriteMaskEXT(frame.cmd, 0, 1, &color_write_mask)
-	vk.CmdSetVertexInputEXT(frame.cmd, 0, nil, 0, nil)
-
-	bind(frame, &render_shader_states[1], .GRAPHICS, &post_process_push_constants)
+	begin_rendering(frame,element)
+	bind(frame, &render_shader_states[1], .GRAPHICS, &PostProcessPushConstants{
+		screen_width = u32(window_width),
+		screen_height = u32(window_height),
+	})
 	vk.CmdDraw(frame.cmd, 3, 1, 0, 0)
 	vk.CmdEndRendering(frame.cmd)
-
-	to_present := vk.ImageMemoryBarrier2 {
-		sType               = .IMAGE_MEMORY_BARRIER_2,
-		srcStageMask        = {.COLOR_ATTACHMENT_OUTPUT},
-		srcAccessMask       = {.COLOR_ATTACHMENT_WRITE},
-		dstStageMask        = {.ALL_COMMANDS},
-		dstAccessMask       = {},
-		oldLayout           = .ATTACHMENT_OPTIMAL,
-		newLayout           = .PRESENT_SRC_KHR,
-		image               = element.image,
-		subresourceRange    = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
-	}
-	vk.CmdPipelineBarrier2(
-		frame.cmd,
-		&vk.DependencyInfo {
-			sType                 = .DEPENDENCY_INFO,
-			imageMemoryBarrierCount = 1,
-			pImageMemoryBarriers  = &to_present,
-		},
-	)
 	element.layout = vk.ImageLayout.PRESENT_SRC_KHR
 }
 

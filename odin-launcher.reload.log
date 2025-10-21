@@ -7,25 +7,25 @@ Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 Validation layer: Copying old device 0 into new device 0
 Validation layer: Removing driver /usr/lib/libvulkan_intel.so due to not having any physical devices
 Validation layer: Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
@@ -50,7 +50,9 @@ compiling shader:
 compiling shader:
 compiling shader:
 compiling shader:
-Discovered 2 shaders: compute.hlsl graphics.hlsl
+Discovered 2 shaders: compute.hlsl graphics.hlsl 
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pSwapchains[0] images passed to present must be in layout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR but VkImage 0x70000000007 is in VK_IMAGE_LAYOUT_UNDEFINED.
+The Vulkan spec states: Each element of pImageIndices must be the index of a presentable image acquired from the swapchain specified by the corresponding element of the pSwapchains array, and the presented image subresource must be in the VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR layout at the time the operation is executed on a VkDevice (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkPresentInfoKHR-pImageIndices-01430)
 Window resized to 1856x1016
 compiling shader:
 compiling shader:
@@ -58,17 +60,22 @@ compiling shader:
 compiling shader:
 compiling shader:
 compiling shader:
-Window resized to 3736x2056
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Window resized to 1856x1016
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pSwapchains[0] images passed to present must be in layout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR but VkImage 0x220000000022 is in VK_IMAGE_LAYOUT_UNDEFINED.
+The Vulkan spec states: Each element of pImageIndices must be the index of a presentable image acquired from the swapchain specified by the corresponding element of the pSwapchains array, and the presented image subresource must be in the VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR layout at the time the operation is executed on a VkDevice (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkPresentInfoKHR-pImageIndices-01430)
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pSwapchains[0] images passed to present must be in layout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR but VkImage 0x230000000023 is in VK_IMAGE_LAYOUT_UNDEFINED.
+The Vulkan spec states: Each element of pImageIndices must be the index of a presentable image acquired from the swapchain specified by the corresponding element of the pSwapchains array, and the presented image subresource must be in the VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR layout at the time the operation is executed on a VkDevice (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkPresentInfoKHR-pImageIndices-01430)
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pSwapchains[0] images passed to present must be in layout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR but VkImage 0x240000000024 is in VK_IMAGE_LAYOUT_UNDEFINED.
+The Vulkan spec states: Each element of pImageIndices must be the index of a presentable image acquired from the swapchain specified by the corresponding element of the pSwapchains array, and the presented image subresource must be in the VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR layout at the time the operation is executed on a VkDevice (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkPresentInfoKHR-pImageIndices-01430)
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pSwapchains[0] images passed to present must be in layout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR but VkImage 0x220000000022 is in VK_IMAGE_LAYOUT_UNDEFINED.
+The Vulkan spec states: Each element of pImageIndices must be the index of a presentable image acquired from the swapchain specified by the corresponding element of the pSwapchains array, and the presented image subresource must be in the VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR layout at the time the operation is executed on a VkDevice (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkPresentInfoKHR-pImageIndices-01430)
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pSwapchains[0] images passed to present must be in layout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR but VkImage 0x230000000023 is in VK_IMAGE_LAYOUT_UNDEFINED.
+The Vulkan spec states: Each element of pImageIndices must be the index of a presentable image acquired from the swapchain specified by the corresponding element of the pSwapchains array, and the presented image subresource must be in the VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR layout at the time the operation is executed on a VkDevice (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkPresentInfoKHR-pImageIndices-01430)
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pSwapchains[0] images passed to present must be in layout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR but VkImage 0x240000000024 is in VK_IMAGE_LAYOUT_UNDEFINED.
+The Vulkan spec states: Each element of pImageIndices must be the index of a presentable image acquired from the swapchain specified by the corresponding element of the pSwapchains array, and the presented image subresource must be in the VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR layout at the time the operation is executed on a VkDevice (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkPresentInfoKHR-pImageIndices-01430)
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pSwapchains[0] images passed to present must be in layout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR but VkImage 0x220000000022 is in VK_IMAGE_LAYOUT_UNDEFINED.
+The Vulkan spec states: Each element of pImageIndices must be the index of a presentable image acquired from the swapchain specified by the corresponding element of the pSwapchains array, and the presented image subresource must be in the VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR layout at the time the operation is executed on a VkDevice (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkPresentInfoKHR-pImageIndices-01430)
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pSwapchains[0] images passed to present must be in layout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR but VkImage 0x230000000023 is in VK_IMAGE_LAYOUT_UNDEFINED.
+The Vulkan spec states: Each element of pImageIndices must be the index of a presentable image acquired from the swapchain specified by the corresponding element of the pSwapchains array, and the presented image subresource must be in the VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR layout at the time the operation is executed on a VkDevice (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkPresentInfoKHR-pImageIndices-01430)
+Validation layer: (Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
+vkQueuePresentKHR(): pPresentInfo->pSwapchains[0] images passed to present must be in layout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR but VkImage 0x240000000024 is in VK_IMAGE_LAYOUT_UNDEFINED.
+The Vulkan spec states: Each element of pImageIndices must be the index of a presentable image acquired from the swapchain specified by the corresponding element of the pSwapchains array, and the presented image subresource must be in the VK_IMAGE_LAYOUT_PRESENT_SRC_KHR or VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR layout at the time the operation is executed on a VkDevice (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkPresentInfoKHR-pImageIndices-01430)

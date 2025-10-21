@@ -84,18 +84,30 @@ bind :: proc(
 	if state.stage_count > 0 {
 		if bind_point == vk.PipelineBindPoint.GRAPHICS {
 			null_shaders := [3]vk.ShaderEXT{{}, {}, {}}
-			null_stages := [3]vk.ShaderStageFlags{
+			null_stages := [3]vk.ShaderStageFlags {
 				{vk.ShaderStageFlag.TESSELLATION_CONTROL},
 				{vk.ShaderStageFlag.TESSELLATION_EVALUATION},
 				{vk.ShaderStageFlag.GEOMETRY},
 			}
-			vk.CmdBindShadersEXT(frame.cmd, u32(len(null_stages)), &null_stages[0], &null_shaders[0])
+			vk.CmdBindShadersEXT(
+				frame.cmd,
+				u32(len(null_stages)),
+				&null_stages[0],
+				&null_shaders[0],
+			)
 		}
 		vk.CmdBindShadersEXT(frame.cmd, state.stage_count, &state.stages[0], &state.shaders[0])
 	}
 	vk.CmdBindDescriptorSets(frame.cmd, bind_point, state.layout, 0, 1, &global_desc_set, 0, nil)
 	if push_size > 0 && state.push_stage != {} {
-		vk.CmdPushConstants(frame.cmd, state.layout, state.push_stage, 0, push_size, push_constants)
+		vk.CmdPushConstants(
+			frame.cmd,
+			state.layout,
+			state.push_stage,
+			0,
+			push_size,
+			push_constants,
+		)
 	}
 }
 
@@ -232,11 +244,11 @@ make_shader_layout :: proc(push: ^PushConstantInfo) -> (layout: vk.PipelineLayou
 		vk.CreatePipelineLayout,
 		device,
 		&vk.PipelineLayoutCreateInfo {
-			sType                 = .PIPELINE_LAYOUT_CREATE_INFO,
-			setLayoutCount        = 1,
-			pSetLayouts           = &layouts[0],
+			sType = .PIPELINE_LAYOUT_CREATE_INFO,
+			setLayoutCount = 1,
+			pSetLayouts = &layouts[0],
 			pushConstantRangeCount = count,
-			pPushConstantRanges   = count > 0 ? &ranges[0] : nil,
+			pPushConstantRanges = count > 0 ? &ranges[0] : nil,
 		},
 		"shader layout",
 		vk.PipelineLayout,
@@ -251,23 +263,26 @@ create_shader_object :: proc(
 	layouts: []vk.DescriptorSetLayout,
 	push_range: ^vk.PushConstantRange,
 	push_range_count: u32,
-) -> (shader: vk.ShaderEXT, ok: bool) {
+) -> (
+	shader: vk.ShaderEXT,
+	ok: bool,
+) {
 	code := load_shader_code_words(path) or_return
 
 	info := vk.ShaderCreateInfoEXT {
-		sType               = vk.StructureType.SHADER_CREATE_INFO_EXT,
-		flags               = {},
-		stage               = {stage},
-		nextStage           = next_stage,
-		codeType            = vk.ShaderCodeTypeEXT.SPIRV,
-		codeSize            = len(code) * size_of(u32),
-		pCode               = raw_data(code),
-		pName               = entry,
-		setLayoutCount      = u32(len(layouts)),
-		pSetLayouts         = len(layouts) > 0 ? &layouts[0] : nil,
+		sType                  = vk.StructureType.SHADER_CREATE_INFO_EXT,
+		flags                  = {},
+		stage                  = {stage},
+		nextStage              = next_stage,
+		codeType               = vk.ShaderCodeTypeEXT.SPIRV,
+		codeSize               = len(code) * size_of(u32),
+		pCode                  = raw_data(code),
+		pName                  = entry,
+		setLayoutCount         = u32(len(layouts)),
+		pSetLayouts            = len(layouts) > 0 ? &layouts[0] : nil,
 		pushConstantRangeCount = push_range_count,
-		pPushConstantRanges = push_range_count > 0 ? push_range : nil,
-		pSpecializationInfo = nil,
+		pPushConstantRanges    = push_range_count > 0 ? push_range : nil,
+		pSpecializationInfo    = nil,
 	}
 
 	result := vk.CreateShadersEXT(device, 1, &info, nil, &shader)
@@ -456,4 +471,91 @@ begin_encoding :: proc(element: ^SwapchainElement) -> CommandEncoder {
 
 	vk.BeginCommandBuffer(encoder.command_buffer, &begin_info)
 	return encoder
+}
+
+begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
+
+	vk.CmdBeginRendering(
+		frame.cmd,
+		&vk.RenderingInfo {
+			sType = .RENDERING_INFO,
+			renderArea = {{0, 0}, {width, height}},
+			layerCount = 1,
+			colorAttachmentCount = 1,
+			pColorAttachments = &vk.RenderingAttachmentInfo {
+				sType = .RENDERING_ATTACHMENT_INFO,
+				imageView = element.imageView,
+				imageLayout = .ATTACHMENT_OPTIMAL,
+				loadOp = .CLEAR,
+				storeOp = .STORE,
+				clearValue = vk.ClearValue{color = {float32 = {0, 0, 0, 1}}},
+			},
+		},
+	)
+
+	vk.CmdSetViewportWithCount(
+		frame.cmd,
+		1,
+		&vk.Viewport {
+			x = 0,
+			y = 0,
+			width = f32(window_width),
+			height = f32(window_height),
+			minDepth = 0,
+			maxDepth = 1,
+		},
+	)
+	vk.CmdSetScissorWithCount(
+		frame.cmd,
+		1,
+		&vk.Rect2D{offset = {0, 0}, extent = {u32(window_width), u32(window_height)}},
+	)
+	vk.CmdSetPrimitiveTopology(frame.cmd, vk.PrimitiveTopology.TRIANGLE_LIST)
+	vk.CmdSetFrontFace(frame.cmd, vk.FrontFace.CLOCKWISE)
+	vk.CmdSetPolygonModeEXT(frame.cmd, vk.PolygonMode.FILL)
+	vk.CmdSetRasterizerDiscardEnable(frame.cmd, b32(false))
+	vk.CmdSetCullMode(frame.cmd, vk.CullModeFlags_NONE)
+	vk.CmdSetDepthClampEnableEXT(frame.cmd, b32(false))
+	vk.CmdSetDepthBiasEnable(frame.cmd, b32(false))
+	vk.CmdSetDepthTestEnable(frame.cmd, b32(false))
+	vk.CmdSetDepthWriteEnable(frame.cmd, b32(false))
+	vk.CmdSetDepthBoundsTestEnable(frame.cmd, b32(false))
+	vk.CmdSetStencilTestEnable(frame.cmd, b32(false))
+	vk.CmdSetPrimitiveRestartEnable(frame.cmd, b32(false))
+	vk.CmdSetAlphaToCoverageEnableEXT(frame.cmd, b32(false))
+	vk.CmdSetAlphaToOneEnableEXT(frame.cmd, b32(false))
+	vk.CmdSetLogicOpEnableEXT(frame.cmd, b32(false))
+	color_blend_enable := b32(false)
+	sample_mask := vk.SampleMask(0xffffffff)
+	sample_flags := vk.SampleCountFlags{vk.SampleCountFlag._1}
+	vk.CmdSetRasterizationSamplesEXT(frame.cmd, sample_flags)
+	vk.CmdSetSampleMaskEXT(frame.cmd, sample_flags, &sample_mask)
+
+	vk.CmdSetDepthBounds(frame.cmd, 0.0, 1.0)
+	vk.CmdSetColorBlendEnableEXT(frame.cmd, 0, 1, &color_blend_enable)
+	vk.CmdSetColorBlendEquationEXT(
+		frame.cmd,
+		0,
+		1,
+		&vk.ColorBlendEquationEXT {
+			srcColorBlendFactor = vk.BlendFactor.ONE,
+			dstColorBlendFactor = vk.BlendFactor.ZERO,
+			colorBlendOp = vk.BlendOp.ADD,
+			srcAlphaBlendFactor = vk.BlendFactor.ONE,
+			dstAlphaBlendFactor = vk.BlendFactor.ZERO,
+			alphaBlendOp = vk.BlendOp.ADD,
+		},
+	)
+	vk.CmdSetColorWriteMaskEXT(
+		frame.cmd,
+		0,
+		1,
+		&vk.ColorComponentFlags {
+			vk.ColorComponentFlag.R,
+			vk.ColorComponentFlag.G,
+			vk.ColorComponentFlag.B,
+			vk.ColorComponentFlag.A,
+		},
+	)
+	vk.CmdSetVertexInputEXT(frame.cmd, 0, nil, 0, nil)
 }
