@@ -12,7 +12,7 @@ CAMERA_UPDATE_FLAG :: u32(1 << 0)
 PHYS_MAX_BODIES :: u32(512000)
 PHYS_PLAYER_INDEX :: u32(0)
 PHYS_PROJECTILE_START :: u32(1)
-PHYS_PROJECTILE_POOL :: u32(PHYS_MAX_BODIES - PHYS_PROJECTILE_START)
+PHYS_PROJECTILE_POOL :: u32(60000)
 PHYS_SOLVER_ITERATIONS :: u32(4)
 PHYS_SUBSTEPS :: u32(1)
 
@@ -121,7 +121,7 @@ SpawnStateGPU :: struct {
     next_projectile: u32,
     next_explosion: u32,
     explosion_head: u32,
-    pad0: u32,
+    active_projectiles: u32,
     events: [EXPLOSION_EVENT_CAPACITY]ExplosionEventGPU,
 }
 
