@@ -50,15 +50,8 @@ compiling shader:
 compiling shader:
 compiling shader:
 compiling shader:
-Discovered 2 shaders: compute.hlsl graphics.hlsl 
-Window resized to 1856x1016
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Window resized to 3736x2056
+Discovered 2 shaders: graphics.hlsl compute.hlsl 
+Window resized to 1856x656
 compiling shader:
 compiling shader:
 compiling shader:
@@ -66,13 +59,6 @@ compiling shader:
 compiling shader:
 compiling shader:
 Window resized to 1856x1016
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Window resized to 1856x696
 compiling shader:
 compiling shader:
 compiling shader:

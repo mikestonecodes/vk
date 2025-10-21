@@ -32,10 +32,10 @@ image_count: c.uint32_t = 0
 // Timeline semaphore for render synchronization
 timeline_semaphore: vk.Semaphore
 timeline_value: c.uint64_t = 0
-image_available_semaphore: vk.Semaphore
+acquire_fence: vk.Fence
 
 MAX_FRAMES_IN_FLIGHT :: c.uint32_t(3)
-MAX_SWAPCHAIN_IMAGES :: c.uint32_t(8) // 8 is plenty; most drivers use 2–4
+MAX_SWAPCHAIN_IMAGES :: c.uint32_t(4) // 8 is plenty; most drivers use 2–4
 elements: [MAX_SWAPCHAIN_IMAGES]SwapchainElement
 
 //frame_timeline_values: [MAX_FRAMES_IN_FLIGHT]c.uint64_t
@@ -235,12 +235,20 @@ wait_for_timeline :: proc(value: c.uint64_t) {
 
 acquire_next_image :: proc(_: c.uint32_t) -> bool {
 
+	if acquire_fence == {} {
+		fmt.println("Acquire fence not initialized")
+		return false
+	}
+
+	vk.WaitForFences(device, 1, &acquire_fence, true, max(u64))
+	vk.ResetFences(device, 1, &acquire_fence)
+
 	result := vk.AcquireNextImageKHR(
 		device,
 		swapchain,
 		max(u64),
-		image_available_semaphore,
 		{},
+		acquire_fence,
 		&image_index,
 	)
 
@@ -250,7 +258,13 @@ acquire_next_image :: proc(_: c.uint32_t) -> bool {
 		return false
 	}
 
-	return result == vk.Result.SUCCESS
+	if result != vk.Result.SUCCESS {
+		return false
+	}
+
+	vk.WaitForFences(device, 1, &acquire_fence, true, max(u64))
+
+	return true
 }
 
 submit_commands :: proc(element: ^SwapchainElement, frame_index: u32) {
@@ -258,31 +272,18 @@ submit_commands :: proc(element: ^SwapchainElement, frame_index: u32) {
 	timeline_value += 1
 	new_value := timeline_value
 
-	wait_infos: [2]vk.SemaphoreSubmitInfo
+	wait_infos: [1]vk.SemaphoreSubmitInfo
 	wait_count: u32 = 0
 	wait_ptr: ^vk.SemaphoreSubmitInfo = nil
 
-	if image_available_semaphore != {} {
-		idx := int(wait_count)
-		wait_infos[idx] = vk.SemaphoreSubmitInfo {
-			sType     = vk.StructureType.SEMAPHORE_SUBMIT_INFO,
-			semaphore = image_available_semaphore,
-			value     = 0,
-			stageMask = {vk.PipelineStageFlag2.COLOR_ATTACHMENT_OUTPUT},
-		}
-		wait_count += 1
-		wait_ptr = &wait_infos[0]
-	}
-
 	if old_value != 0 {
-		idx := int(wait_count)
-		wait_infos[idx] = vk.SemaphoreSubmitInfo {
+		wait_infos[0] = vk.SemaphoreSubmitInfo {
 			sType     = vk.StructureType.SEMAPHORE_SUBMIT_INFO,
 			semaphore = timeline_semaphore,
 			value     = old_value,
 			stageMask = {vk.PipelineStageFlag2.TOP_OF_PIPE},
 		}
-		wait_count += 1
+		wait_count = 1
 		wait_ptr = &wait_infos[0]
 	}
 
@@ -1039,11 +1040,14 @@ init_vulkan :: proc() -> bool {
 		return false
 	}
 
-	binary_info := vk.SemaphoreCreateInfo {sType = vk.StructureType.SEMAPHORE_CREATE_INFO}
-	if vk.CreateSemaphore(device, &binary_info, nil, &image_available_semaphore) != vk.Result.SUCCESS {
+	fence_info := vk.FenceCreateInfo {
+		sType = vk.StructureType.FENCE_CREATE_INFO,
+		flags = {vk.FenceCreateFlag.SIGNALED},
+	}
+	if vk.CreateFence(device, &fence_info, nil, &acquire_fence) != vk.Result.SUCCESS {
 		vk.DestroySemaphore(device, timeline_semaphore, nil)
 		timeline_semaphore = {}
-		fmt.println("Failed to create image-available semaphore")
+		fmt.println("Failed to create acquire fence")
 		return false
 	}
 
@@ -1282,9 +1286,9 @@ destroy_all_sync_objects :: proc() {
 		vk.DestroySemaphore(device, timeline_semaphore, nil)
 		timeline_semaphore = {}
 	}
-	if image_available_semaphore != {} {
-		vk.DestroySemaphore(device, image_available_semaphore, nil)
-		image_available_semaphore = {}
+	if acquire_fence != {} {
+		vk.DestroyFence(device, acquire_fence, nil)
+		acquire_fence = {}
 	}
 }
 destroy_swapchain :: proc() {

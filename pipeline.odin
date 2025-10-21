@@ -243,10 +243,6 @@ make_shader_layout :: proc(push: ^PushConstantInfo) -> (layout: vk.PipelineLayou
 	)
 }
 
-shader_stage_enabled :: proc(flags: vk.ShaderStageFlags, stage: vk.ShaderStageFlag) -> bool {
-	return (flags & {stage}) != {}
-}
-
 create_shader_object :: proc(
 	path: string,
 	stage: vk.ShaderStageFlag,
@@ -321,7 +317,7 @@ create_shader_program :: proc(config: ^ShaderProgramConfig, state: ^ShaderProgra
 	if config.compute_module != "" {
 		range_ptr: ^vk.PushConstantRange = nil
 		range_count: u32 = 0
-		if range.size > 0 && shader_stage_enabled(range.stageFlags, vk.ShaderStageFlag.COMPUTE) {
+		if range.size > 0 && (range.stageFlags & {vk.ShaderStageFlag.COMPUTE}) != {} {
 			range_ptr = &range
 			range_count = 1
 		}
