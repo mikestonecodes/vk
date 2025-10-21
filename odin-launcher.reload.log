@@ -7,25 +7,25 @@ Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: Removing driver /usr/lib/libvulkan_intel.so due to not having any physical devices
 Validation layer: Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
@@ -44,25 +44,142 @@ Validation layer:            Library:  /usr/lib/libVkLayer_khronos_validation.so
 Validation layer:      ||
 Validation layer:    <Device>
 Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "/usr/lib/libGLX_nvidia.so.0"
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Discovered 2 shaders: graphics.hlsl compute.hlsl 
-Window resized to 1856x1016
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+Discovered 2 shaders: compute.hlsl graphics.hlsl
+Window resized to 1856x2056
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+Recompiling graphics.hlsl
+compiling shader: graphics.hlsl
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+Failed: graphics.hlsl
 Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
+compiling shader: compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+Shader compilation failed: graphics.hlsl
+compiling shader: graphics.hlsl
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+Shader compilation failed: graphics.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+Shader compilation failed: graphics.hlsl
+compiling shader: graphics.hlsl
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+graphics.hlsl:158:2: error: use of undeclared identifier 'aee'
+        aee
+        ^
+
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+Shader compilation failed: graphics.hlsl
+Recompiling graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl

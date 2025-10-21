@@ -312,11 +312,12 @@ bool world_circle_from_cell(float2 cell, out WorldCircle circle) {
     return true;
 }
 
-bool collide_world(float2 p, float expand, out float2 n_out, out float depth_out) {
+bool collide_world(float2 p, float expand, out float2 n_out, out float depth_out, out float2 center_out, out float radius_out, out float energy_out) {
     float2 base_cell = floor(p);
     bool hit = false;
     float best_depth = 0.0f;
     float2 best_normal = float2(0.0f, 0.0f);
+    WorldCircle best_circle = (WorldCircle)0;
 
     for (int oy = -1; oy <= 1; ++oy) {
         for (int ox = -1; ox <= 1; ++ox) {
@@ -333,6 +334,7 @@ bool collide_world(float2 p, float expand, out float2 n_out, out float depth_out
                 best_depth = penetration;
                 best_normal = delta / safe_dist;
                 hit = true;
+                best_circle = circle;
             }
         }
     }
@@ -340,9 +342,15 @@ bool collide_world(float2 p, float expand, out float2 n_out, out float depth_out
     if (hit) {
         n_out = best_normal;
         depth_out = best_depth;
+        center_out = best_circle.center;
+        radius_out = best_circle.radius;
+        energy_out = best_circle.energy;
     } else {
         n_out = float2(0.0f, 0.0f);
         depth_out = 0.0f;
+        center_out = float2(0.0f, 0.0f);
+        radius_out = 0.0f;
+        energy_out = 0.0f;
     }
     return hit;
 }
@@ -357,6 +365,70 @@ float2 safe_normalize(float2 v, float fallback_x) {
 
 uint grid_cell_count() {
     return max(push_constants.grid_x, 1u) * max(push_constants.grid_y, 1u);
+}
+
+void deactivate_body(uint id) {
+    if (id >= push_constants.body_capacity) {
+        return;
+    }
+    float2 current = body_pos_pred[id];
+    body_active[id] = 0u;
+    body_pos[id] = current;
+    body_pos_pred[id] = current;
+    body_vel[id] = float2(0.0f, 0.0f);
+    store_body_delta(id, float2(0.0f, 0.0f));
+}
+
+void trigger_projectile_explosion(uint source_id, float2 circle_center, float circle_radius, float circle_energy) {
+    deactivate_body(source_id);
+
+    float explosion_radius = (circle_radius + push_constants.projectile_radius) * (3.0f + circle_energy * 2.5f);
+    explosion_radius = max(explosion_radius, push_constants.projectile_radius * 3.5f);
+    float radius_sq = explosion_radius * explosion_radius;
+
+    uint2 origin_cell = world_to_cell(circle_center);
+    uint grid_x = max(push_constants.grid_x, 1u);
+    uint grid_y = max(push_constants.grid_y, 1u);
+    uint cells = grid_cell_count();
+
+    float cell_radius_f = explosion_radius / CELL_SIZE + 1.0f;
+    int cell_radius = (int)ceil(cell_radius_f);
+    cell_radius = max(cell_radius, 1);
+    cell_radius = min(cell_radius, 16);
+
+    for (int oy = -cell_radius; oy <= cell_radius; ++oy) {
+        for (int ox = -cell_radius; ox <= cell_radius; ++ox) {
+            uint nx = wrap_int(int(origin_cell.x) + ox, grid_x);
+            uint ny = wrap_int(int(origin_cell.y) + oy, grid_y);
+            uint c = ny * grid_x + nx;
+            if (c >= cells) {
+                continue;
+            }
+            uint begin = cell_offsets[c];
+            uint end = cell_offsets[c + 1u];
+            for (uint k = begin; k < end; ++k) {
+                uint j = sorted_indices[k];
+                if (j == 0u || j >= push_constants.body_capacity) {
+                    continue;
+                }
+                if (body_active[j] == 0u) {
+                    continue;
+                }
+                if (body_inv_mass[j] <= 0.0f) {
+                    continue;
+                }
+
+                float2 pos = body_pos_pred[j];
+                float2 delta = pos - circle_center;
+                float dist_sq = dot(delta, delta);
+                if (dist_sq > radius_sq) {
+                    continue;
+                }
+
+                deactivate_body(j);
+            }
+        }
+    }
 }
 
 void initialize_bodies(uint id) {
@@ -621,10 +693,17 @@ void constraints_kernel(uint id) {
     }
 
     // World collision
-    {
+    if (wi > 0.0f) {
         float2 normal;
         float depth;
-        if (wi > 0.0f && collide_world(xi, ri, normal, depth)) {
+        float2 circle_center;
+        float circle_radius;
+        float circle_energy;
+        if (collide_world(xi, ri, normal, depth, circle_center, circle_radius, circle_energy)) {
+            if (id >= PHYS_PROJECTILE_START) {
+                trigger_projectile_explosion(id, circle_center, circle_radius, circle_energy);
+                return;
+            }
             float2 corr = -(depth)*normal * wi;
             atomic_add_body_delta(id, corr);
         }

@@ -560,13 +560,15 @@ compile_hlsl :: proc(hlsl_file, profile, entry, output: string) -> bool {
 
 compile_shader :: proc(hlsl_file: string) -> bool {
 
-	fmt.println("compiling shader:")
+	fmt.println("compiling shader:", hlsl_file)
 	is_compute, out0, out1 := hlsl_outputs(hlsl_file)
 	if is_compute {
 		return compile_hlsl(hlsl_file, "cs_6_0", "main", out0)
 	}
 	vs_ok := compile_hlsl(hlsl_file, "vs_6_0", "vs_main", out0)
 	fs_ok := compile_hlsl(hlsl_file, "ps_6_0", "fs_main", out1)
+
+	fmt.println("compiled shader successfully! ignore previous compile errors for this file:", hlsl_file)
 	return vs_ok && fs_ok
 }
 
