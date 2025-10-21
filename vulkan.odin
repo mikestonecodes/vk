@@ -35,7 +35,7 @@ timeline_value: c.uint64_t = 0
 acquire_fence: vk.Fence
 
 MAX_FRAMES_IN_FLIGHT :: c.uint32_t(3)
-MAX_SWAPCHAIN_IMAGES :: c.uint32_t(4) // 8 is plenty; most drivers use 2–4
+MAX_SWAPCHAIN_IMAGES :: c.uint32_t(4) // 4 keeps headroom for triple-buffer drivers
 elements: [MAX_SWAPCHAIN_IMAGES]SwapchainElement
 
 //frame_timeline_values: [MAX_FRAMES_IN_FLIGHT]c.uint64_t
@@ -243,14 +243,15 @@ acquire_next_image :: proc(_: c.uint32_t) -> bool {
 	vk.WaitForFences(device, 1, &acquire_fence, true, max(u64))
 	vk.ResetFences(device, 1, &acquire_fence)
 
-	result := vk.AcquireNextImageKHR(
-		device,
-		swapchain,
-		max(u64),
-		{},
-		acquire_fence,
-		&image_index,
-	)
+	acquire_info := vk.AcquireNextImageInfoKHR {
+		sType      = vk.StructureType.ACQUIRE_NEXT_IMAGE_INFO_KHR,
+		swapchain  = swapchain,
+		timeout    = max(u64),
+		semaphore = {},
+		fence      = acquire_fence,
+		deviceMask = 1,
+	}
+	result := vk.AcquireNextImage2KHR(device, &acquire_info, &image_index)
 
 	if result == vk.Result.ERROR_OUT_OF_DATE_KHR || result == vk.Result.SUBOPTIMAL_KHR {
 		destroy_swapchain()
