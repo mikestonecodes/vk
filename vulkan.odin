@@ -247,7 +247,7 @@ acquire_next_image :: proc(_: c.uint32_t) -> bool {
 		sType      = vk.StructureType.ACQUIRE_NEXT_IMAGE_INFO_KHR,
 		swapchain  = swapchain,
 		timeout    = max(u64),
-		semaphore = {},
+		semaphore  = {},
 		fence      = acquire_fence,
 		deviceMask = 1,
 	}
@@ -290,29 +290,29 @@ submit_commands :: proc(element: ^SwapchainElement, frame_index: u32) {
 
 	command_infos := [1]vk.CommandBufferSubmitInfo {
 		{
-			sType         = vk.StructureType.COMMAND_BUFFER_SUBMIT_INFO,
+			sType = vk.StructureType.COMMAND_BUFFER_SUBMIT_INFO,
 			commandBuffer = element.commandBuffer,
-			deviceMask    = 1,
+			deviceMask = 1,
 		},
 	}
 
 	signal_infos := [1]vk.SemaphoreSubmitInfo {
 		{
-			sType     = vk.StructureType.SEMAPHORE_SUBMIT_INFO,
+			sType = vk.StructureType.SEMAPHORE_SUBMIT_INFO,
 			semaphore = timeline_semaphore,
-			value     = new_value,
+			value = new_value,
 			stageMask = {vk.PipelineStageFlag2.ALL_GRAPHICS},
 		},
 	}
 
 	submit_info := vk.SubmitInfo2 {
-		sType                   = vk.StructureType.SUBMIT_INFO_2,
-		waitSemaphoreInfoCount  = wait_count,
-		pWaitSemaphoreInfos     = wait_ptr,
-		commandBufferInfoCount  = 1,
-		pCommandBufferInfos     = &command_infos[0],
+		sType                    = vk.StructureType.SUBMIT_INFO_2,
+		waitSemaphoreInfoCount   = wait_count,
+		pWaitSemaphoreInfos      = wait_ptr,
+		commandBufferInfoCount   = 1,
+		pCommandBufferInfos      = &command_infos[0],
 		signalSemaphoreInfoCount = 1,
-		pSignalSemaphoreInfos   = &signal_infos[0],
+		pSignalSemaphoreInfos    = &signal_infos[0],
 	}
 
 	vk.QueueSubmit2(queue, 1, &submit_info, {})
@@ -444,14 +444,12 @@ layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
 // ──────────────────────────────────────────────────────────────
 
 
-device_extension_names := [?]cstring {
-	"VK_KHR_swapchain",
-}
+device_extension_names := [?]cstring{"VK_KHR_swapchain"}
 
 
 create_logical_device :: proc() -> bool {
 	queue_priority: f32 = 1.0
-	queue_create_info := vk.DeviceQueueCreateInfo {
+	queue_info := vk.DeviceQueueCreateInfo {
 		sType            = .DEVICE_QUEUE_CREATE_INFO,
 		queueFamilyIndex = queue_family_index,
 		queueCount       = 1,
@@ -459,119 +457,75 @@ create_logical_device :: proc() -> bool {
 	}
 
 	// ───────────────────────────────
-	// Modern Vulkan 1.3 features
+	// Vulkan 1.3 core + common extras
 	// ───────────────────────────────
 
-	shader_object_features := vk.PhysicalDeviceShaderObjectFeaturesEXT {
+	shader_object := vk.PhysicalDeviceShaderObjectFeaturesEXT {
 		sType        = .PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT,
-		shaderObject = false,
+		shaderObject = true,
 	}
-
-	extended_dynamic_state := vk.PhysicalDeviceExtendedDynamicStateFeaturesEXT {
+	extended_dynamic := vk.PhysicalDeviceExtendedDynamicStateFeaturesEXT {
 		sType                = .PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
-		pNext                = &shader_object_features,
-		extendedDynamicState = false,
+		extendedDynamicState = true,
 	}
-
-rendering_features := vk.PhysicalDeviceDynamicRenderingFeatures {
-	sType            = .PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-	pNext            = &extended_dynamic_state,
-	dynamicRendering = false,
-}
-
-sync2 := vk.PhysicalDeviceSynchronization2Features {
-	sType            = .PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
-	pNext            = &rendering_features,
-	synchronization2 = false,
-}
-
 	vulkan12 := vk.PhysicalDeviceVulkan12Features {
-		sType                                   = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-		pNext                                   = &sync2,
-		descriptorIndexing                      = true,
-		descriptorBindingPartiallyBound         = true,
-		descriptorBindingUpdateUnusedWhilePending = true,
+		sType                                  = vk.StructureType.PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+		pNext                                  = &extended_dynamic,
+		descriptorIndexing                     = true,
+		descriptorBindingPartiallyBound        = true,
 		descriptorBindingVariableDescriptorCount = true,
-		timelineSemaphore                       = true,
-		runtimeDescriptorArray                  = true,
+		descriptorBindingSampledImageUpdateAfterBind = true,
+		descriptorBindingStorageImageUpdateAfterBind = true,
+		descriptorBindingStorageBufferUpdateAfterBind = true,
+		descriptorBindingUniformBufferUpdateAfterBind = true,
+		descriptorBindingUniformTexelBufferUpdateAfterBind = true,
+		descriptorBindingStorageTexelBufferUpdateAfterBind = true,
+		descriptorBindingUpdateUnusedWhilePending = true,
+		runtimeDescriptorArray                = true,
+		timelineSemaphore                     = true,
 	}
+	sync2 := vk.PhysicalDeviceSynchronization2Features {
+		sType            = vk.StructureType.PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
+		pNext            = &vulkan12,
+		synchronization2 = true,
+	}
+	dynamic_rendering := vk.PhysicalDeviceDynamicRenderingFeatures {
+		sType            = vk.StructureType.PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+		pNext            = &sync2,
+		dynamicRendering = true,
+	}
+	extended_dynamic.pNext = &shader_object
 
-	features2 := vk.PhysicalDeviceFeatures2 {
-		sType    = .PHYSICAL_DEVICE_FEATURES_2,
+	features := vk.PhysicalDeviceFeatures2 {
+		sType = .PHYSICAL_DEVICE_FEATURES_2,
+		pNext = &dynamic_rendering,
 		features = vk.PhysicalDeviceFeatures{fragmentStoresAndAtomics = true},
-		pNext    = &vulkan12,
 	}
+	vk.GetPhysicalDeviceFeatures2(phys_device, &features)
 
-	vk.GetPhysicalDeviceFeatures2(phys_device, &features2)
-
-	if shader_object_features.shaderObject == false {
-		fmt.println("VK_EXT_shader_object not supported on this device")
-		return false
-	}
-
-	if extended_dynamic_state.extendedDynamicState == false {
-		fmt.println("VK_EXT_extended_dynamic_state not supported on this device")
-		return false
-	}
-
-	if rendering_features.dynamicRendering == false {
-		fmt.println("VK_KHR_dynamic_rendering not supported on this device")
-		return false
-	}
-
-	if vulkan12.descriptorIndexing == false ||
-	   vulkan12.descriptorBindingPartiallyBound == false ||
-	   vulkan12.descriptorBindingUpdateUnusedWhilePending == false ||
-	   vulkan12.descriptorBindingVariableDescriptorCount == false ||
-	   vulkan12.runtimeDescriptorArray == false ||
-	   vulkan12.timelineSemaphore == false {
-		fmt.println("runtime descriptor arrays not supported on this device")
-		return false
-	}
-
-	if sync2.synchronization2 == false {
-		fmt.println("VK_KHR_synchronization2 not supported on this device")
-		return false
-	}
-
-	shader_object_features.shaderObject = true
-	extended_dynamic_state.extendedDynamicState = true
-	rendering_features.dynamicRendering = true
-	vulkan12.runtimeDescriptorArray = true
-	vulkan12.descriptorIndexing = true
-	vulkan12.descriptorBindingPartiallyBound = true
-	vulkan12.descriptorBindingUpdateUnusedWhilePending = true
-	vulkan12.descriptorBindingVariableDescriptorCount = true
-	vulkan12.timelineSemaphore = true
-	sync2.synchronization2 = true
-
-	device_extension_names := [?]cstring {
+	device_exts := [?]cstring {
 		"VK_KHR_swapchain",
-		"VK_EXT_shader_object",
-		"VK_KHR_synchronization2",
-		"VK_EXT_descriptor_indexing",
-		"VK_EXT_extended_dynamic_state",
-		"VK_EXT_extended_dynamic_state2",
-		"VK_EXT_extended_dynamic_state3",
-		"VK_KHR_dedicated_allocation",
-		"VK_KHR_get_memory_requirements2",
-		"VK_KHR_dynamic_rendering",
+		"VK_KHR_timeline_semaphore",
+		"VK_KHR_synchronization2", // core in 1.3, kept for safety
+		"VK_KHR_dynamic_rendering", // core in 1.3, kept for safety
+		"VK_EXT_descriptor_indexing", // core in 1.2+, safe everywhere
+		"VK_EXT_extended_dynamic_state", // optional QoL
+		"VK_EXT_shader_object", // optional modern path
 	}
 
-	device_create_info := vk.DeviceCreateInfo {
+	device_info := vk.DeviceCreateInfo {
 		sType                   = .DEVICE_CREATE_INFO,
-		pNext                   = &features2, // ← correct root of chain
+		pNext                   = &features,
 		queueCreateInfoCount    = 1,
-		pQueueCreateInfos       = &queue_create_info,
+		pQueueCreateInfos       = &queue_info,
+		enabledExtensionCount   = u32(len(device_exts)),
+		ppEnabledExtensionNames = raw_data(device_exts[:]),
 		enabledLayerCount       = ENABLE_VALIDATION ? len(layer_names) : 0,
 		ppEnabledLayerNames     = ENABLE_VALIDATION ? raw_data(layer_names[:]) : nil,
-		enabledExtensionCount   = len(device_extension_names),
-		ppEnabledExtensionNames = raw_data(device_extension_names[:]),
 	}
 
-	result := vk.CreateDevice(phys_device, &device_create_info, nil, &device)
-	if result != vk.Result.SUCCESS {
-		fmt.printf("Failed to create device: %d\n", result)
+	if vk.CreateDevice(phys_device, &device_info, nil, &device) != .SUCCESS {
+		fmt.println("Failed to create device")
 		return false
 	}
 
@@ -840,118 +794,78 @@ debug_callback :: proc "system" (
 
 
 create_swapchain :: proc() -> bool {
-	// Query caps
-	caps: vk.SurfaceCapabilitiesKHR
-	if vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(phys_device, vulkan_surface, &caps) !=
-	   vk.Result.SUCCESS {
-		fmt.println("Failed to query surface caps")
-		return false
-	}
+    caps: vk.SurfaceCapabilitiesKHR
+    if vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(phys_device, vulkan_surface, &caps) != .SUCCESS {
+        return false
+    }
 
-	// Pick format
-	formats, ok := vkw_enumerate_surface(
-		vk.GetPhysicalDeviceSurfaceFormatsKHR,
-		phys_device,
-		vulkan_surface,
-		"surface formats",
-		vk.SurfaceFormatKHR,
-	)
-	if !ok do return false
-	defer delete(formats)
+    // Prefer SRGB format
+    count: u32
+    vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &count, nil)
+    if count == 0 do return false
+    fmts := make([^]vk.SurfaceFormatKHR, count)
+    defer free(fmts)
+    vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &count, fmts)
+    fmt_count := cast(int) count
+    format = fmts[0].format
+    for i in 0 ..< fmt_count {
+        fmt := fmts[i]
+        if fmt.format == vk.Format.B8G8R8A8_SRGB {
+            format = fmt.format
+            break
+        }
+    }
 
-	chosen := formats[0]
-	for f in formats {
-		if f.format == vk.Format.B8G8R8A8_UNORM {chosen = f;break}
-	}
-	format = chosen.format
+    desired := min(caps.minImageCount + 1,
+                   caps.maxImageCount > 0 ? caps.maxImageCount : caps.minImageCount + 1)
 
-	// Pick image count
-	desired := caps.minImageCount + 1
-	if caps.maxImageCount > 0 && desired > caps.maxImageCount {
-		desired = caps.maxImageCount
-	}
+    sc_info := vk.SwapchainCreateInfoKHR{
+        sType = .SWAPCHAIN_CREATE_INFO_KHR,
+        surface = vulkan_surface,
+        minImageCount = desired,
+        imageFormat = format,
+        imageColorSpace = vk.ColorSpaceKHR.SRGB_NONLINEAR,
+        imageExtent = {width, height},
+        imageArrayLayers = 1,
+        imageUsage = {.COLOR_ATTACHMENT},
+        presentMode = .FIFO,
+        preTransform = caps.currentTransform,
+        compositeAlpha = {.OPAQUE},
+        clipped = true,
+    }
+    if vk.CreateSwapchainKHR(device, &sc_info, nil, &swapchain) != .SUCCESS do return false
 
-	// Create swapchain
-	swapchain = vkw(
-		vk.CreateSwapchainKHR,
-		device,
-		&vk.SwapchainCreateInfoKHR {
-			sType = vk.StructureType.SWAPCHAIN_CREATE_INFO_KHR,
-			surface = vulkan_surface,
-			minImageCount = desired,
-			imageFormat = chosen.format,
-			imageColorSpace = chosen.colorSpace,
-			imageExtent = {width, height},
-			imageArrayLayers = 1,
-			imageUsage = {vk.ImageUsageFlag.COLOR_ATTACHMENT},
-			imageSharingMode = vk.SharingMode.EXCLUSIVE,
-			preTransform = caps.currentTransform,
-			compositeAlpha = {vk.CompositeAlphaFlagKHR.OPAQUE},
-			presentMode = vk.PresentModeKHR.IMMEDIATE,
-			clipped = true,
-		},
-		"swapchain",
-		vk.SwapchainKHR,
-	) or_return
+    // Fetch images and make simple views / cmd buffers
+    vk.GetSwapchainImagesKHR(device, swapchain, &image_count, nil)
+    imgs := make([^]vk.Image, image_count)
+    defer free(imgs)
+    vk.GetSwapchainImagesKHR(device, swapchain, &image_count, imgs)
+    for i in 0 ..< image_count {
+        elements[i].image = imgs[i]
+        vk.CreateImageView(device,
+            &vk.ImageViewCreateInfo{
+                sType = .IMAGE_VIEW_CREATE_INFO,
+                image = imgs[i],
+                viewType = .D2,
+                format = format,
+                subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+            },
+            nil, &elements[i].imageView)
+        vk.AllocateCommandBuffers(device,
+            &vk.CommandBufferAllocateInfo{
+                sType = .COMMAND_BUFFER_ALLOCATE_INFO,
+                commandPool = command_pool,
+                level = .PRIMARY,
+                commandBufferCount = 1,
+            },
+            &elements[i].commandBuffer)
+    }
 
-
-	// Get swapchain images
-	image_count = desired
-	if vk.GetSwapchainImagesKHR(device, swapchain, &image_count, nil) != vk.Result.SUCCESS {
-		fmt.println("Failed to query swapchain images")
-		return false
-	}
-	imgs := make([^]vk.Image, image_count)
-	defer free(imgs)
-	vk.GetSwapchainImagesKHR(device, swapchain, &image_count, imgs)
-
-	// Allocate elements + semaphores
-	for i in 0 ..< image_count {
-		elements[i].image = imgs[i]
-		elements[i].last_value = 0
-		elements[i].layout = vk.ImageLayout.UNDEFINED
-
-		elements[i].imageView = vkw(
-			vk.CreateImageView,
-			device,
-			&vk.ImageViewCreateInfo {
-				sType = vk.StructureType.IMAGE_VIEW_CREATE_INFO,
-				viewType = vk.ImageViewType.D2,
-				format = format,
-				subresourceRange = {
-					aspectMask = {vk.ImageAspectFlag.COLOR},
-					levelCount = 1,
-					layerCount = 1,
-				},
-				image = imgs[i],
-			},
-			"image view",
-			vk.ImageView,
-		) or_return
-
-		vk.AllocateCommandBuffers(
-			device,
-			&vk.CommandBufferAllocateInfo {
-				sType = vk.StructureType.COMMAND_BUFFER_ALLOCATE_INFO,
-				commandPool = command_pool,
-				commandBufferCount = 1,
-				level = vk.CommandBufferLevel.PRIMARY,
-			},
-			&elements[i].commandBuffer,
-		)
-		elements[i].last_value = 0
-	}
-
-	frames_in_flight = min(image_count, MAX_FRAMES_IN_FLIGHT)
-	if frames_in_flight == 0 do frames_in_flight = 1
-	current_frame = 0
-	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		frame_slot_values[i] = 0
-	}
-
-	return true
+    frames_in_flight = max(1, min(image_count, MAX_FRAMES_IN_FLIGHT))
+    current_frame = 0
+    for i in 0 ..< MAX_FRAMES_IN_FLIGHT do frame_slot_values[i] = 0
+    return true
 }
-
 
 init_vulkan :: proc() -> bool {
 	// Load global function pointers (this uses the loader already provided by the system)
