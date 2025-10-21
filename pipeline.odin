@@ -160,105 +160,44 @@ bind_resource :: proc(slot: u32, resource: $T, dstBinding := u32(max(u32))) {
 }
 global_desc_pool: vk.DescriptorPool
 
+global_descriptor_specs: Array(32, DescriptorBindingSpec)
+
+get_global_descriptor_specs :: proc() -> []DescriptorBindingSpec {
+	specs := &global_descriptor_specs
+	specs.len = 0
+	for buffer_spec in buffer_specs {
+		descriptor := DescriptorBindingSpec {
+			binding          = buffer_spec.binding,
+			descriptor_type  = .STORAGE_BUFFER,
+			descriptor_count = 1,
+			stage_flags      = buffer_spec.stage_flags,
+		}
+		array_push(specs, descriptor)
+	}
+	for extra in global_descriptor_extras {
+		array_push(specs, extra)
+	}
+	return array_slice(specs)
+}
 
 init_global_descriptors :: proc() -> bool {
-	bindings := [16]vk.DescriptorSetLayoutBinding {
-		{
-			binding = 0,
-			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.COMPUTE, vk.ShaderStageFlag.FRAGMENT},
-		},
-		{
-			binding = 1,
-			descriptorType = .SAMPLED_IMAGE,
-			descriptorCount = 2,
-			stageFlags = {vk.ShaderStageFlag.FRAGMENT},
-		},
-		{
-			binding = 2,
-			descriptorType = .SAMPLER,
-			descriptorCount = 2,
-			stageFlags = {vk.ShaderStageFlag.FRAGMENT},
-		},
-		{
-			binding = 3,
-			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.COMPUTE},
-		},
-		{
-			binding = 20,
-			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.COMPUTE},
-		},
-		{
-			binding = 21,
-			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.COMPUTE},
-		},
-		{
-			binding = 22,
-			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.COMPUTE},
-		},
-		{
-			binding = 23,
-			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.COMPUTE},
-		},
-		{
-			binding = 24,
-			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.COMPUTE},
-		},
-		{
-			binding = 25,
-			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.COMPUTE},
-		},
-		{
-			binding = 26,
-			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.COMPUTE},
-		},
-		{
-			binding = 27,
-			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.COMPUTE},
-		},
-		{
-			binding = 30,
-			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.COMPUTE},
-		},
-		{
-			binding = 31,
-			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.COMPUTE},
-		},
-		{
-			binding = 32,
-			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.COMPUTE},
-		},
-		{
-			binding = 33,
-			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 1,
-			stageFlags = {vk.ShaderStageFlag.COMPUTE},
-		},
+	specs := get_global_descriptor_specs()
+	bindings_storage: Array(32, vk.DescriptorSetLayoutBinding)
+	for spec in specs {
+		binding := vk.DescriptorSetLayoutBinding {
+			binding            = spec.binding,
+			descriptorType     = spec.descriptor_type,
+			descriptorCount    = spec.descriptor_count,
+			stageFlags         = spec.stage_flags,
+			pImmutableSamplers = nil,
+		}
+		array_push(&bindings_storage, binding)
+	}
+	bindings_slice := array_slice(&bindings_storage)
+	binding_count := len(bindings_slice)
+	bindings_ptr := cast(^vk.DescriptorSetLayoutBinding)nil
+	if binding_count > 0 {
+		bindings_ptr = &bindings_slice[0]
 	}
 
 	global_desc_layout = vkw(
@@ -266,17 +205,45 @@ init_global_descriptors :: proc() -> bool {
 		device,
 		&vk.DescriptorSetLayoutCreateInfo {
 			sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-			bindingCount = u32(len(bindings)),
-			pBindings = &bindings[0],
+			bindingCount = u32(binding_count),
+			pBindings = bindings_ptr,
 		},
 		"global descriptor set layout",
 		vk.DescriptorSetLayout,
 	) or_return
 
-	pool_sizes := [3]vk.DescriptorPoolSize {
-		{type = .STORAGE_BUFFER, descriptorCount = 16},
-		{type = .SAMPLED_IMAGE, descriptorCount = 2},
-		{type = .SAMPLER, descriptorCount = 2},
+	storage_count: u32 = 0
+	sampled_image_count: u32 = 0
+	sampler_count: u32 = 0
+	for spec in specs {
+		#partial switch spec.descriptor_type {
+		case .STORAGE_BUFFER:
+			storage_count += spec.descriptor_count
+		case .SAMPLED_IMAGE:
+			sampled_image_count += spec.descriptor_count
+		case .SAMPLER:
+			sampler_count += spec.descriptor_count
+		}
+	}
+
+	pool_sizes: [3]vk.DescriptorPoolSize
+	pool_count: u32 = 0
+	if storage_count > 0 {
+		pool_sizes[pool_count] = {type = .STORAGE_BUFFER, descriptorCount = storage_count}
+		pool_count += 1
+	}
+	if sampled_image_count > 0 {
+		pool_sizes[pool_count] = {type = .SAMPLED_IMAGE, descriptorCount = sampled_image_count}
+		pool_count += 1
+	}
+	if sampler_count > 0 {
+		pool_sizes[pool_count] = {type = .SAMPLER, descriptorCount = sampler_count}
+		pool_count += 1
+	}
+
+	pool_sizes_ptr := cast(^vk.DescriptorPoolSize)nil
+	if pool_count > 0 {
+		pool_sizes_ptr = &pool_sizes[0]
 	}
 	global_desc_pool = vkw(
 		vk.CreateDescriptorPool,
@@ -284,8 +251,8 @@ init_global_descriptors :: proc() -> bool {
 		&vk.DescriptorPoolCreateInfo {
 			sType = .DESCRIPTOR_POOL_CREATE_INFO,
 			maxSets = 1,
-			poolSizeCount = u32(len(pool_sizes)),
-			pPoolSizes = &pool_sizes[0],
+			poolSizeCount = pool_count,
+			pPoolSizes = pool_sizes_ptr,
 		},
 		"global descriptor pool",
 		vk.DescriptorPool,

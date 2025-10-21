@@ -54,6 +54,5 @@ compiling shader: graphics.hlsl
 compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 compiling shader: graphics.hlsl
 compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-Discovered 2 shaders: compute.hlsl graphics.hlsl 
-Window resized to 1856x1016
-Window resized to 1856x696
+Discovered 2 shaders: graphics.hlsl compute.hlsl 
+Window resized to 1856x656

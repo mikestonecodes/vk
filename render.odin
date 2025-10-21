@@ -156,29 +156,48 @@ body_capacity_size := DeviceSize(PHYS_MAX_BODIES)
 grid_cell_size := DeviceSize(GRID_CELL_COUNT)
 
 
+
 buffer_specs := []struct {
-	size:    DeviceSize,
-	flags:   vk.BufferUsageFlags,
-	binding: u32,
+	size:        DeviceSize,
+	flags:       vk.BufferUsageFlags,
+	binding:     u32,
+	stage_flags: vk.ShaderStageFlags,
 } {
 	{
 		DeviceSize(window_width * window_height * 4 * size_of(u32)),
 		{.STORAGE_BUFFER, .TRANSFER_DST},
 		0,
+		{.COMPUTE, .FRAGMENT},
 	},
-	{DeviceSize(size_of(CameraStateGPU)), {.STORAGE_BUFFER, .TRANSFER_DST}, 3},
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 20},
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 21},
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 22},
-	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 23},
-	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 24},
-	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 25},
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 26},
-	{DeviceSize(size_of(SpawnStateGPU)), {.STORAGE_BUFFER}, 27},
-	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 30},
-	{DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size, {.STORAGE_BUFFER}, 31},
-	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 32},
-	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 33},
+	{DeviceSize(size_of(CameraStateGPU)), {.STORAGE_BUFFER, .TRANSFER_DST}, 3, {.COMPUTE}},
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 20, {.COMPUTE}},
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 21, {.COMPUTE}},
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 22, {.COMPUTE}},
+	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 23, {.COMPUTE}},
+	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 24, {.COMPUTE}},
+	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 25, {.COMPUTE}},
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 26, {.COMPUTE}},
+	{DeviceSize(size_of(SpawnStateGPU)), {.STORAGE_BUFFER}, 27, {.COMPUTE}},
+	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 30, {.COMPUTE}},
+	{DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size, {.STORAGE_BUFFER}, 31, {.COMPUTE}},
+	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 32, {.COMPUTE}},
+	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 33, {.COMPUTE}},
+}
+
+DescriptorBindingSpec :: struct {
+	binding:          u32,
+	descriptor_type:  vk.DescriptorType,
+	descriptor_count: u32,
+	stage_flags:      vk.ShaderStageFlags,
+}
+global_descriptor_extras := []DescriptorBindingSpec {
+	{
+		binding = 1,
+		descriptor_type = .SAMPLED_IMAGE,
+		descriptor_count = 2,
+		stage_flags = {.FRAGMENT},
+	},
+	{binding = 2, descriptor_type = .SAMPLER, descriptor_count = 2, stage_flags = {.FRAGMENT}},
 }
 
 
