@@ -12,6 +12,7 @@ static const uint  PHYS_PROJECTILE_START = 1u;
 static const float CELL_SIZE = 2.0f;
 static const float WORLD_RANGE_LIMIT = 1e6f;
 
+// GPU physics compute pipeline
 struct ComputePushConstants {
     float time;
     float delta_time;

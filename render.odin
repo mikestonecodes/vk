@@ -9,7 +9,7 @@ PIPELINE_COUNT :: 2
 CAMERA_UPDATE_FLAG :: u32(1 << 0)
 
 // Physics configuration
-PHYS_MAX_BODIES :: u32(512)
+PHYS_MAX_BODIES :: u32(512000)
 PHYS_PLAYER_INDEX :: u32(0)
 PHYS_PROJECTILE_START :: u32(1)
 PHYS_PROJECTILE_POOL :: u32(PHYS_MAX_BODIES - PHYS_PROJECTILE_START)
@@ -107,7 +107,6 @@ ComputePushConstants :: struct {
 compute_push_constants: ComputePushConstants
 post_process_push_constants: PostProcessPushConstants
 physics_initialized: bool
-fire_was_pressed: bool
 
 init_render_resources :: proc() -> bool {
 
@@ -267,7 +266,6 @@ init_render_resources :: proc() -> bool {
 	bind_resource(0, &sorted_indices_buffer, 33)
 
 	physics_initialized = false
-	fire_was_pressed = false
 
 	return true
 
@@ -302,8 +300,7 @@ simulate_particles :: proc(frame: FrameInputs) {
 	compute_push_constants.mouse_ndc_y = f32(clamp(mouse_y / height, 0.0, 1.0))
 
 	fire_pressed := is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT)
-	compute_push_constants.spawn_projectile = fire_pressed && !fire_was_pressed ? u32(1) : u32(0)
-	fire_was_pressed = fire_pressed
+	compute_push_constants.spawn_projectile = fire_pressed ? u32(1) : u32(0)
 
 	total_pixels := u32(window_width) * u32(window_height)
 	pixel_dispatch := (total_pixels + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
@@ -480,5 +477,4 @@ cleanup_render_resources :: proc() {
 	destroy_buffer(&camera_state_buffer)
 	destroy_buffer(&accumulation_buffer)
 	physics_initialized = false
-	fire_was_pressed = false
 }
