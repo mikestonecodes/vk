@@ -38,23 +38,15 @@ MAX_FRAMES_IN_FLIGHT :: c.uint32_t(3)
 MAX_SWAPCHAIN_IMAGES :: c.uint32_t(4) // 4 keeps headroom for triple-buffer drivers
 elements: [MAX_SWAPCHAIN_IMAGES]SwapchainElement
 
-MAX_INSTANCE_EXTENSION_COUNT :: 16
-instance_extension_buffer: [MAX_INSTANCE_EXTENSION_COUNT]cstring
-
-MAX_PHYSICAL_DEVICE_COUNT :: u32(8)
-physical_device_buffer: [MAX_PHYSICAL_DEVICE_COUNT]vk.PhysicalDevice
-
-MAX_QUEUE_FAMILY_COUNT :: u32(16)
-queue_family_buffer: [MAX_QUEUE_FAMILY_COUNT]vk.QueueFamilyProperties
-
-MAX_SURFACE_FORMAT_COUNT :: u32(16)
-surface_format_buffer: [MAX_SURFACE_FORMAT_COUNT]vk.SurfaceFormatKHR
+instance_extensions := Array(16, cstring){}
+physical_devices := Array(8, vk.PhysicalDevice){}
+queue_families := Array(16, vk.QueueFamilyProperties){}
+surface_formats := Array(16, vk.SurfaceFormatKHR){}
 
 swapchain_image_handles: [MAX_SWAPCHAIN_IMAGES]vk.Image
 
 MAX_SPIRV_BYTES :: 1 << 20
-MAX_SPIRV_WORDS :: MAX_SPIRV_BYTES / 4
-spirv_words_buffer: [MAX_SPIRV_WORDS]u32
+spirv_words := Array(MAX_SPIRV_BYTES / 4, u32){}
 
 slice_to_vla :: proc(slice: []$T) -> [^]T {
 	return transmute([^]T)raw_data(slice)
@@ -376,16 +368,16 @@ vulkan_init :: proc() -> (ok: bool) {
 get_instance_extensions :: proc() -> []cstring {
 	// Get required extensions from GLFW
 	glfw_extensions := glfw.GetRequiredInstanceExtensions()
-	total := len(glfw_extensions) + 2
-	runtime.assert(total <= len(instance_extension_buffer), "instance extension buffer too small")
+	instance_extensions.len = 0
+	runtime.assert(len(glfw_extensions) + 2 <= len(instance_extensions.data), "instance extension buffer too small")
 
-	for i in 0 ..< len(glfw_extensions) {
-		instance_extension_buffer[i] = glfw_extensions[i]
+	for ext in glfw_extensions {
+		array_push(&instance_extensions, ext)
 	}
 
-	instance_extension_buffer[len(glfw_extensions)] = "VK_EXT_debug_utils"
-	instance_extension_buffer[len(glfw_extensions) + 1] = "VK_EXT_validation_features" // optional but useful
-	return instance_extension_buffer[:total]
+	array_push(&instance_extensions, "VK_EXT_debug_utils")
+	array_push(&instance_extensions, "VK_EXT_validation_features") // optional but useful
+	return array_slice(&instance_extensions)
 }
 layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
 
@@ -610,20 +602,22 @@ load_shader_spirv :: proc(path: string) -> ([]u32, bool) {
 	}
 
 	word_count := len(data) / 4
+	spirv_words.len = 0
 	for i in 0 ..< word_count {
 		idx := i * 4
-		spirv_words_buffer[i] =
+		spirv_words.data[i] =
 			u32(data[idx + 0]) |
 			(u32(data[idx + 1]) << 8) |
 			(u32(data[idx + 2]) << 16) |
 			(u32(data[idx + 3]) << 24)
 	}
+	spirv_words.len = i32(word_count)
 
 	// Optional: sanity check SPIR-V magic 0x07230203
-	if word_count > 0 && spirv_words_buffer[0] != u32(0x07230203) {
-		fmt.printf("WARN: %s does not look like SPIR-V (magic=%#x)\n", path, spirv_words_buffer[0])
+	if word_count > 0 && spirv_words.data[0] != u32(0x07230203) {
+		fmt.printf("WARN: %s does not look like SPIR-V (magic=%#x)\n", path, spirv_words.data[0])
 	}
-	return spirv_words_buffer[:word_count], true
+	return array_slice(&spirv_words), true
 }
 
 load_shader_code_words :: proc(path: string) -> ([]u32, bool) {
@@ -750,22 +744,24 @@ create_swapchain :: proc() -> bool {
 	count: u32
 	vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &count, nil)
 	if count == 0 do return false
-	if count > MAX_SURFACE_FORMAT_COUNT {
-		count = MAX_SURFACE_FORMAT_COUNT
+	surface_cap := u32(len(surface_formats.data))
+	if count > surface_cap {
+		count = surface_cap
 	}
-	surface_formats := slice_to_vla(surface_format_buffer[:int(count)])
+	format_slots := slice_to_vla(surface_formats.data[:int(count)])
 	if vk.GetPhysicalDeviceSurfaceFormatsKHR(
 		   phys_device,
 		   vulkan_surface,
 		   &count,
-		   surface_formats,
+		   format_slots,
 	   ) !=
 	   .SUCCESS {
 		return false
 	}
-	format = surface_format_buffer[0].format
+	surface_formats.len = i32(count)
+	format = surface_formats.data[0].format
 	for i in 0 ..< int(count) {
-		fmt := surface_format_buffer[i]
+		fmt := surface_formats.data[i]
 		if fmt.format == vk.Format.B8G8R8A8_SRGB {
 			format = fmt.format
 			break
@@ -989,11 +985,12 @@ setup_physical_device :: proc() -> bool {
 		return false
 	}
 
-	if device_count > MAX_PHYSICAL_DEVICE_COUNT {
-		device_count = MAX_PHYSICAL_DEVICE_COUNT
+	capacity := u32(len(physical_devices.data))
+	if device_count > capacity {
+		device_count = capacity
 	}
 
-	phys_devices := slice_to_vla(physical_device_buffer[:int(device_count)])
+	phys_devices := slice_to_vla(physical_devices.data[:int(device_count)])
 	if vk.EnumeratePhysicalDevices(
 		   instance,
 		   &device_count,
@@ -1004,7 +1001,8 @@ setup_physical_device :: proc() -> bool {
 		return false
 	}
 
-	phys_device = physical_device_buffer[0]
+	physical_devices.len = i32(device_count)
+	phys_device = physical_devices.data[0]
 
 	queue_family_count: u32
 	vk.GetPhysicalDeviceQueueFamilyProperties(phys_device, &queue_family_count, nil)
@@ -1012,19 +1010,21 @@ setup_physical_device :: proc() -> bool {
 		fmt.println("No queue families found")
 		return false
 	}
-	if queue_family_count > MAX_QUEUE_FAMILY_COUNT {
-		queue_family_count = MAX_QUEUE_FAMILY_COUNT
+	queue_cap := u32(len(queue_families.data))
+	if queue_family_count > queue_cap {
+		queue_family_count = queue_cap
 	}
 
-	queue_props := slice_to_vla(queue_family_buffer[:int(queue_family_count)])
+	queue_props := slice_to_vla(queue_families.data[:int(queue_family_count)])
 	vk.GetPhysicalDeviceQueueFamilyProperties(
 		phys_device,
 		&queue_family_count,
 		queue_props,
 	)
+	queue_families.len = i32(queue_family_count)
 
 	for idx in 0 ..< int(queue_family_count) {
-		qf := queue_family_buffer[idx]
+		qf := queue_families.data[idx]
 		present_support: b32
 		if vk.GetPhysicalDeviceSurfaceSupportKHR(
 			   phys_device,
