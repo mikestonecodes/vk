@@ -48,10 +48,6 @@ swapchain_image_handles: [MAX_SWAPCHAIN_IMAGES]vk.Image
 MAX_SPIRV_BYTES :: 1 << 20
 spirv_words := Array(MAX_SPIRV_BYTES / 4, u32){}
 
-slice_to_vla :: proc(slice: []$T) -> [^]T {
-	return transmute([^]T)raw_data(slice)
-}
-
 //frame_timeline_values: [MAX_FRAMES_IN_FLIGHT]c.uint64_t
 frames_in_flight: c.uint32_t = 0
 current_frame: c.uint32_t = 0
@@ -748,12 +744,12 @@ create_swapchain :: proc() -> bool {
 	if count > surface_cap {
 		count = surface_cap
 	}
-	format_slots := slice_to_vla(surface_formats.data[:int(count)])
+	formats_ptr := raw_data(surface_formats.data[:])
 	if vk.GetPhysicalDeviceSurfaceFormatsKHR(
 		   phys_device,
 		   vulkan_surface,
 		   &count,
-		   format_slots,
+		   formats_ptr,
 	   ) !=
 	   .SUCCESS {
 		return false
@@ -797,12 +793,12 @@ create_swapchain :: proc() -> bool {
 	if image_count > MAX_SWAPCHAIN_IMAGES {
 		image_count = MAX_SWAPCHAIN_IMAGES
 	}
-	image_slice := slice_to_vla(swapchain_image_handles[:int(image_count)])
+	image_ptr := raw_data(swapchain_image_handles[:])
 	if vk.GetSwapchainImagesKHR(
 		   device,
 		   swapchain,
 		   &image_count,
-		   image_slice,
+		   image_ptr,
 	   ) !=
 	   .SUCCESS {
 		return false
@@ -990,11 +986,11 @@ setup_physical_device :: proc() -> bool {
 		device_count = capacity
 	}
 
-	phys_devices := slice_to_vla(physical_devices.data[:int(device_count)])
+	device_ptr := raw_data(physical_devices.data[:])
 	if vk.EnumeratePhysicalDevices(
 		   instance,
 		   &device_count,
-		   phys_devices,
+		   device_ptr,
 	   ) !=
 	   .SUCCESS {
 		fmt.println("Failed to enumerate physical devices")
@@ -1015,11 +1011,11 @@ setup_physical_device :: proc() -> bool {
 		queue_family_count = queue_cap
 	}
 
-	queue_props := slice_to_vla(queue_families.data[:int(queue_family_count)])
+	queue_ptr := raw_data(queue_families.data[:])
 	vk.GetPhysicalDeviceQueueFamilyProperties(
 		phys_device,
 		&queue_family_count,
-		queue_props,
+		queue_ptr,
 	)
 	queue_families.len = i32(queue_family_count)
 
