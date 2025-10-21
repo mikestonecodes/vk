@@ -50,8 +50,100 @@ compiling shader:
 compiling shader:
 compiling shader:
 compiling shader:
-Discovered 2 shaders: graphics.hlsl compute.hlsl 
+Discovered 2 shaders: compute.hlsl graphics.hlsl 
 Window resized to 1856x2056
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling compute.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling compute.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling compute.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling compute.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling compute.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling compute.hlsl
+compiling shader:
+compute.hlsl:216:19: warning: implicit truncation of vector type [-Wconversion]
+            float presence = hash21(seed);
+                  ^
+
+compiling shader:
+compute.hlsl:216:19: warning: implicit truncation of vector type [-Wconversion]
+            float presence = hash21(seed);
+                  ^
+
+compiling shader:
+compiling shader:
+compiling shader:
+compute.hlsl:216:19: warning: implicit truncation of vector type [-Wconversion]
+            float presence = hash21(seed);
+                  ^
+
+compiling shader:
+compiling shader:
+Recompiling compute.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling compute.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling compute.hlsl
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Recompiling compute.hlsl
+compiling shader:
 compiling shader:
 compiling shader:
 compiling shader:

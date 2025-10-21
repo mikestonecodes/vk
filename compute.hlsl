@@ -23,7 +23,7 @@ struct PushConstants {
 
 static const uint OPTION_CAMERA_UPDATE = 1u << 0;
 
-static const float CAMERA_DEFAULT_ZOOM = 80.0f;
+static const float CAMERA_DEFAULT_ZOOM = 5.0f;
 static const float CAMERA_MOVE_SPEED   = 40.0f;
 static const float CAMERA_MIN_ZOOM     = 2.0f;
 static const float CAMERA_MAX_ZOOM     = 5000.0f;
@@ -77,7 +77,7 @@ int compute_circle_sample_radius(float zoom, float aspect, float2 resolution) {
 }
 
 float hash11(float n) {
-    return frac(sin(n) * 43758.5453123f);
+    return frac(sin(n) * 1343758.5453123f);
 }
 
 float2 hash21(float2 p) {
@@ -214,12 +214,12 @@ void main(uint3 tid : SV_DispatchThreadID)
             float2 cell = baseCell + float2(ox, oy);
             float seed = dot(cell, float2(53.34f, 19.13f));
             float presence = hash11(seed);
-            if (presence < 0.99f) {
+            if (presence < 0.97f) {
                 continue;
             }
 
             float2 jitter = hash21(cell) - 0.5f;
-            float radius = lerp(0.35f, 2.10f, hash11(seed + 17.23f));
+            float radius = lerp(0.35f, 0.10f, hash11(seed + 17.23f));
             float softness = lerp(0.20f, 0.55f, hash11(seed + 41.07f));
             float2 center = cell + jitter * 0.9f;
 
@@ -242,7 +242,7 @@ void main(uint3 tid : SV_DispatchThreadID)
     if (density <= 0.0001f) {
         float2 center = float2(0.0f, 0.0f);
         float dist = length(world - center);
-        float radius = 1.35f;
+        float radius = 0.1f;
         float softness = 0.32f;
         float coverage = soft_circle(dist, radius, softness);
         float3 baseColor = hash31(float2(0.0f, 0.0f));
