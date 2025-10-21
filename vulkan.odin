@@ -857,6 +857,7 @@ create_swapchain :: proc() -> bool {
 			},
 			&elements[i].commandBuffer,
 		)
+		elements[i].layout = vk.ImageLayout.UNDEFINED
 	}
 
 	frames_in_flight = max(1, min(image_count, MAX_FRAMES_IN_FLIGHT))
@@ -1147,27 +1148,6 @@ destroy_texture :: proc(resource: ^TextureResource) {
 }
 
 
-apply_transfer_to_compute_barrier :: proc(cmd: vk.CommandBuffer, buf: ^BufferResource) {
-	runtime.assert(buf.buffer != {}, "transfer barrier requested before initialization")
-
-	barrier := vk.BufferMemoryBarrier2 {
-		sType         = .BUFFER_MEMORY_BARRIER_2,
-		srcStageMask  = {.TRANSFER},
-		srcAccessMask = {.TRANSFER_WRITE},
-		dstStageMask  = {.COMPUTE_SHADER},
-		dstAccessMask = {.SHADER_WRITE},
-		buffer        = buf.buffer,
-		offset        = 0,
-		size          = buf.size,
-	}
-	dep := vk.DependencyInfo {
-		sType                    = .DEPENDENCY_INFO,
-		bufferMemoryBarrierCount = 1,
-		pBufferMemoryBarriers    = &barrier,
-	}
-	vk.CmdPipelineBarrier2(cmd, &dep)
-}
-
 apply_compute_to_fragment_barrier :: proc(cmd: vk.CommandBuffer, buf: ^BufferResource) {
 	runtime.assert(buf.buffer != {}, "compute barrier requested before initialization")
 
@@ -1187,6 +1167,49 @@ apply_compute_to_fragment_barrier :: proc(cmd: vk.CommandBuffer, buf: ^BufferRes
 		pBufferMemoryBarriers    = &barrier,
 	}
 	vk.CmdPipelineBarrier2(cmd, &dep)
+}
+
+transition_swapchain_image_layout :: proc(cmd: vk.CommandBuffer, element: ^SwapchainElement, new_layout: vk.ImageLayout) {
+	runtime.assert(element.image != {}, "swapchain image missing before layout transition")
+
+	old_layout := element.layout
+	if old_layout == new_layout {
+		return
+	}
+
+	barrier_needed := false
+	barrier := vk.ImageMemoryBarrier2 {
+		sType = .IMAGE_MEMORY_BARRIER_2,
+		oldLayout = old_layout,
+		newLayout = new_layout,
+		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		image = element.image,
+		subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+	}
+
+	#partial switch new_layout {
+	case vk.ImageLayout.ATTACHMENT_OPTIMAL:
+		barrier.dstStageMask = {vk.PipelineStageFlag2.COLOR_ATTACHMENT_OUTPUT}
+		barrier.dstAccessMask = {vk.AccessFlag2.COLOR_ATTACHMENT_WRITE}
+		barrier_needed = true
+	case vk.ImageLayout.PRESENT_SRC_KHR:
+		barrier.srcStageMask = {vk.PipelineStageFlag2.COLOR_ATTACHMENT_OUTPUT}
+		barrier.srcAccessMask = {vk.AccessFlag2.COLOR_ATTACHMENT_WRITE}
+		barrier_needed = true
+	}
+
+	if barrier_needed {
+		dependency := vk.DependencyInfo {
+			sType = .DEPENDENCY_INFO,
+			imageMemoryBarrierCount = 1,
+			pImageMemoryBarriers = &barrier,
+		}
+
+		vk.CmdPipelineBarrier2(cmd, &dependency)
+	}
+
+	element.layout = new_layout
 }
 
 
@@ -1261,54 +1284,6 @@ vulkan_cleanup :: proc() {
 
 // Single path: decode -> allocate -> copy -> view -> sampler
 
-transition_to_sampled :: proc(image: vk.Image) {
-	cmd: vk.CommandBuffer
-	vk.AllocateCommandBuffers(
-		device,
-		&vk.CommandBufferAllocateInfo {
-			sType = .COMMAND_BUFFER_ALLOCATE_INFO,
-			level = .PRIMARY,
-			commandPool = command_pool,
-			commandBufferCount = 1,
-		},
-		&cmd,
-	)
-
-	vk.BeginCommandBuffer(
-		cmd,
-		&vk.CommandBufferBeginInfo{sType = .COMMAND_BUFFER_BEGIN_INFO, flags = {.ONE_TIME_SUBMIT}},
-	)
-
-	vk.CmdPipelineBarrier2(
-		cmd,
-		&vk.DependencyInfo {
-			sType = .DEPENDENCY_INFO,
-			imageMemoryBarrierCount = 1,
-			pImageMemoryBarriers = &vk.ImageMemoryBarrier2 {
-				sType = .IMAGE_MEMORY_BARRIER_2,
-				srcStageMask = {.HOST},
-				srcAccessMask = {.HOST_WRITE},
-				dstStageMask = {.FRAGMENT_SHADER},
-				dstAccessMask = {.SHADER_READ},
-				oldLayout = .PREINITIALIZED,
-				newLayout = .SHADER_READ_ONLY_OPTIMAL,
-				image = image,
-				subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
-			},
-		},
-	)
-
-	vk.EndCommandBuffer(cmd)
-	vk.QueueSubmit(
-		queue,
-		1,
-		&vk.SubmitInfo{sType = .SUBMIT_INFO, commandBufferCount = 1, pCommandBuffers = &cmd},
-		{},
-	)
-	vk.QueueWaitIdle(queue)
-	vk.FreeCommandBuffers(device, command_pool, 1, &cmd)
-}
-
 create_texture_from_png :: proc(path: string) -> (TextureResource, bool) {
 	tex: TextureResource
 
@@ -1357,8 +1332,61 @@ create_texture_from_png :: proc(path: string) -> (TextureResource, bool) {
 	runtime.mem_copy_non_overlapping(data, raw_data(src), required)
 	vk.UnmapMemory(device, tex.memory)
 
-	// --- Transition PREINITIALIZED → SHADER_READ_ONLY_OPTIMAL
-	transition_to_sampled(tex.image)
+	// --- Transition to shader-read layout before sampling
+	transition_cmd: vk.CommandBuffer
+	alloc_info := vk.CommandBufferAllocateInfo {
+		sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
+		commandPool        = command_pool,
+		level              = .PRIMARY,
+		commandBufferCount = 1,
+	}
+	if vk.AllocateCommandBuffers(device, &alloc_info, &transition_cmd) != vk.Result.SUCCESS {
+		fmt.println("Failed to allocate command buffer for texture transition")
+		destroy_texture(&tex)
+		return tex, false
+	}
+
+	begin_info := vk.CommandBufferBeginInfo {
+		sType = .COMMAND_BUFFER_BEGIN_INFO,
+		flags = {vk.CommandBufferUsageFlag.ONE_TIME_SUBMIT},
+	}
+	vk.BeginCommandBuffer(transition_cmd, &begin_info)
+
+	barrier := vk.ImageMemoryBarrier2 {
+		sType               = .IMAGE_MEMORY_BARRIER_2,
+		srcStageMask        = {vk.PipelineStageFlag2.HOST},
+		srcAccessMask       = {vk.AccessFlag2.HOST_WRITE},
+		dstStageMask        = {vk.PipelineStageFlag2.FRAGMENT_SHADER},
+		dstAccessMask       = {vk.AccessFlag2.SHADER_READ},
+		oldLayout           = vk.ImageLayout.PREINITIALIZED,
+		newLayout           = vk.ImageLayout.SHADER_READ_ONLY_OPTIMAL,
+		srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+		image               = tex.image,
+		subresourceRange    = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+	}
+	dependency := vk.DependencyInfo {
+		sType                   = .DEPENDENCY_INFO,
+		imageMemoryBarrierCount = 1,
+		pImageMemoryBarriers    = &barrier,
+	}
+	vk.CmdPipelineBarrier2(transition_cmd, &dependency)
+	vk.EndCommandBuffer(transition_cmd)
+
+	cmd_submit := vk.CommandBufferSubmitInfo {
+		sType         = vk.StructureType.COMMAND_BUFFER_SUBMIT_INFO,
+		commandBuffer = transition_cmd,
+		deviceMask    = 1,
+	}
+	submit_info := vk.SubmitInfo2 {
+		sType                  = vk.StructureType.SUBMIT_INFO_2,
+		commandBufferInfoCount = 1,
+		pCommandBufferInfos    = &cmd_submit,
+	}
+	vk.QueueSubmit2(queue, 1, &submit_info, {})
+	vk.QueueWaitIdle(queue)
+	vk.FreeCommandBuffers(device, command_pool, 1, &transition_cmd)
+
 	tex.layout = .SHADER_READ_ONLY_OPTIMAL
 
 	// --- View

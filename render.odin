@@ -183,7 +183,7 @@ simulate_particles :: proc(frame: FrameInputs) {
 
 // accumulation_buffer -> post_process.hlsl -> swapchain image
 composite_to_swapchain :: proc(frame: FrameInputs, element: ^SwapchainElement) {
-	element.layout = vk.ImageLayout.ATTACHMENT_OPTIMAL
+
 	begin_rendering(frame,element)
 	bind(frame, &render_shader_states[1], .GRAPHICS, &PostProcessPushConstants{
 		screen_width = u32(window_width),
@@ -191,7 +191,7 @@ composite_to_swapchain :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 	})
 	vk.CmdDraw(frame.cmd, 3, 1, 0, 0)
 	vk.CmdEndRendering(frame.cmd)
-	element.layout = vk.ImageLayout.PRESENT_SRC_KHR
+	transition_swapchain_image_layout(frame.cmd, element, vk.ImageLayout.PRESENT_SRC_KHR)
 }
 
 cleanup_render_resources :: proc() {

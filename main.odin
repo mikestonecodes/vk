@@ -26,20 +26,8 @@ main :: proc() {
 	// Main render loop
 	for glfw_should_quit() == 0 {
 		glfw_poll_events()
-
-		// Handle window resize
 		handle_resize()
-
-		// Hot reload shaders if changed
 		check_shader_reload()
-
-
-		// Only render when window is visible
-		if glfw_window_visible() != 0 {
-			render_frame(start_time)
-		} else {
-			// Sleep when window is hidden to avoid busy waiting
-			time.sleep(16 * time.Millisecond) // ~60 FPS equivalent
-		}
+		render_frame(start_time)
 	}
 }

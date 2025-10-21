@@ -475,6 +475,9 @@ begin_encoding :: proc(element: ^SwapchainElement) -> CommandEncoder {
 
 begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 
+	apply_compute_to_fragment_barrier(frame.cmd, &accumulation_buffer)
+	transition_swapchain_image_layout(frame.cmd, element, vk.ImageLayout.ATTACHMENT_OPTIMAL)
+
 	vk.CmdBeginRendering(
 		frame.cmd,
 		&vk.RenderingInfo {
