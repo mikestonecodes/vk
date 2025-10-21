@@ -385,6 +385,8 @@ void trigger_projectile_explosion(uint source_id, float2 circle_center, float ci
     float explosion_radius = (circle_radius + push_constants.projectile_radius) * (3.0f + circle_energy * 2.5f);
     explosion_radius = max(explosion_radius, push_constants.projectile_radius * 3.5f);
     float radius_sq = explosion_radius * explosion_radius;
+    float kill_radius = explosion_radius * 0.5f;
+    float kill_radius_sq = kill_radius * kill_radius;
 
     uint2 origin_cell = world_to_cell(circle_center);
     uint grid_x = max(push_constants.grid_x, 1u);
@@ -425,7 +427,16 @@ void trigger_projectile_explosion(uint source_id, float2 circle_center, float ci
                     continue;
                 }
 
-                deactivate_body(j);
+                if (dist_sq <= kill_radius_sq) {
+                    deactivate_body(j);
+                    continue;
+                }
+
+                float dist = sqrt(max(dist_sq, 1e-8f));
+                float2 dir = delta / dist;
+                float falloff = saturate((explosion_radius - dist) / max(explosion_radius - kill_radius, 1e-3f));
+                float push_strength = (circle_energy * 3.0f + 1.0f) * falloff * push_constants.projectile_radius;
+                atomic_add_body_delta(j, dir * push_strength);
             }
         }
     }
