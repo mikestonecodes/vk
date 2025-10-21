@@ -21,6 +21,22 @@ GRID_CELL_COUNT :: u32(GRID_X * GRID_Y)
 
 EXPLOSION_EVENT_CAPACITY :: u32(256)
 
+KeyBinding :: struct {
+	key:   u32,
+	field: ^b32,
+}
+
+key_bindings := []KeyBinding {
+	{glfw.KEY_W, &compute_push_constants.move_forward},
+	{glfw.KEY_S, &compute_push_constants.move_backward},
+	{glfw.KEY_D, &compute_push_constants.move_right},
+	{glfw.KEY_A, &compute_push_constants.move_left},
+	{glfw.KEY_E, &compute_push_constants.zoom_in},
+	{glfw.KEY_Q, &compute_push_constants.zoom_out},
+	{glfw.KEY_T, &compute_push_constants.speed},
+	{glfw.KEY_R, &compute_push_constants.reset_camera},
+}
+
 CameraStateGPU :: struct {
 	position:    [2]f32,
 	zoom:        f32,
@@ -223,47 +239,52 @@ physics_initialized: bool
 // compute.hlsl -> accumulation_buffer
 compute :: proc(frame: FrameInputs) {
 	mouse_x, mouse_y := get_mouse_position()
-	width := max(f64(window_width), 1.0)
-	height := max(f64(window_height), 1.0)
-	total_pixels := u32(window_width) * u32(window_height)
-	pixel_dispatch := (total_pixels + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
-	body_dispatch := (PHYS_MAX_BODIES + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
-	grid_dispatch := (GRID_CELL_COUNT + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
-
-
 	compute_push_constants.time = frame.time
 	compute_push_constants.delta_time = frame.delta_time
 	compute_push_constants.screen_width = u32(window_width)
 	compute_push_constants.screen_height = u32(window_height)
-	compute_push_constants.brightness = 1.0
-	compute_push_constants.move_forward = b32(is_key_pressed(glfw.KEY_W))
-	compute_push_constants.move_backward = b32(is_key_pressed(glfw.KEY_S))
-	compute_push_constants.move_right = b32(is_key_pressed(glfw.KEY_D))
-	compute_push_constants.move_left = b32(is_key_pressed(glfw.KEY_A))
-	compute_push_constants.zoom_in = b32(is_key_pressed(glfw.KEY_E))
-	compute_push_constants.zoom_out = b32(is_key_pressed(glfw.KEY_Q))
-	compute_push_constants.speed = b32(is_key_pressed(glfw.KEY_T))
-	compute_push_constants.reset_camera = b32(is_key_pressed(glfw.KEY_R))
-	compute_push_constants.spawn_projectile = b32(is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT))
-	compute_push_constants.mouse_ndc_x = f32(clamp(mouse_x / width, 0.0, 1.0))
-	compute_push_constants.mouse_ndc_y = f32(clamp(mouse_y / height, 0.0, 1.0))
 
+	for binding in key_bindings {
+		binding.field^ = b32(is_key_pressed(i32(binding.key)))
+	}
+
+	compute_push_constants.spawn_projectile = b32(is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT))
+
+	compute_push_constants.mouse_ndc_x = f32(
+		clamp(mouse_x / max(f64(window_width), 1.0), 0.0, 1.0),
+	)
+	compute_push_constants.mouse_ndc_y = f32(
+		clamp(mouse_y / max(f64(window_height), 1.0), 0.0, 1.0),
+	)
+
+
+	// ---- Camera update ----
+	compute_push_constants.options = CAMERA_UPDATE_FLAG
+	dispatch_compute(frame, {mode = .CAMERA_UPDATE})
+
+	total_pixels := u32(window_width) * u32(window_height)
+	pixel_dispatch := (total_pixels + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
+	physics(frame,pixel_dispatch)
+
+	zero_buffer(frame, &buffers.data[0])
+	transfer_to_compute_barrier(frame.cmd, &buffers.data[0])
+	dispatch_compute(frame, {mode = .RENDER, group = {pixel_dispatch, 1, 1}})
+}
+
+physics :: proc(frame:FrameInputs,pixel_dispatch:u32) {
 
 	substep_count_f := f32(PHYS_SUBSTEPS)
 	if substep_count_f <= 0.0 {substep_count_f = 1.0}
 	physics_dt := frame.delta_time / substep_count_f
 	if physics_dt < 0.0 {physics_dt = 0.0}
 
-	// ---- Camera update ----
-	compute_push_constants.options = CAMERA_UPDATE_FLAG
-	dispatch_compute(frame, {mode = .CAMERA_UPDATE})
-
-	// ---- One-time physics init ----
 	if !physics_initialized {
 		dispatch_compute(frame, {mode = .INITIALIZE})
 		physics_initialized = true
 	}
 
+	body_dispatch := (PHYS_MAX_BODIES + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
+	grid_dispatch := (GRID_CELL_COUNT + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
 	// ---- Substeps ----
 	for substep_index: u32 = 0; substep_index < PHYS_SUBSTEPS; substep_index += 1 {
 		compute_push_constants.substep_index = substep_index
@@ -306,12 +327,8 @@ compute :: proc(frame: FrameInputs) {
 			dispatch_compute(frame, {mode = .APPLY_DELTAS, group = {body_dispatch, 1, 1}})
 		}
 	}
-
 	dispatch_compute(frame, {mode = .FINALIZE, group = {body_dispatch, 1, 1}})
-	// ---- Prepare accumulation buffer ----
-	zero_buffer(frame, &buffers.data[0])
-	transfer_to_compute_barrier(frame.cmd, &buffers.data[0])
-	dispatch_compute(frame, {mode = .RENDER, group = {pixel_dispatch, 1, 1}})
+
 }
 
 // accumulation_buffer -> post_process.hlsl -> swapchain image
