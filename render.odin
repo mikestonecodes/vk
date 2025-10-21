@@ -6,14 +6,6 @@ import vk "vendor:vulkan"
 COMPUTE_GROUP_SIZE :: u32(128)
 PIPELINE_COUNT :: 2
 
-KEY_FORWARD_BIT :: u32(1 << 0)
-KEY_BACKWARD_BIT :: u32(1 << 1)
-KEY_RIGHT_BIT :: u32(1 << 2)
-KEY_LEFT_BIT :: u32(1 << 3)
-KEY_ZOOM_IN_BIT :: u32(1 << 4)
-KEY_ZOOM_OUT_BIT :: u32(1 << 5)
-KEY_SPEED_BIT :: u32(1 << 6)
-
 CAMERA_UPDATE_FLAG :: u32(1 << 0)
 
 CameraStateGPU :: struct {
@@ -38,7 +30,14 @@ ComputePushConstants :: struct {
 	screen_width:  u32,
 	screen_height: u32,
 	brightness:    f32,
-	key_mask:      u32,
+	move_forward:  b32,
+	move_backward: b32,
+	move_right:    b32,
+	move_left:     b32,
+	zoom_in:       b32,
+	zoom_out:      b32,
+	speed:         b32,
+	reset_camera:  b32,
 	options:       u32,
 	_pad0:         u32,
 }
@@ -102,18 +101,6 @@ init_render_resources :: proc() -> bool {
 
 }
 
-get_key_mask :: proc() -> u32 {
-	mask: u32 = 0
-	if is_key_pressed(glfw.KEY_W) do mask |= KEY_FORWARD_BIT
-	if is_key_pressed(glfw.KEY_S) do mask |= KEY_BACKWARD_BIT
-	if is_key_pressed(glfw.KEY_D) do mask |= KEY_RIGHT_BIT
-	if is_key_pressed(glfw.KEY_A) do mask |= KEY_LEFT_BIT
-	if is_key_pressed(glfw.KEY_E) do mask |= KEY_ZOOM_IN_BIT
-	if is_key_pressed(glfw.KEY_Q) do mask |= KEY_ZOOM_OUT_BIT
-	if is_key_pressed(glfw.KEY_T) do mask |= KEY_SPEED_BIT
-	return mask
-}
-
 record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
 	simulate_particles(frame)
 	composite_to_swapchain(frame, element)
@@ -122,14 +109,19 @@ record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
 // compute.hlsl -> accumulation_buffer
 simulate_particles :: proc(frame: FrameInputs) {
 
-	key_mask := get_key_mask()
-
 	compute_push_constants.time = frame.time
 	compute_push_constants.delta_time = frame.delta_time
 	compute_push_constants.screen_width = u32(window_width)
 	compute_push_constants.screen_height = u32(window_height)
 	compute_push_constants.brightness = 1.0
-	compute_push_constants.key_mask = key_mask
+	compute_push_constants.move_forward = b32(is_key_pressed(glfw.KEY_W))
+	compute_push_constants.move_backward = b32(is_key_pressed(glfw.KEY_S))
+	compute_push_constants.move_right = b32(is_key_pressed(glfw.KEY_D))
+	compute_push_constants.move_left = b32(is_key_pressed(glfw.KEY_A))
+	compute_push_constants.zoom_in = b32(is_key_pressed(glfw.KEY_E))
+	compute_push_constants.zoom_out = b32(is_key_pressed(glfw.KEY_Q))
+	compute_push_constants.speed = b32(is_key_pressed(glfw.KEY_T))
+	compute_push_constants.reset_camera = b32(is_key_pressed(glfw.KEY_R))
 	compute_push_constants.options = CAMERA_UPDATE_FLAG
 
 	bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)

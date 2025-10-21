@@ -515,7 +515,6 @@ discover_shaders :: proc() {
 	}
 	fmt.println()
 }
-
 // ──────────────────────────────────────────────────────────────────────────────
 // Filename helpers
 // ──────────────────────────────────────────────────────────────────────────────
@@ -654,7 +653,6 @@ compile_changed_shaders :: proc(changed_hlsl: []string) -> bool {
 		info, present := shader_registry[hlsl]
 		if !present {
 			fmt.printf("Warning: %s not in registry\n", hlsl)
-			ok_all = false
 			continue
 		}
 		fmt.printf("Recompiling %s\n", info.source_path)
@@ -673,13 +671,36 @@ check_shader_reload :: proc() -> bool {
 	}
 
 	changed := Array(MAX_TRACKED_SHADERS, string){}
+	missing := Array(MAX_TRACKED_SHADERS, string){}
+
+	// Pick up newly added shaders
+	handle, err := os.open(".")
+	assert(err == nil, "shader sync: failed to open cwd")
+	defer os.close(handle)
+	files, read_err := os.read_dir(handle, -1)
+	assert(read_err == nil, "shader sync: failed to read cwd")
+	defer delete(files)
+	for file in files {
+		if !strings.has_suffix(file.name, ".hlsl") {
+			continue
+		}
+		_, present := shader_registry[file.name]
+		if present {
+			continue
+		}
+		shader_registry[file.name] = ShaderInfo {
+			source_path   = file.name,
+			last_modified = file.modification_time,
+		}
+		array_push(&changed, file.name)
+	}
+
 	for name, &info in shader_registry {
 		st, err := os.stat(info.source_path)
 		if err != nil {
 			// File missing → drop it from registry
 			fmt.printf("Shader source missing: %s\n", info.source_path)
-			delete_key(&shader_registry, name) // correct form
-			array_push(&changed, name) // trigger rebuild
+			array_push(&missing, name)
 			continue
 		}
 
@@ -689,11 +710,19 @@ check_shader_reload :: proc() -> bool {
 		}
 	}
 
-	if changed.len == 0 {
+	if changed.len == 0 && missing.len == 0 {
 		return shaders_ready
 	}
-	if !compile_changed_shaders(array_slice(&changed)) {
-		return shaders_ready // keep old shaders if rebuild fails
+
+	if changed.len > 0 {
+		if !compile_changed_shaders(array_slice(&changed)) {
+			return shaders_ready // keep old shaders if rebuild fails
+		}
+	}
+
+	for i in 0 ..< missing.len {
+		name := missing.data[i]
+		delete_key(&shader_registry, name)
 	}
 
 	// Full rebuild
