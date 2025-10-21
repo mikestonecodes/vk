@@ -5,8 +5,6 @@ struct PushConstants {
 [[vk::push_constant]] PushConstants push_constants;
 
 [[vk::binding(0, 0)]] StructuredBuffer<uint> buffers[];
-[[vk::binding(1, 0)]] Texture2D<float4>     textures[];
-[[vk::binding(2, 0)]] SamplerState          samplers[];
 
 static const float2 POSITIONS[3] = {
     float2(-1.0f, -1.0f), float2(3.0f, -1.0f), float2(-1.0f, 3.0f)
