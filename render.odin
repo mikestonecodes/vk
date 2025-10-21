@@ -5,7 +5,6 @@ import vk "vendor:vulkan"
 
 COMPUTE_GROUP_SIZE :: u32(128)
 PIPELINE_COUNT :: 2
-
 CAMERA_UPDATE_FLAG :: u32(1 << 0)
 
 // Physics configuration
@@ -19,7 +18,6 @@ PHYS_SUBSTEPS :: u32(1)
 GRID_X :: u32(512)
 GRID_Y :: u32(512)
 GRID_CELL_COUNT :: u32(GRID_X * GRID_Y)
-
 
 EXPLOSION_EVENT_CAPACITY :: u32(256)
 
@@ -195,18 +193,12 @@ global_descriptor_extras :: []DescriptorBindingSpec {
 render_shader_configs := []ShaderProgramConfig {
 	{
 		compute_module = "compute.spv",
-		push = {
-			stage = {.COMPUTE},
-			size = u32(size_of(ComputePushConstants)),
-		},
+		push = {stage = {.COMPUTE}, size = u32(size_of(ComputePushConstants))},
 	},
 	{
 		vertex_module = "graphics_vs.spv",
 		fragment_module = "graphics_fs.spv",
-		push = {
-			stage = {.VERTEX, .FRAGMENT},
-			size = u32(size_of(PostProcessPushConstants)),
-		},
+		push = {stage = {.VERTEX, .FRAGMENT}, size = u32(size_of(PostProcessPushConstants))},
 	},
 }
 
@@ -222,13 +214,14 @@ resize :: proc() {
 }
 
 record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
-	simulate_particles(frame)
-	composite_to_swapchain(frame, element)
+	compute(frame)
+	graphics(frame, element)
+	transition_swapchain_image_layout(frame.cmd, element, .PRESENT_SRC_KHR)
 }
 
 physics_initialized: bool
 // compute.hlsl -> accumulation_buffer
-simulate_particles :: proc(frame: FrameInputs) {
+compute :: proc(frame: FrameInputs) {
 	mouse_x, mouse_y := get_mouse_position()
 	width := max(f64(window_width), 1.0)
 	height := max(f64(window_height), 1.0)
@@ -318,12 +311,11 @@ simulate_particles :: proc(frame: FrameInputs) {
 	// ---- Prepare accumulation buffer ----
 	zero_buffer(frame, &buffers.data[0])
 	transfer_to_compute_barrier(frame.cmd, &buffers.data[0])
-
 	dispatch_compute(frame, {mode = .RENDER, group = {pixel_dispatch, 1, 1}})
 }
 
 // accumulation_buffer -> post_process.hlsl -> swapchain image
-composite_to_swapchain :: proc(frame: FrameInputs, element: ^SwapchainElement) {
+graphics :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 	apply_compute_to_fragment_barrier(frame.cmd, &buffers.data[0])
 	begin_rendering(frame, element)
 	bind(
@@ -335,7 +327,6 @@ composite_to_swapchain :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 			screen_height = u32(window_height),
 		},
 	)
-	vk.CmdDraw(frame.cmd, 3, 1, 0, 0)
-	vk.CmdEndRendering(frame.cmd)
-	transition_swapchain_image_layout(frame.cmd, element, .PRESENT_SRC_KHR)
+	draw(frame, 3, 1, 0, 0)
+	end_rendering(frame)
 }

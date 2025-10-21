@@ -229,15 +229,24 @@ init_global_descriptors :: proc() -> bool {
 	pool_sizes: [3]vk.DescriptorPoolSize
 	pool_count: u32 = 0
 	if storage_count > 0 {
-		pool_sizes[pool_count] = {type = .STORAGE_BUFFER, descriptorCount = storage_count}
+		pool_sizes[pool_count] = {
+			type            = .STORAGE_BUFFER,
+			descriptorCount = storage_count,
+		}
 		pool_count += 1
 	}
 	if sampled_image_count > 0 {
-		pool_sizes[pool_count] = {type = .SAMPLED_IMAGE, descriptorCount = sampled_image_count}
+		pool_sizes[pool_count] = {
+			type            = .SAMPLED_IMAGE,
+			descriptorCount = sampled_image_count,
+		}
 		pool_count += 1
 	}
 	if sampler_count > 0 {
-		pool_sizes[pool_count] = {type = .SAMPLER, descriptorCount = sampler_count}
+		pool_sizes[pool_count] = {
+			type            = .SAMPLER,
+			descriptorCount = sampler_count,
+		}
 		pool_count += 1
 	}
 
@@ -526,6 +535,13 @@ begin_encoding :: proc(element: ^SwapchainElement) -> CommandEncoder {
 	return encoder
 }
 
+end_rendering :: proc(frame:FrameInputs) {
+	vk.CmdEndRendering(frame.cmd)
+}
+
+draw :: proc(frame: FrameInputs, vertex_count: u32, instance_count: u32 = 1, first_vertex: u32 = 0, first_instance: u32 = 0) {
+	vk.CmdDraw(frame.cmd, vertex_count, instance_count, first_vertex, first_instance)
+}
 begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 
 	transition_swapchain_image_layout(frame.cmd, element, vk.ImageLayout.ATTACHMENT_OPTIMAL)
