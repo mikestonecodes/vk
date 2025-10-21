@@ -1168,6 +1168,43 @@ destroy_texture :: proc(resource: ^TextureResource) {
 	resource^ = TextureResource{}
 }
 
+compute_barrier :: proc(cmd: vk.CommandBuffer) {
+	barrier := vk.MemoryBarrier2 {
+		sType         = .MEMORY_BARRIER_2,
+		srcStageMask  = {vk.PipelineStageFlag2.COMPUTE_SHADER},
+		srcAccessMask = {vk.AccessFlag2.SHADER_READ, vk.AccessFlag2.SHADER_WRITE},
+		dstStageMask  = {vk.PipelineStageFlag2.COMPUTE_SHADER},
+		dstAccessMask = {vk.AccessFlag2.SHADER_READ, vk.AccessFlag2.SHADER_WRITE},
+	}
+	dependency := vk.DependencyInfo {
+		sType              = .DEPENDENCY_INFO,
+		memoryBarrierCount = 1,
+		pMemoryBarriers    = &barrier,
+	}
+	vk.CmdPipelineBarrier2(cmd, &dependency)
+}
+
+transfer_to_compute_barrier :: proc(cmd: vk.CommandBuffer, buf: ^BufferResource) {
+	runtime.assert(buf.buffer != {}, "transfer/computation barrier requested before initialization")
+
+	barrier := vk.BufferMemoryBarrier2 {
+		sType         = .BUFFER_MEMORY_BARRIER_2,
+		srcStageMask  = {vk.PipelineStageFlag2.TRANSFER},
+		srcAccessMask = {vk.AccessFlag2.TRANSFER_WRITE},
+		dstStageMask  = {vk.PipelineStageFlag2.COMPUTE_SHADER},
+		dstAccessMask = {vk.AccessFlag2.SHADER_READ, vk.AccessFlag2.SHADER_WRITE},
+		buffer        = buf.buffer,
+		offset        = 0,
+		size          = buf.size,
+	}
+	dependency := vk.DependencyInfo {
+		sType                    = .DEPENDENCY_INFO,
+		bufferMemoryBarrierCount = 1,
+		pBufferMemoryBarriers    = &barrier,
+	}
+	vk.CmdPipelineBarrier2(cmd, &dependency)
+}
+
 
 apply_compute_to_fragment_barrier :: proc(cmd: vk.CommandBuffer, buf: ^BufferResource) {
 	runtime.assert(buf.buffer != {}, "compute barrier requested before initialization")

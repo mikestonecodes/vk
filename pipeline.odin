@@ -153,11 +153,11 @@ bind_resource :: proc(slot: u32, resource: $T, dstBinding := u32(max(u32))) {
 global_desc_pool: vk.DescriptorPool
 
 init_global_descriptors :: proc() -> bool {
-	bindings := [4]vk.DescriptorSetLayoutBinding {
+	bindings := [16]vk.DescriptorSetLayoutBinding {
 		{
 			binding = 0,
 			descriptorType = .STORAGE_BUFFER,
-			descriptorCount = 4,
+			descriptorCount = 1,
 			stageFlags = {vk.ShaderStageFlag.COMPUTE, vk.ShaderStageFlag.FRAGMENT},
 		},
 		{
@@ -175,8 +175,80 @@ init_global_descriptors :: proc() -> bool {
 		{
 			binding         = 3,
 			descriptorType  = .STORAGE_BUFFER,
-			descriptorCount = 1, // global state (camera, etc.)
+			descriptorCount = 1,
 			stageFlags      = {vk.ShaderStageFlag.COMPUTE},
+		},
+		{
+			binding = 20,
+			descriptorType = .STORAGE_BUFFER,
+			descriptorCount = 1,
+			stageFlags = {vk.ShaderStageFlag.COMPUTE},
+		},
+		{
+			binding = 21,
+			descriptorType = .STORAGE_BUFFER,
+			descriptorCount = 1,
+			stageFlags = {vk.ShaderStageFlag.COMPUTE},
+		},
+		{
+			binding = 22,
+			descriptorType = .STORAGE_BUFFER,
+			descriptorCount = 1,
+			stageFlags = {vk.ShaderStageFlag.COMPUTE},
+		},
+		{
+			binding = 23,
+			descriptorType = .STORAGE_BUFFER,
+			descriptorCount = 1,
+			stageFlags = {vk.ShaderStageFlag.COMPUTE},
+		},
+		{
+			binding = 24,
+			descriptorType = .STORAGE_BUFFER,
+			descriptorCount = 1,
+			stageFlags = {vk.ShaderStageFlag.COMPUTE},
+		},
+		{
+			binding = 25,
+			descriptorType = .STORAGE_BUFFER,
+			descriptorCount = 1,
+			stageFlags = {vk.ShaderStageFlag.COMPUTE},
+		},
+		{
+			binding = 26,
+			descriptorType = .STORAGE_BUFFER,
+			descriptorCount = 1,
+			stageFlags = {vk.ShaderStageFlag.COMPUTE},
+		},
+		{
+			binding = 27,
+			descriptorType = .STORAGE_BUFFER,
+			descriptorCount = 1,
+			stageFlags = {vk.ShaderStageFlag.COMPUTE},
+		},
+		{
+			binding = 30,
+			descriptorType = .STORAGE_BUFFER,
+			descriptorCount = 1,
+			stageFlags = {vk.ShaderStageFlag.COMPUTE},
+		},
+		{
+			binding = 31,
+			descriptorType = .STORAGE_BUFFER,
+			descriptorCount = 1,
+			stageFlags = {vk.ShaderStageFlag.COMPUTE},
+		},
+		{
+			binding = 32,
+			descriptorType = .STORAGE_BUFFER,
+			descriptorCount = 1,
+			stageFlags = {vk.ShaderStageFlag.COMPUTE},
+		},
+		{
+			binding = 33,
+			descriptorType = .STORAGE_BUFFER,
+			descriptorCount = 1,
+			stageFlags = {vk.ShaderStageFlag.COMPUTE},
 		},
 	}
 
@@ -192,11 +264,10 @@ init_global_descriptors :: proc() -> bool {
 		vk.DescriptorSetLayout,
 	) or_return
 
-	pool_sizes := [4]vk.DescriptorPoolSize {
-		{type = .STORAGE_BUFFER, descriptorCount = 4},
+	pool_sizes := [3]vk.DescriptorPoolSize {
+		{type = .STORAGE_BUFFER, descriptorCount = 16},
 		{type = .SAMPLED_IMAGE, descriptorCount = 2},
 		{type = .SAMPLER, descriptorCount = 2},
-		{type = .STORAGE_BUFFER, descriptorCount = 1},
 	}
 	global_desc_pool = vkw(
 		vk.CreateDescriptorPool,

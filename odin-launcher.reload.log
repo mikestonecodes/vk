@@ -45,79 +45,369 @@ Validation layer:      ||
 Validation layer:    <Device>
 Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "/usr/lib/libGLX_nvidia.so.0"
 compiling shader:
+compute.hlsl:397:23: error: use of undeclared identifier 'atomicAdd'
+    uint next_index = atomicAdd(spawn_state[0].next_projectile, 1u);
+                      ^
+compute.hlsl:468:5: error: use of undeclared identifier 'atomicAdd'
+    atomicAdd(cell_counts[index], 1u);
+    ^
+compute.hlsl:552:19: error: use of undeclared identifier 'atomicAdd'
+    uint offset = atomicAdd(cell_scratch[idx], 1u);
+                  ^
+compute.hlsl:595:19: error: expected unqualified-id
+            float discard;
+                  ^
+compute.hlsl:596:58: error: expected expression
+            InterlockedAdd(body_delta_pos[id].x, corr.x, discard);
+                                                         ^
+compute.hlsl:597:58: error: expected expression
+            InterlockedAdd(body_delta_pos[id].y, corr.y, discard);
+                                                         ^
+compute.hlsl:647:23: error: expected unqualified-id
+                float discard;
+                      ^
+compute.hlsl:648:64: error: expected expression
+                InterlockedAdd(body_delta_pos[id].x, corr_i.x, discard);
+                                                               ^
+compute.hlsl:649:64: error: expected expression
+                InterlockedAdd(body_delta_pos[id].y, corr_i.y, discard);
+                                                               ^
+compute.hlsl:650:63: error: expected expression
+                InterlockedAdd(body_delta_pos[j].x, corr_j.x, discard);
+                                                              ^
+compute.hlsl:651:63: error: expected expression
+                InterlockedAdd(body_delta_pos[j].y, corr_j.y, discard);
+                                                              ^
+
 compiling shader:
 compiling shader:
 compiling shader:
+compute.hlsl:397:23: error: use of undeclared identifier 'atomicAdd'
+    uint next_index = atomicAdd(spawn_state[0].next_projectile, 1u);
+                      ^
+compute.hlsl:468:5: error: use of undeclared identifier 'atomicAdd'
+    atomicAdd(cell_counts[index], 1u);
+    ^
+compute.hlsl:552:19: error: use of undeclared identifier 'atomicAdd'
+    uint offset = atomicAdd(cell_scratch[idx], 1u);
+                  ^
+compute.hlsl:595:19: error: expected unqualified-id
+            float discard;
+                  ^
+compute.hlsl:596:58: error: expected expression
+            InterlockedAdd(body_delta_pos[id].x, corr.x, discard);
+                                                         ^
+compute.hlsl:597:58: error: expected expression
+            InterlockedAdd(body_delta_pos[id].y, corr.y, discard);
+                                                         ^
+compute.hlsl:647:23: error: expected unqualified-id
+                float discard;
+                      ^
+compute.hlsl:648:64: error: expected expression
+                InterlockedAdd(body_delta_pos[id].x, corr_i.x, discard);
+                                                               ^
+compute.hlsl:649:64: error: expected expression
+                InterlockedAdd(body_delta_pos[id].y, corr_i.y, discard);
+                                                               ^
+compute.hlsl:650:63: error: expected expression
+                InterlockedAdd(body_delta_pos[j].x, corr_j.x, discard);
+                                                              ^
+compute.hlsl:651:63: error: expected expression
+                InterlockedAdd(body_delta_pos[j].y, corr_j.y, discard);
+                                                              ^
+
+Shader compilation failed: compute.hlsl
 compiling shader:
 compiling shader:
-Discovered 2 shaders: compute.hlsl graphics.hlsl 
+Discovered 2 shaders: graphics.hlsl compute.hlsl 
 Window resized to 1856x2056
 compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compute.hlsl:216:19: warning: implicit truncation of vector type [-Wconversion]
-            float presence = hash21(seed);
+compute.hlsl:397:23: error: use of undeclared identifier 'atomicAdd'
+    uint next_index = atomicAdd(spawn_state[0].next_projectile, 1u);
+                      ^
+compute.hlsl:468:5: error: use of undeclared identifier 'atomicAdd'
+    atomicAdd(cell_counts[index], 1u);
+    ^
+compute.hlsl:552:19: error: use of undeclared identifier 'atomicAdd'
+    uint offset = atomicAdd(cell_scratch[idx], 1u);
                   ^
-
-compiling shader:
-compute.hlsl:216:19: warning: implicit truncation of vector type [-Wconversion]
-            float presence = hash21(seed);
+compute.hlsl:595:19: error: expected unqualified-id
+            float discard;
                   ^
+compute.hlsl:596:58: error: expected expression
+            InterlockedAdd(body_delta_pos[id].x, corr.x, discard);
+                                                         ^
+compute.hlsl:597:58: error: expected expression
+            InterlockedAdd(body_delta_pos[id].y, corr.y, discard);
+                                                         ^
+compute.hlsl:647:23: error: expected unqualified-id
+                float discard;
+                      ^
+compute.hlsl:648:64: error: expected expression
+                InterlockedAdd(body_delta_pos[id].x, corr_i.x, discard);
+                                                               ^
+compute.hlsl:649:64: error: expected expression
+                InterlockedAdd(body_delta_pos[id].y, corr_i.y, discard);
+                                                               ^
+compute.hlsl:650:63: error: expected expression
+                InterlockedAdd(body_delta_pos[j].x, corr_j.x, discard);
+                                                              ^
+compute.hlsl:651:63: error: expected expression
+                InterlockedAdd(body_delta_pos[j].y, corr_j.y, discard);
+                                                              ^
 
 compiling shader:
 compiling shader:
 compiling shader:
-compute.hlsl:216:19: warning: implicit truncation of vector type [-Wconversion]
-            float presence = hash21(seed);
+compute.hlsl:397:23: error: use of undeclared identifier 'atomicAdd'
+    uint next_index = atomicAdd(spawn_state[0].next_projectile, 1u);
+                      ^
+compute.hlsl:468:5: error: use of undeclared identifier 'atomicAdd'
+    atomicAdd(cell_counts[index], 1u);
+    ^
+compute.hlsl:552:19: error: use of undeclared identifier 'atomicAdd'
+    uint offset = atomicAdd(cell_scratch[idx], 1u);
                   ^
+compute.hlsl:595:19: error: expected unqualified-id
+            float discard;
+                  ^
+compute.hlsl:596:58: error: expected expression
+            InterlockedAdd(body_delta_pos[id].x, corr.x, discard);
+                                                         ^
+compute.hlsl:597:58: error: expected expression
+            InterlockedAdd(body_delta_pos[id].y, corr.y, discard);
+                                                         ^
+compute.hlsl:647:23: error: expected unqualified-id
+                float discard;
+                      ^
+compute.hlsl:648:64: error: expected expression
+                InterlockedAdd(body_delta_pos[id].x, corr_i.x, discard);
+                                                               ^
+compute.hlsl:649:64: error: expected expression
+                InterlockedAdd(body_delta_pos[id].y, corr_i.y, discard);
+                                                               ^
+compute.hlsl:650:63: error: expected expression
+                InterlockedAdd(body_delta_pos[j].x, corr_j.x, discard);
+                                                              ^
+compute.hlsl:651:63: error: expected expression
+                InterlockedAdd(body_delta_pos[j].y, corr_j.y, discard);
+                                                              ^
 
+Shader compilation failed: compute.hlsl
 compiling shader:
 compiling shader:
+Recompiling compute.hlsl
+compiling shader:
+compute.hlsl:597:13: error: no matching function for call to 'InterlockedAdd'
+            InterlockedAdd(body_delta_pos[id].x, corr.x);
+            ^~~~~~~~~~~~~~
+compute.hlsl:597:13: note: candidate function not viable: no known conversion from 'float' to 'unsigned long long &' for 1st argument
+            InterlockedAdd(body_delta_pos[id].x, corr.x);
+            ^              ~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:597:13: note: candidate function not viable: no known conversion from 'float' to 'int &' for 1st argument
+            InterlockedAdd(body_delta_pos[id].x, corr.x);
+            ^              ~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:598:13: error: no matching function for call to 'InterlockedAdd'
+            InterlockedAdd(body_delta_pos[id].y, corr.y);
+            ^~~~~~~~~~~~~~
+compute.hlsl:598:13: note: candidate function not viable: no known conversion from 'float' to 'unsigned long long &' for 1st argument
+            InterlockedAdd(body_delta_pos[id].y, corr.y);
+            ^              ~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:598:13: note: candidate function not viable: no known conversion from 'float' to 'int &' for 1st argument
+            InterlockedAdd(body_delta_pos[id].y, corr.y);
+            ^              ~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:648:17: error: no matching function for call to 'InterlockedAdd'
+                InterlockedAdd(body_delta_pos[id].x, corr_i.x);
+                ^~~~~~~~~~~~~~
+compute.hlsl:648:17: note: candidate function not viable: no known conversion from 'float' to 'unsigned long long &' for 1st argument
+                InterlockedAdd(body_delta_pos[id].x, corr_i.x);
+                ^              ~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:648:17: note: candidate function not viable: no known conversion from 'float' to 'int &' for 1st argument
+                InterlockedAdd(body_delta_pos[id].x, corr_i.x);
+                ^              ~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:649:17: error: no matching function for call to 'InterlockedAdd'
+                InterlockedAdd(body_delta_pos[id].y, corr_i.y);
+                ^~~~~~~~~~~~~~
+compute.hlsl:649:17: note: candidate function not viable: no known conversion from 'float' to 'unsigned long long &' for 1st argument
+                InterlockedAdd(body_delta_pos[id].y, corr_i.y);
+                ^              ~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:649:17: note: candidate function not viable: no known conversion from 'float' to 'int &' for 1st argument
+                InterlockedAdd(body_delta_pos[id].y, corr_i.y);
+                ^              ~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:650:17: error: no matching function for call to 'InterlockedAdd'
+                InterlockedAdd(body_delta_pos[j].x, corr_j.x);
+                ^~~~~~~~~~~~~~
+compute.hlsl:650:17: note: candidate function not viable: no known conversion from 'float' to 'unsigned long long &' for 1st argument
+                InterlockedAdd(body_delta_pos[j].x, corr_j.x);
+                ^              ~~~~~~~~~~~~~~~~~~~
+compute.hlsl:650:17: note: candidate function not viable: no known conversion from 'float' to 'int &' for 1st argument
+                InterlockedAdd(body_delta_pos[j].x, corr_j.x);
+                ^              ~~~~~~~~~~~~~~~~~~~
+compute.hlsl:651:17: error: no matching function for call to 'InterlockedAdd'
+                InterlockedAdd(body_delta_pos[j].y, corr_j.y);
+                ^~~~~~~~~~~~~~
+compute.hlsl:651:17: note: candidate function not viable: no known conversion from 'float' to 'unsigned long long &' for 1st argument
+                InterlockedAdd(body_delta_pos[j].y, corr_j.y);
+                ^              ~~~~~~~~~~~~~~~~~~~
+compute.hlsl:651:17: note: candidate function not viable: no known conversion from 'float' to 'int &' for 1st argument
+                InterlockedAdd(body_delta_pos[j].y, corr_j.y);
+                ^              ~~~~~~~~~~~~~~~~~~~
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader:
+compute.hlsl:346:5: error: use of undeclared identifier 'body_delta_pos'
+    body_delta_pos[id] = float2(0.0f, 0.0f);
+    ^
+compute.hlsl:414:5: error: use of undeclared identifier 'body_delta_pos'
+    body_delta_pos[slot] = float2(0.0f, 0.0f);
+    ^
+compute.hlsl:570:5: error: use of undeclared identifier 'body_delta_pos'
+    body_delta_pos[id] = float2(0.0f, 0.0f);
+    ^
+compute.hlsl:597:28: error: use of undeclared identifier 'body_delta_pos'
+            InterlockedAdd(body_delta_pos[id].x, corr.x);
+                           ^
+compute.hlsl:598:28: error: use of undeclared identifier 'body_delta_pos'
+            InterlockedAdd(body_delta_pos[id].y, corr.y);
+                           ^
+compute.hlsl:648:32: error: use of undeclared identifier 'body_delta_pos'
+                InterlockedAdd(body_delta_pos[id].x, corr_i.x);
+                               ^
+compute.hlsl:649:32: error: use of undeclared identifier 'body_delta_pos'
+                InterlockedAdd(body_delta_pos[id].y, corr_i.y);
+                               ^
+compute.hlsl:650:32: error: use of undeclared identifier 'body_delta_pos'
+                InterlockedAdd(body_delta_pos[j].x, corr_j.x);
+                               ^
+compute.hlsl:651:32: error: use of undeclared identifier 'body_delta_pos'
+                InterlockedAdd(body_delta_pos[j].y, corr_j.y);
+                               ^
+compute.hlsl:666:17: error: use of undeclared identifier 'body_delta_pos'
+    float2 dp = body_delta_pos[id] * push_constants.relaxation;
+                ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader:
+compute.hlsl:115:9: error: use of undeclared identifier 'InterlockedCompareExchange'
+        InterlockedCompareExchange(body_delta_buffer, address, expected, desired, original);
+        ^
+compute.hlsl:386:5: error: use of undeclared identifier 'body_delta_pos'
+    body_delta_pos[id] = float2(0.0f, 0.0f);
+    ^
+compute.hlsl:454:5: error: use of undeclared identifier 'body_delta_pos'
+    body_delta_pos[slot] = float2(0.0f, 0.0f);
+    ^
+compute.hlsl:610:5: error: use of undeclared identifier 'body_delta_pos'
+    body_delta_pos[id] = float2(0.0f, 0.0f);
+    ^
+compute.hlsl:637:28: error: use of undeclared identifier 'body_delta_pos'
+            InterlockedAdd(body_delta_pos[id].x, corr.x);
+                           ^
+compute.hlsl:638:28: error: use of undeclared identifier 'body_delta_pos'
+            InterlockedAdd(body_delta_pos[id].y, corr.y);
+                           ^
+compute.hlsl:688:32: error: use of undeclared identifier 'body_delta_pos'
+                InterlockedAdd(body_delta_pos[id].x, corr_i.x);
+                               ^
+compute.hlsl:689:32: error: use of undeclared identifier 'body_delta_pos'
+                InterlockedAdd(body_delta_pos[id].y, corr_i.y);
+                               ^
+compute.hlsl:690:32: error: use of undeclared identifier 'body_delta_pos'
+                InterlockedAdd(body_delta_pos[j].x, corr_j.x);
+                               ^
+compute.hlsl:691:32: error: use of undeclared identifier 'body_delta_pos'
+                InterlockedAdd(body_delta_pos[j].y, corr_j.y);
+                               ^
+compute.hlsl:706:17: error: use of undeclared identifier 'body_delta_pos'
+    float2 dp = body_delta_pos[id] * push_constants.relaxation;
+                ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader:
+compute.hlsl:115:9: error: use of undeclared identifier 'InterlockedCompareExchange'
+        InterlockedCompareExchange(body_delta_buffer, address, expected, desired, original);
+        ^
+compute.hlsl:386:5: error: use of undeclared identifier 'body_delta_pos'
+    body_delta_pos[id] = float2(0.0f, 0.0f);
+    ^
+compute.hlsl:454:5: error: use of undeclared identifier 'body_delta_pos'
+    body_delta_pos[slot] = float2(0.0f, 0.0f);
+    ^
+compute.hlsl:610:5: error: use of undeclared identifier 'body_delta_pos'
+    body_delta_pos[id] = float2(0.0f, 0.0f);
+    ^
+compute.hlsl:637:28: error: use of undeclared identifier 'body_delta_pos'
+            InterlockedAdd(body_delta_pos[id].x, corr.x);
+                           ^
+compute.hlsl:638:28: error: use of undeclared identifier 'body_delta_pos'
+            InterlockedAdd(body_delta_pos[id].y, corr.y);
+                           ^
+compute.hlsl:688:32: error: use of undeclared identifier 'body_delta_pos'
+                InterlockedAdd(body_delta_pos[id].x, corr_i.x);
+                               ^
+compute.hlsl:689:32: error: use of undeclared identifier 'body_delta_pos'
+                InterlockedAdd(body_delta_pos[id].y, corr_i.y);
+                               ^
+compute.hlsl:690:32: error: use of undeclared identifier 'body_delta_pos'
+                InterlockedAdd(body_delta_pos[j].x, corr_j.x);
+                               ^
+compute.hlsl:691:32: error: use of undeclared identifier 'body_delta_pos'
+                InterlockedAdd(body_delta_pos[j].y, corr_j.y);
+                               ^
+compute.hlsl:706:17: error: use of undeclared identifier 'body_delta_pos'
+    float2 dp = body_delta_pos[id] * push_constants.relaxation;
+                ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader:
+compute.hlsl:115:9: error: use of undeclared identifier 'InterlockedCompareExchange'
+        InterlockedCompareExchange(body_delta_buffer, address, expected, desired, original);
+        ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader:
+compute.hlsl:95:18: error: use of undeclared identifier 'body_delta_buffer'; did you mean 'body_delta_accum'?
+    uint2 bits = body_delta_buffer.Load2(offset);
+                 ^~~~~~~~~~~~~~~~~
+                 body_delta_accum
+compute.hlsl:74:49: note: 'body_delta_accum' declared here
+[[vk::binding(26, 0)]] RWStructuredBuffer<int2> body_delta_accum;
+                                                ^
+compute.hlsl:95:36: error: no member named 'Load2' in 'RWStructuredBuffer<vector<int, 2> >'; did you mean 'Load'?
+    uint2 bits = body_delta_buffer.Load2(offset);
+                                   ^~~~~
+                                   Load
+note: 'Load' declared here
+compute.hlsl:101:5: error: use of undeclared identifier 'body_delta_buffer'; did you mean 'body_delta_offset'?
+    body_delta_buffer.Store2(offset, asuint(value));
+    ^~~~~~~~~~~~~~~~~
+    body_delta_offset
+compute.hlsl:89:6: note: 'body_delta_offset' declared here
+uint body_delta_offset(uint id) {
+     ^
+compute.hlsl:101:22: error: member reference base type 'uint (uint)' is not a structure or union
+    body_delta_buffer.Store2(offset, asuint(value));
+    ~~~~~~~~~~~~~~~~~^~~~~~~
+compute.hlsl:109:21: error: use of undeclared identifier 'body_delta_buffer'; did you mean 'body_delta_accum'?
+    uint expected = body_delta_buffer.Load(address);
+                    ^~~~~~~~~~~~~~~~~
+                    body_delta_accum
+compute.hlsl:74:49: note: 'body_delta_accum' declared here
+[[vk::binding(26, 0)]] RWStructuredBuffer<int2> body_delta_accum;
+                                                ^
+compute.hlsl:109:10: warning: implicit truncation of vector type [-Wconversion]
+    uint expected = body_delta_buffer.Load(address);
+         ^
+compute.hlsl:115:36: error: use of undeclared identifier 'body_delta_buffer'
+        InterlockedCompareExchange(body_delta_buffer, address, expected, desired, original);
+                                   ^
+
+Failed: compute.hlsl
 Recompiling compute.hlsl
 compiling shader:
 compiling shader:
@@ -126,104 +416,7 @@ compiling shader:
 compiling shader:
 compiling shader:
 compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-compiling shader:
-Recompiling compute.hlsl
-compiling shader:
+Window resized to 1856x1016
 compiling shader:
 compiling shader:
 compiling shader:

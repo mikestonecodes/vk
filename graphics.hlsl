@@ -4,7 +4,7 @@ struct PushConstants {
 };
 [[vk::push_constant]] PushConstants push_constants;
 
-[[vk::binding(0, 0)]] StructuredBuffer<uint> buffers[];
+[[vk::binding(0, 0)]] StructuredBuffer<uint> accumulation_buffer;
 
 static const float2 POSITIONS[3] = {
     float2(-1.0f, -1.0f), float2(3.0f, -1.0f), float2(-1.0f, 3.0f)
@@ -53,10 +53,10 @@ float4 sample_accum(int2 coord, uint w, uint h) {
     coord.y = clamp(coord.y, 0, max_y);
 
     uint index = (uint(coord.y) * w + uint(coord.x)) * 4u;
-    float3 col = float3(buffers[0][index + 0],
-                        buffers[0][index + 1],
-                        buffers[0][index + 2]) / COLOR_SCALE;
-    float density = float(buffers[0][index + 3]) / COLOR_SCALE;
+    float3 col = float3(accumulation_buffer[index + 0],
+                        accumulation_buffer[index + 1],
+                        accumulation_buffer[index + 2]) / COLOR_SCALE;
+    float density = float(accumulation_buffer[index + 3]) / COLOR_SCALE;
     return float4(col, density);
 }
 
