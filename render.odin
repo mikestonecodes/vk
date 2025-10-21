@@ -2,6 +2,7 @@ package main
 
 import "base:runtime"
 import "core:bytes"
+import "core:c"
 import "core:fmt"
 import image "core:image"
 import png "core:image/png"
@@ -121,7 +122,7 @@ init_render_resources :: proc() -> bool {
 		fragment_module = "graphics_fs.spv",
 		push = PushConstantInfo {
 			label = "PostProcessPushConstants",
-			stage = {vk.ShaderStageFlag.FRAGMENT},
+			stage = {vk.ShaderStageFlag.VERTEX, vk.ShaderStageFlag.FRAGMENT},
 			size = u32(size_of(PostProcessPushConstants)),
 		},
 	}
@@ -186,13 +187,14 @@ composite_to_swapchain :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 
 	apply_compute_to_fragment_barrier(frame.cmd, &accumulation_buffer)
 
+	old_layout := element.layout
 	to_attachment := vk.ImageMemoryBarrier2 {
 		sType               = .IMAGE_MEMORY_BARRIER_2,
 		srcStageMask        = {.TOP_OF_PIPE},
 		srcAccessMask       = {},
 		dstStageMask        = {.COLOR_ATTACHMENT_OUTPUT},
 		dstAccessMask       = {.COLOR_ATTACHMENT_WRITE},
-		oldLayout           = .PRESENT_SRC_KHR,
+		oldLayout           = old_layout,
 		newLayout           = .ATTACHMENT_OPTIMAL,
 		image               = element.image,
 		subresourceRange    = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
@@ -205,6 +207,7 @@ composite_to_swapchain :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 			pImageMemoryBarriers  = &to_attachment,
 		},
 	)
+	element.layout = vk.ImageLayout.ATTACHMENT_OPTIMAL
 
 	color_attachment := vk.RenderingAttachmentInfo {
 		sType       = .RENDERING_ATTACHMENT_INFO,
@@ -238,10 +241,44 @@ composite_to_swapchain :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 		offset = {0, 0},
 		extent = {u32(window_width), u32(window_height)},
 	}
-	vk.CmdSetViewport(frame.cmd, 0, 1, &viewport)
-	vk.CmdSetScissor(frame.cmd, 0, 1, &scissor)
+	vk.CmdSetViewportWithCount(frame.cmd, 1, &viewport)
+	vk.CmdSetScissorWithCount(frame.cmd, 1, &scissor)
 	vk.CmdSetPrimitiveTopology(frame.cmd, vk.PrimitiveTopology.TRIANGLE_LIST)
 	vk.CmdSetFrontFace(frame.cmd, vk.FrontFace.CLOCKWISE)
+	vk.CmdSetPolygonModeEXT(frame.cmd, vk.PolygonMode.FILL)
+	vk.CmdSetRasterizerDiscardEnable(frame.cmd, b32(false))
+	vk.CmdSetCullMode(frame.cmd, vk.CullModeFlags_NONE)
+	vk.CmdSetDepthClampEnableEXT(frame.cmd, b32(false))
+	vk.CmdSetDepthBiasEnable(frame.cmd, b32(false))
+	vk.CmdSetDepthTestEnable(frame.cmd, b32(false))
+	vk.CmdSetDepthWriteEnable(frame.cmd, b32(false))
+	vk.CmdSetDepthBoundsTestEnable(frame.cmd, b32(false))
+	vk.CmdSetDepthBounds(frame.cmd, 0.0, 1.0)
+	vk.CmdSetStencilTestEnable(frame.cmd, b32(false))
+	vk.CmdSetPrimitiveRestartEnable(frame.cmd, b32(false))
+
+	sample_flags := vk.SampleCountFlags{vk.SampleCountFlag._1}
+	vk.CmdSetRasterizationSamplesEXT(frame.cmd, sample_flags)
+	sample_mask := vk.SampleMask(0xffffffff)
+	vk.CmdSetSampleMaskEXT(frame.cmd, sample_flags, &sample_mask)
+	vk.CmdSetAlphaToCoverageEnableEXT(frame.cmd, b32(false))
+	vk.CmdSetAlphaToOneEnableEXT(frame.cmd, b32(false))
+	vk.CmdSetLogicOpEnableEXT(frame.cmd, b32(false))
+
+	color_blend_enable := b32(false)
+	vk.CmdSetColorBlendEnableEXT(frame.cmd, 0, 1, &color_blend_enable)
+	color_blend_equation := vk.ColorBlendEquationEXT {
+		srcColorBlendFactor  = vk.BlendFactor.ONE,
+		dstColorBlendFactor  = vk.BlendFactor.ZERO,
+		colorBlendOp         = vk.BlendOp.ADD,
+		srcAlphaBlendFactor  = vk.BlendFactor.ONE,
+		dstAlphaBlendFactor  = vk.BlendFactor.ZERO,
+		alphaBlendOp         = vk.BlendOp.ADD,
+	}
+	vk.CmdSetColorBlendEquationEXT(frame.cmd, 0, 1, &color_blend_equation)
+	color_write_mask := vk.ColorComponentFlags{vk.ColorComponentFlag.R, vk.ColorComponentFlag.G, vk.ColorComponentFlag.B, vk.ColorComponentFlag.A}
+	vk.CmdSetColorWriteMaskEXT(frame.cmd, 0, 1, &color_write_mask)
+	vk.CmdSetVertexInputEXT(frame.cmd, 0, nil, 0, nil)
 
 	bind(frame, &render_shader_states[1], .GRAPHICS, &post_process_push_constants)
 	vk.CmdDraw(frame.cmd, 3, 1, 0, 0)
@@ -266,6 +303,7 @@ composite_to_swapchain :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 			pImageMemoryBarriers  = &to_present,
 		},
 	)
+	element.layout = vk.ImageLayout.PRESENT_SRC_KHR
 }
 
 cleanup_render_resources :: proc() {

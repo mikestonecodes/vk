@@ -82,6 +82,15 @@ bind :: proc(
 	push_size := u32(size_of(T))
 
 	if state.stage_count > 0 {
+		if bind_point == vk.PipelineBindPoint.GRAPHICS {
+			null_shaders := [3]vk.ShaderEXT{{}, {}, {}}
+			null_stages := [3]vk.ShaderStageFlags{
+				{vk.ShaderStageFlag.TESSELLATION_CONTROL},
+				{vk.ShaderStageFlag.TESSELLATION_EVALUATION},
+				{vk.ShaderStageFlag.GEOMETRY},
+			}
+			vk.CmdBindShadersEXT(frame.cmd, u32(len(null_stages)), &null_stages[0], &null_shaders[0])
+		}
 		vk.CmdBindShadersEXT(frame.cmd, state.stage_count, &state.stages[0], &state.shaders[0])
 	}
 	vk.CmdBindDescriptorSets(frame.cmd, bind_point, state.layout, 0, 1, &global_desc_set, 0, nil)
@@ -241,6 +250,7 @@ shader_stage_enabled :: proc(flags: vk.ShaderStageFlags, stage: vk.ShaderStageFl
 create_shader_object :: proc(
 	path: string,
 	stage: vk.ShaderStageFlag,
+	next_stage: vk.ShaderStageFlags,
 	entry: cstring,
 	layouts: []vk.DescriptorSetLayout,
 	push_range: ^vk.PushConstantRange,
@@ -252,7 +262,7 @@ create_shader_object :: proc(
 		sType               = vk.StructureType.SHADER_CREATE_INFO_EXT,
 		flags               = {},
 		stage               = {stage},
-		nextStage           = {},
+		nextStage           = next_stage,
 		codeType            = vk.ShaderCodeTypeEXT.SPIRV,
 		codeSize            = len(code) * size_of(u32),
 		pCode               = raw_data(code),
@@ -319,6 +329,7 @@ create_shader_program :: proc(config: ^ShaderProgramConfig, state: ^ShaderProgra
 		shader := create_shader_object(
 			config.compute_module,
 			vk.ShaderStageFlag.COMPUTE,
+			vk.ShaderStageFlags{},
 			cstring("main"),
 			layouts[:],
 			range_ptr,
@@ -332,13 +343,26 @@ create_shader_program :: proc(config: ^ShaderProgramConfig, state: ^ShaderProgra
 		stages[0] = {vk.ShaderStageFlag.COMPUTE}
 		shaders[0] = shader
 	} else {
+		gfx_range_ptr: ^vk.PushConstantRange = nil
+		gfx_range_count: u32 = 0
+		if range.size > 0 {
+			gfx_range_ptr = &range
+			gfx_range_count = 1
+		}
+
+		next_stage := vk.ShaderStageFlags{}
+		if config.fragment_module != "" {
+			next_stage = vk.ShaderStageFlags{vk.ShaderStageFlag.FRAGMENT}
+		}
+
 		vertex_shader := create_shader_object(
 			config.vertex_module,
 			vk.ShaderStageFlag.VERTEX,
+			next_stage,
 			cstring("vs_main"),
 			layouts[:],
-			nil,
-			0,
+			gfx_range_ptr,
+			gfx_range_count,
 		) or_return
 
 		shader_handles[created] = vertex_shader
@@ -348,20 +372,14 @@ create_shader_program :: proc(config: ^ShaderProgramConfig, state: ^ShaderProgra
 		shaders[0] = vertex_shader
 		stage_count = 1
 
-		range_ptr: ^vk.PushConstantRange = nil
-		range_count: u32 = 0
-		if range.size > 0 && shader_stage_enabled(range.stageFlags, vk.ShaderStageFlag.FRAGMENT) {
-			range_ptr = &range
-			range_count = 1
-		}
-
 		fragment_shader := create_shader_object(
 			config.fragment_module,
 			vk.ShaderStageFlag.FRAGMENT,
+			vk.ShaderStageFlags{},
 			cstring("fs_main"),
 			layouts[:],
-			range_ptr,
-			range_count,
+			gfx_range_ptr,
+			gfx_range_count,
 		) or_return
 
 		shader_handles[created] = fragment_shader

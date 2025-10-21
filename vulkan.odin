@@ -32,6 +32,7 @@ image_count: c.uint32_t = 0
 // Timeline semaphore for render synchronization
 timeline_semaphore: vk.Semaphore
 timeline_value: c.uint64_t = 0
+image_available_semaphore: vk.Semaphore
 
 MAX_FRAMES_IN_FLIGHT :: c.uint32_t(3)
 MAX_SWAPCHAIN_IMAGES :: c.uint32_t(8) // 8 is plenty; most drivers use 2–4
@@ -48,6 +49,7 @@ SwapchainElement :: struct {
 	commandBuffer: vk.CommandBuffer,
 	image:         vk.Image,
 	imageView:     vk.ImageView,
+	layout:        vk.ImageLayout,
 	last_value:    c.uint64_t,
 }
 
@@ -237,7 +239,7 @@ acquire_next_image :: proc(_: c.uint32_t) -> bool {
 		device,
 		swapchain,
 		max(u64),
-		{},
+		image_available_semaphore,
 		{},
 		&image_index,
 	)
@@ -256,18 +258,31 @@ submit_commands :: proc(element: ^SwapchainElement, frame_index: u32) {
 	timeline_value += 1
 	new_value := timeline_value
 
-	wait_infos: [1]vk.SemaphoreSubmitInfo
+	wait_infos: [2]vk.SemaphoreSubmitInfo
 	wait_count: u32 = 0
 	wait_ptr: ^vk.SemaphoreSubmitInfo = nil
 
+	if image_available_semaphore != {} {
+		idx := int(wait_count)
+		wait_infos[idx] = vk.SemaphoreSubmitInfo {
+			sType     = vk.StructureType.SEMAPHORE_SUBMIT_INFO,
+			semaphore = image_available_semaphore,
+			value     = 0,
+			stageMask = {vk.PipelineStageFlag2.COLOR_ATTACHMENT_OUTPUT},
+		}
+		wait_count += 1
+		wait_ptr = &wait_infos[0]
+	}
+
 	if old_value != 0 {
-		wait_infos[0] = vk.SemaphoreSubmitInfo {
+		idx := int(wait_count)
+		wait_infos[idx] = vk.SemaphoreSubmitInfo {
 			sType     = vk.StructureType.SEMAPHORE_SUBMIT_INFO,
 			semaphore = timeline_semaphore,
 			value     = old_value,
 			stageMask = {vk.PipelineStageFlag2.TOP_OF_PIPE},
 		}
-		wait_count = 1
+		wait_count += 1
 		wait_ptr = &wait_infos[0]
 	}
 
@@ -456,28 +471,33 @@ create_logical_device :: proc() -> bool {
 		extendedDynamicState = false,
 	}
 
-	rendering_features := vk.PhysicalDeviceDynamicRenderingFeatures {
-		sType            = .PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-		pNext            = &extended_dynamic_state,
-		dynamicRendering = false,
-	}
+rendering_features := vk.PhysicalDeviceDynamicRenderingFeatures {
+	sType            = .PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+	pNext            = &extended_dynamic_state,
+	dynamicRendering = false,
+}
 
-	timeline := vk.PhysicalDeviceTimelineSemaphoreFeatures {
-		sType             = .PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
-		pNext             = &rendering_features,
-		timelineSemaphore = true,
-	}
+sync2 := vk.PhysicalDeviceSynchronization2Features {
+	sType            = .PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
+	pNext            = &rendering_features,
+	synchronization2 = false,
+}
 
-	sync2 := vk.PhysicalDeviceSynchronization2Features {
-		sType            = .PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
-		pNext            = &timeline,
-		synchronization2 = false,
+	vulkan12 := vk.PhysicalDeviceVulkan12Features {
+		sType                                   = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+		pNext                                   = &sync2,
+		descriptorIndexing                      = true,
+		descriptorBindingPartiallyBound         = true,
+		descriptorBindingUpdateUnusedWhilePending = true,
+		descriptorBindingVariableDescriptorCount = true,
+		timelineSemaphore                       = true,
+		runtimeDescriptorArray                  = true,
 	}
 
 	features2 := vk.PhysicalDeviceFeatures2 {
 		sType    = .PHYSICAL_DEVICE_FEATURES_2,
 		features = vk.PhysicalDeviceFeatures{fragmentStoresAndAtomics = true},
-		pNext    = &sync2,
+		pNext    = &vulkan12,
 	}
 
 	vk.GetPhysicalDeviceFeatures2(phys_device, &features2)
@@ -497,6 +517,16 @@ create_logical_device :: proc() -> bool {
 		return false
 	}
 
+	if vulkan12.descriptorIndexing == false ||
+	   vulkan12.descriptorBindingPartiallyBound == false ||
+	   vulkan12.descriptorBindingUpdateUnusedWhilePending == false ||
+	   vulkan12.descriptorBindingVariableDescriptorCount == false ||
+	   vulkan12.runtimeDescriptorArray == false ||
+	   vulkan12.timelineSemaphore == false {
+		fmt.println("runtime descriptor arrays not supported on this device")
+		return false
+	}
+
 	if sync2.synchronization2 == false {
 		fmt.println("VK_KHR_synchronization2 not supported on this device")
 		return false
@@ -505,6 +535,12 @@ create_logical_device :: proc() -> bool {
 	shader_object_features.shaderObject = true
 	extended_dynamic_state.extendedDynamicState = true
 	rendering_features.dynamicRendering = true
+	vulkan12.runtimeDescriptorArray = true
+	vulkan12.descriptorIndexing = true
+	vulkan12.descriptorBindingPartiallyBound = true
+	vulkan12.descriptorBindingUpdateUnusedWhilePending = true
+	vulkan12.descriptorBindingVariableDescriptorCount = true
+	vulkan12.timelineSemaphore = true
 	sync2.synchronization2 = true
 
 	device_extension_names := [?]cstring {
@@ -871,6 +907,7 @@ create_swapchain :: proc() -> bool {
 	for i in 0 ..< image_count {
 		elements[i].image = imgs[i]
 		elements[i].last_value = 0
+		elements[i].layout = vk.ImageLayout.UNDEFINED
 
 		elements[i].imageView = vkw(
 			vk.CreateImageView,
@@ -999,6 +1036,14 @@ init_vulkan :: proc() -> bool {
 
 	if vk.CreateSemaphore(device, &sem_info, nil, &timeline_semaphore) != vk.Result.SUCCESS {
 		fmt.println("Failed to create timeline semaphore")
+		return false
+	}
+
+	binary_info := vk.SemaphoreCreateInfo {sType = vk.StructureType.SEMAPHORE_CREATE_INFO}
+	if vk.CreateSemaphore(device, &binary_info, nil, &image_available_semaphore) != vk.Result.SUCCESS {
+		vk.DestroySemaphore(device, timeline_semaphore, nil)
+		timeline_semaphore = {}
+		fmt.println("Failed to create image-available semaphore")
 		return false
 	}
 
@@ -1236,6 +1281,10 @@ destroy_all_sync_objects :: proc() {
 	if timeline_semaphore != {} {
 		vk.DestroySemaphore(device, timeline_semaphore, nil)
 		timeline_semaphore = {}
+	}
+	if image_available_semaphore != {} {
+		vk.DestroySemaphore(device, image_available_semaphore, nil)
+		image_available_semaphore = {}
 	}
 }
 destroy_swapchain :: proc() {
