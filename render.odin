@@ -47,20 +47,6 @@ CameraStateGPU :: struct {
 	pad1:        [3]u32,
 }
 
-accumulation_buffer: BufferResource
-camera_state_buffer: BufferResource
-body_pos_buffer: BufferResource
-body_pos_pred_buffer: BufferResource
-body_vel_buffer: BufferResource
-body_radius_buffer: BufferResource
-body_inv_mass_buffer: BufferResource
-body_active_buffer: BufferResource
-body_delta_buffer: BufferResource
-cell_counts_buffer: BufferResource
-cell_offsets_buffer: BufferResource
-cell_scratch_buffer: BufferResource
-sorted_indices_buffer: BufferResource
-spawn_state_buffer: BufferResource
 
 PostProcessPushConstants :: struct {
 	screen_width:  u32,
@@ -99,7 +85,7 @@ ComputePushConstants :: struct {
 	projectile_max_distance: f32,
 	player_radius:           f32,
 	player_damping:          f32,
-	spawn_projectile:        u32,
+	spawn_projectile:        b32,
 	mouse_ndc_x:             f32,
 	mouse_ndc_y:             f32,
 	projectile_pool:         u32,
@@ -129,121 +115,98 @@ compute_push_constants: ComputePushConstants
 post_process_push_constants: PostProcessPushConstants
 physics_initialized: bool
 
+ComputeTask :: struct {
+	mode:           u32,
+	pipeline_index: u32,
+	group:          [3]u32,
+	repeat_count:   u32,
+	label:          string,
+}
+
+
+simulation_dispatch_table: []ComputeTask = {
+	{DISPATCH_CAMERA_UPDATE, 0, [3]u32{1, 1, 1}, 1, "camera"},
+	{DISPATCH_INITIALIZE, 0, [3]u32{0, 0, 0}, 1, "init"}, // filled dynamically
+	{DISPATCH_CLEAR_GRID, 0, [3]u32{0, 0, 0}, 1, "clear_grid"},
+	{DISPATCH_SPAWN_PROJECTILE, 0, [3]u32{1, 1, 1}, 1, "spawn"},
+	{DISPATCH_INTEGRATE, 0, [3]u32{0, 0, 0}, 1, "integrate"},
+	{DISPATCH_HISTOGRAM, 0, [3]u32{0, 0, 0}, 1, "histogram"},
+	{DISPATCH_PREFIX_COPY, 0, [3]u32{0, 0, 0}, 1, "prefix_copy"},
+	{DISPATCH_PREFIX_FINALIZE, 0, [3]u32{0, 0, 0}, 1, "prefix_finalize"},
+	{DISPATCH_SCATTER, 0, [3]u32{0, 0, 0}, 1, "scatter"},
+	{DISPATCH_ZERO_DELTAS, 0, [3]u32{0, 0, 0}, 1, "zero_deltas"},
+	{DISPATCH_CONSTRAINTS, 0, [3]u32{0, 0, 0}, PHYS_SOLVER_ITERATIONS, "constraints"},
+	{DISPATCH_APPLY_DELTAS, 0, [3]u32{0, 0, 0}, 1, "apply_deltas"},
+	{DISPATCH_FINALIZE, 0, [3]u32{0, 0, 0}, 1, "finalize"},
+	{DISPATCH_RENDER, 0, [3]u32{0, 0, 0}, 1, "render"},
+}
+
+body_vec2_size := vk.DeviceSize(size_of(f32) * 2)
+body_scalar_size := vk.DeviceSize(size_of(f32))
+body_uint_size := vk.DeviceSize(size_of(u32))
+body_capacity_size := vk.DeviceSize(PHYS_MAX_BODIES)
+grid_cell_size := vk.DeviceSize(GRID_CELL_COUNT)
+
+
+buffer_specs := []struct {
+	size:    vk.DeviceSize,
+	flags:   vk.BufferUsageFlags,
+	binding: u32,
+} {
+	{
+		vk.DeviceSize(window_width * window_height * 4 * size_of(u32)),
+		{.STORAGE_BUFFER, .TRANSFER_DST},
+		0,
+	},
+	{vk.DeviceSize(size_of(CameraStateGPU)), {.STORAGE_BUFFER, .TRANSFER_DST}, 3},
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 20},
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 21},
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 22},
+	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 23},
+	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 24},
+	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 25},
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 26},
+	{vk.DeviceSize(size_of(SpawnStateGPU)), {.STORAGE_BUFFER}, 27},
+	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 30},
+	{vk.DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size, {.STORAGE_BUFFER}, 31},
+	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 32},
+	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 33},
+}
+
+buffers: Array(32, BufferResource)
+
+cleanup_render_resources :: proc() {
+
+	for &buffer in buffers.data {
+		destroy_buffer(&buffer)
+	}
+	physics_initialized = false
+}
+
 init_render_resources :: proc() -> bool {
 
-	destroy_buffer(&accumulation_buffer)
-	destroy_buffer(&camera_state_buffer)
-	destroy_buffer(&body_pos_buffer)
-	destroy_buffer(&body_pos_pred_buffer)
-	destroy_buffer(&body_vel_buffer)
-	destroy_buffer(&body_radius_buffer)
-	destroy_buffer(&body_inv_mass_buffer)
-	destroy_buffer(&body_active_buffer)
-	destroy_buffer(&body_delta_buffer)
-	destroy_buffer(&cell_counts_buffer)
-	destroy_buffer(&cell_offsets_buffer)
-	destroy_buffer(&cell_scratch_buffer)
-	destroy_buffer(&sorted_indices_buffer)
-	destroy_buffer(&spawn_state_buffer)
-
-	create_buffer(
-		&accumulation_buffer,
-		vk.DeviceSize(window_width) *
-		vk.DeviceSize(window_height) *
-		4 *
-		vk.DeviceSize(size_of(u32)), // 4 channels (RGBA)
-		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
-	)
-
-	create_buffer(
-		&camera_state_buffer,
-		vk.DeviceSize(size_of(CameraStateGPU)),
-		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
-	)
-
-	body_vec2_size := vk.DeviceSize(size_of(f32) * 2)
-	body_scalar_size := vk.DeviceSize(size_of(f32))
-	body_uint_size := vk.DeviceSize(size_of(u32))
-	body_capacity_size := vk.DeviceSize(PHYS_MAX_BODIES)
-	grid_cell_size := vk.DeviceSize(GRID_CELL_COUNT)
-
-	create_buffer(
-		&body_pos_buffer,
-		body_capacity_size * body_vec2_size,
-		{vk.BufferUsageFlag.STORAGE_BUFFER},
-	)
-	create_buffer(
-		&body_pos_pred_buffer,
-		body_capacity_size * body_vec2_size,
-		{vk.BufferUsageFlag.STORAGE_BUFFER},
-	)
-	create_buffer(
-		&body_vel_buffer,
-		body_capacity_size * body_vec2_size,
-		{vk.BufferUsageFlag.STORAGE_BUFFER},
-	)
-	create_buffer(
-		&body_radius_buffer,
-		body_capacity_size * body_scalar_size,
-		{vk.BufferUsageFlag.STORAGE_BUFFER},
-	)
-	create_buffer(
-		&body_inv_mass_buffer,
-		body_capacity_size * body_scalar_size,
-		{vk.BufferUsageFlag.STORAGE_BUFFER},
-	)
-	create_buffer(
-		&body_active_buffer,
-		body_capacity_size * body_uint_size,
-		{vk.BufferUsageFlag.STORAGE_BUFFER},
-	)
-	create_buffer(
-		&body_delta_buffer,
-		body_capacity_size * body_vec2_size,
-		{vk.BufferUsageFlag.STORAGE_BUFFER},
-	)
-	create_buffer(
-		&cell_counts_buffer,
-		grid_cell_size * body_uint_size,
-		{vk.BufferUsageFlag.STORAGE_BUFFER},
-	)
-	create_buffer(
-		&cell_offsets_buffer,
-		(vk.DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size),
-		{vk.BufferUsageFlag.STORAGE_BUFFER},
-	)
-	create_buffer(
-		&cell_scratch_buffer,
-		grid_cell_size * body_uint_size,
-		{vk.BufferUsageFlag.STORAGE_BUFFER},
-	)
-	create_buffer(
-		&sorted_indices_buffer,
-		body_capacity_size * body_uint_size,
-		{vk.BufferUsageFlag.STORAGE_BUFFER},
-	)
-	create_buffer(
-		&spawn_state_buffer,
-		vk.DeviceSize(size_of(SpawnStateGPU)),
-		{vk.BufferUsageFlag.STORAGE_BUFFER},
-	)
-
-	render_shader_configs[0] = {
-		compute_module = "compute.spv",
-		push = PushConstantInfo {
-			label = "ComputePushConstants",
-			stage = {vk.ShaderStageFlag.COMPUTE},
-			size = u32(size_of(ComputePushConstants)),
-		},
+	for spec, i in buffer_specs {
+		create_buffer(&buffers.data[i], spec.size, spec.flags)
+		bind_resource(0, &buffers.data[i], spec.binding)
 	}
 
-	render_shader_configs[1] = {
-		vertex_module = "graphics_vs.spv",
-		fragment_module = "graphics_fs.spv",
-		push = PushConstantInfo {
-			label = "PostProcessPushConstants",
-			stage = {vk.ShaderStageFlag.VERTEX, vk.ShaderStageFlag.FRAGMENT},
-			size = u32(size_of(PostProcessPushConstants)),
+	render_shader_configs = {
+		{
+			compute_module = "compute.spv",
+			push = {
+				label = "ComputePushConstants",
+				stage = {vk.ShaderStageFlag.COMPUTE},
+				size = u32(size_of(ComputePushConstants)),
+			},
+		},
+		{
+			vertex_module = "graphics_vs.spv",
+			fragment_module = "graphics_fs.spv",
+			push = {
+				label = "PostProcessPushConstants",
+				stage = {vk.ShaderStageFlag.VERTEX, vk.ShaderStageFlag.FRAGMENT},
+				size = u32(size_of(PostProcessPushConstants)),
+			},
 		},
 	}
 
@@ -267,21 +230,6 @@ init_render_resources :: proc() -> bool {
 	}
 
 
-	bind_resource(0, &accumulation_buffer)
-	bind_resource(0, &camera_state_buffer, 3)
-	bind_resource(0, &body_pos_buffer, 20)
-	bind_resource(0, &body_pos_pred_buffer, 21)
-	bind_resource(0, &body_vel_buffer, 22)
-	bind_resource(0, &body_radius_buffer, 23)
-	bind_resource(0, &body_inv_mass_buffer, 24)
-	bind_resource(0, &body_active_buffer, 25)
-	bind_resource(0, &body_delta_buffer, 26)
-	bind_resource(0, &spawn_state_buffer, 27)
-	bind_resource(0, &cell_counts_buffer, 30)
-	bind_resource(0, &cell_offsets_buffer, 31)
-	bind_resource(0, &cell_scratch_buffer, 32)
-	bind_resource(0, &sorted_indices_buffer, 33)
-
 	post_process_push_constants = PostProcessPushConstants {
 		screen_width  = u32(window_width),
 		screen_height = u32(window_height),
@@ -293,16 +241,16 @@ init_render_resources :: proc() -> bool {
 }
 
 resize :: proc() {
-	destroy_buffer(&accumulation_buffer)
+	destroy_buffer(&buffers.data[0])
 	create_buffer(
-		&accumulation_buffer,
+		&buffers.data[0],
 		vk.DeviceSize(window_width) *
 		vk.DeviceSize(window_height) *
 		4 *
 		vk.DeviceSize(size_of(u32)),
 		{vk.BufferUsageFlag.STORAGE_BUFFER, vk.BufferUsageFlag.TRANSFER_DST},
 	)
-	bind_resource(0, &accumulation_buffer)
+	bind_resource(0, &buffers.data[0])
 }
 
 record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
@@ -312,6 +260,14 @@ record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
 
 // compute.hlsl -> accumulation_buffer
 simulate_particles :: proc(frame: FrameInputs) {
+	mouse_x, mouse_y := get_mouse_position()
+	width := max(f64(window_width), 1.0)
+	height := max(f64(window_height), 1.0)
+	total_pixels := u32(window_width) * u32(window_height)
+	pixel_dispatch := (total_pixels + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
+	body_dispatch := (PHYS_MAX_BODIES + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
+	grid_dispatch := (GRID_CELL_COUNT + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
+
 
 	compute_push_constants.time = frame.time
 	compute_push_constants.delta_time = frame.delta_time
@@ -326,93 +282,87 @@ simulate_particles :: proc(frame: FrameInputs) {
 	compute_push_constants.zoom_out = b32(is_key_pressed(glfw.KEY_Q))
 	compute_push_constants.speed = b32(is_key_pressed(glfw.KEY_T))
 	compute_push_constants.reset_camera = b32(is_key_pressed(glfw.KEY_R))
-
-	mouse_x, mouse_y := get_mouse_position()
-	width := max(f64(window_width), 1.0)
-	height := max(f64(window_height), 1.0)
+	compute_push_constants.spawn_projectile = b32(is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT))
 	compute_push_constants.mouse_ndc_x = f32(clamp(mouse_x / width, 0.0, 1.0))
 	compute_push_constants.mouse_ndc_y = f32(clamp(mouse_y / height, 0.0, 1.0))
 
-	fire_pressed := is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT)
-	compute_push_constants.spawn_projectile = fire_pressed ? u32(1) : u32(0)
-
-	total_pixels := u32(window_width) * u32(window_height)
-	pixel_dispatch := (total_pixels + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
-	body_dispatch := (PHYS_MAX_BODIES + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
-	grid_dispatch := (GRID_CELL_COUNT + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
 
 	substep_count_f := f32(PHYS_SUBSTEPS)
-	if substep_count_f <= 0.0 {
-		substep_count_f = 1.0
-	}
+	if substep_count_f <= 0.0 {substep_count_f = 1.0}
 	physics_dt := frame.delta_time / substep_count_f
-	if physics_dt < 0.0 {
-		physics_dt = 0.0
-	}
+	if physics_dt < 0.0 {physics_dt = 0.0}
 
-	// Camera update pass
+	// ---- Camera update ----
 	compute_push_constants.options = CAMERA_UPDATE_FLAG
-	compute_push_constants.dispatch_mode = DISPATCH_CAMERA_UPDATE
-	bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-	vk.CmdDispatch(frame.cmd, 1, 1, 1)
-	compute_barrier(frame.cmd)
+	dispatch_compute(
+		frame,
+		ComputeTask{mode = DISPATCH_CAMERA_UPDATE, pipeline_index = 0, group = {1, 1, 1}},
+	)
 
-	// Physics initialization (once per resource lifetime)
+	// ---- One-time physics init ----
 	if !physics_initialized {
-		compute_push_constants.options = 0
-		compute_push_constants.dispatch_mode = DISPATCH_INITIALIZE
-		compute_push_constants.solver_iteration = 0
-		compute_push_constants.substep_index = 0
-		compute_push_constants.scan_offset = 0
-		compute_push_constants.scan_source = 0
-		bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-		vk.CmdDispatch(frame.cmd, body_dispatch, 1, 1)
-		compute_barrier(frame.cmd)
+		dispatch_compute(
+			frame,
+			ComputeTask{mode = DISPATCH_INITIALIZE, pipeline_index = 0, group = {1, 1, 1}},
+		)
 		physics_initialized = true
 	}
 
-	compute_push_constants.options = 0
-	compute_push_constants.solver_iteration = 0
-	compute_push_constants.substep_index = 0
-
+	// ---- Substeps ----
 	for substep_index: u32 = 0; substep_index < PHYS_SUBSTEPS; substep_index += 1 {
 		compute_push_constants.substep_index = substep_index
 		compute_push_constants.delta_time = physics_dt
 
-		// Clear cell counters
-		compute_push_constants.dispatch_mode = DISPATCH_CLEAR_GRID
-		bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-		vk.CmdDispatch(frame.cmd, grid_dispatch, 1, 1)
-		compute_barrier(frame.cmd)
+		// Clear cell grid
+		dispatch_compute(
+			frame,
+			ComputeTask {
+				mode = DISPATCH_CLEAR_GRID,
+				pipeline_index = 0,
+				group = {grid_dispatch, 1, 1},
+			},
+		)
 
-		// Spawn request
-		if compute_push_constants.spawn_projectile != 0 {
-			compute_push_constants.dispatch_mode = DISPATCH_SPAWN_PROJECTILE
-			bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-			vk.CmdDispatch(frame.cmd, 1, 1, 1)
-			compute_barrier(frame.cmd)
-			compute_push_constants.spawn_projectile = 0
+		// Spawn projectile (only if requested)
+		if compute_push_constants.spawn_projectile != false {
+			dispatch_compute(
+				frame,
+				ComputeTask {
+					mode = DISPATCH_SPAWN_PROJECTILE,
+					pipeline_index = 0,
+					group = {1, 1, 1},
+				},
+			)
+			compute_push_constants.spawn_projectile = false
 		}
 
 		// Integrate and predict
-		compute_push_constants.dispatch_mode = DISPATCH_INTEGRATE
-		bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-		vk.CmdDispatch(frame.cmd, body_dispatch, 1, 1)
-		compute_barrier(frame.cmd)
+		dispatch_compute(
+			frame,
+			ComputeTask {
+				mode = DISPATCH_INTEGRATE,
+				pipeline_index = 0,
+				group = {body_dispatch, 1, 1},
+			},
+		)
+		dispatch_compute(
+			frame,
+			ComputeTask {
+				mode = DISPATCH_HISTOGRAM,
+				pipeline_index = 0,
+				group = {body_dispatch, 1, 1},
+			},
+		)
 
-		// Histogram (cell population)
-		compute_push_constants.dispatch_mode = DISPATCH_HISTOGRAM
-		bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-		vk.CmdDispatch(frame.cmd, body_dispatch, 1, 1)
-		compute_barrier(frame.cmd)
-
-		// Prefix sum preparation
-		compute_push_constants.dispatch_mode = DISPATCH_PREFIX_COPY
-		compute_push_constants.scan_source = 0
-		bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-		vk.CmdDispatch(frame.cmd, grid_dispatch, 1, 1)
-		compute_barrier(frame.cmd)
-
+		// ---- Prefix sum ----
+		dispatch_compute(
+			frame,
+			ComputeTask {
+				mode = DISPATCH_PREFIX_COPY,
+				pipeline_index = 0,
+				group = {grid_dispatch, 1, 1},
+			},
+		)
 		parity: u32 = 0
 		offset: u32 = 1
 		for offset < GRID_CELL_COUNT {
@@ -422,69 +372,90 @@ simulate_particles :: proc(frame: FrameInputs) {
 			bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
 			vk.CmdDispatch(frame.cmd, grid_dispatch, 1, 1)
 			compute_barrier(frame.cmd)
-
 			parity = 1 - parity
 			offset <<= 1
 		}
-
 		if parity == 0 {
-			compute_push_constants.dispatch_mode = DISPATCH_PREFIX_COPY_SOURCE
-			compute_push_constants.scan_source = 0
-			bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-			vk.CmdDispatch(frame.cmd, grid_dispatch, 1, 1)
-			compute_barrier(frame.cmd)
+			dispatch_compute(
+				frame,
+				ComputeTask {
+					mode = DISPATCH_PREFIX_COPY_SOURCE,
+					pipeline_index = 0,
+					group = {grid_dispatch, 1, 1},
+				},
+			)
 			parity = 1
 		}
-
-		compute_push_constants.dispatch_mode = DISPATCH_PREFIX_FINALIZE
 		compute_push_constants.scan_source = parity
-		bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-		vk.CmdDispatch(frame.cmd, grid_dispatch, 1, 1)
-		compute_barrier(frame.cmd)
+		dispatch_compute(
+			frame,
+			ComputeTask {
+				mode = DISPATCH_PREFIX_FINALIZE,
+				pipeline_index = 0,
+				group = {grid_dispatch, 1, 1},
+			},
+		)
 
-		// Scatter bodies into sorted list
-		compute_push_constants.dispatch_mode = DISPATCH_SCATTER
-		bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-		vk.CmdDispatch(frame.cmd, body_dispatch, 1, 1)
-		compute_barrier(frame.cmd)
+		// ---- Scatter ----
+		dispatch_compute(
+			frame,
+			ComputeTask {
+				mode = DISPATCH_SCATTER,
+				pipeline_index = 0,
+				group = {body_dispatch, 1, 1},
+			},
+		)
 
+		// ---- Solver iterations ----
 		for iter: u32 = 0; iter < PHYS_SOLVER_ITERATIONS; iter += 1 {
 			compute_push_constants.solver_iteration = iter
-
-			compute_push_constants.dispatch_mode = DISPATCH_ZERO_DELTAS
-			bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-			vk.CmdDispatch(frame.cmd, body_dispatch, 1, 1)
-			compute_barrier(frame.cmd)
-
-			compute_push_constants.dispatch_mode = DISPATCH_CONSTRAINTS
-			bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-			vk.CmdDispatch(frame.cmd, body_dispatch, 1, 1)
-			compute_barrier(frame.cmd)
-
-			compute_push_constants.dispatch_mode = DISPATCH_APPLY_DELTAS
-			bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-			vk.CmdDispatch(frame.cmd, body_dispatch, 1, 1)
-			compute_barrier(frame.cmd)
+			dispatch_compute(
+				frame,
+				ComputeTask {
+					mode = DISPATCH_ZERO_DELTAS,
+					pipeline_index = 0,
+					group = {body_dispatch, 1, 1},
+				},
+			)
+			dispatch_compute(
+				frame,
+				ComputeTask {
+					mode = DISPATCH_CONSTRAINTS,
+					pipeline_index = 0,
+					group = {body_dispatch, 1, 1},
+				},
+			)
+			dispatch_compute(
+				frame,
+				ComputeTask {
+					mode = DISPATCH_APPLY_DELTAS,
+					pipeline_index = 0,
+					group = {body_dispatch, 1, 1},
+				},
+			)
 		}
 	}
 
-	compute_push_constants.dispatch_mode = DISPATCH_FINALIZE
-	compute_push_constants.solver_iteration = 0
-	bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-	vk.CmdDispatch(frame.cmd, body_dispatch, 1, 1)
-	compute_barrier(frame.cmd)
+	// ---- Finalize positions ----
+	dispatch_compute(
+		frame,
+		ComputeTask{mode = DISPATCH_FINALIZE, pipeline_index = 0, group = {body_dispatch, 1, 1}},
+	)
 
-	vk.CmdFillBuffer(frame.cmd, accumulation_buffer.buffer, 0, accumulation_buffer.size, 0)
-	transfer_to_compute_barrier(frame.cmd, &accumulation_buffer)
+	// ---- Prepare accumulation buffer ----
+	vk.CmdFillBuffer(frame.cmd, buffers.data[0].buffer, 0, buffers.data[0].size, 0)
+	transfer_to_compute_barrier(frame.cmd, &buffers.data[0])
 
-	compute_push_constants.dispatch_mode = DISPATCH_RENDER
-	bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-	vk.CmdDispatch(frame.cmd, pixel_dispatch, 1, 1)
+	// ---- Render pass ----
+	dispatch_compute(
+		frame,
+		ComputeTask{mode = DISPATCH_RENDER, pipeline_index = 0, group = {pixel_dispatch, 1, 1}},
+	)
 }
-
 // accumulation_buffer -> post_process.hlsl -> swapchain image
 composite_to_swapchain :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 
+	apply_compute_to_fragment_barrier(frame.cmd, &buffers.data[0])
 	begin_rendering(frame, element)
 	bind(
 		frame,
@@ -498,22 +469,4 @@ composite_to_swapchain :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 	vk.CmdDraw(frame.cmd, 3, 1, 0, 0)
 	vk.CmdEndRendering(frame.cmd)
 	transition_swapchain_image_layout(frame.cmd, element, vk.ImageLayout.PRESENT_SRC_KHR)
-}
-
-cleanup_render_resources :: proc() {
-	destroy_buffer(&spawn_state_buffer)
-	destroy_buffer(&sorted_indices_buffer)
-	destroy_buffer(&cell_scratch_buffer)
-	destroy_buffer(&cell_offsets_buffer)
-	destroy_buffer(&cell_counts_buffer)
-	destroy_buffer(&body_delta_buffer)
-	destroy_buffer(&body_active_buffer)
-	destroy_buffer(&body_inv_mass_buffer)
-	destroy_buffer(&body_radius_buffer)
-	destroy_buffer(&body_vel_buffer)
-	destroy_buffer(&body_pos_pred_buffer)
-	destroy_buffer(&body_pos_buffer)
-	destroy_buffer(&camera_state_buffer)
-	destroy_buffer(&accumulation_buffer)
-	physics_initialized = false
 }

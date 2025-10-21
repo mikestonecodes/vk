@@ -50,11 +50,6 @@ begin_frame_commands :: proc(
 	encoder: CommandEncoder,
 	frame: FrameInputs,
 ) {
-	runtime.assert(
-		accumulation_buffer.buffer != {},
-		"accumulation buffer missing before recording commands",
-	)
-	runtime.assert(accumulation_buffer.size > 0, "accumulation buffer size must be positive")
 
 	encoder = begin_encoding(element)
 	current_time := f32(time.duration_seconds(time.diff(start_time, time.now())))
@@ -122,6 +117,17 @@ bind :: proc(
 global_desc_layout: vk.DescriptorSetLayout
 global_desc_set: vk.DescriptorSet
 
+// Generic helper that respects solver_iteration etc.
+dispatch_compute :: proc(frame: FrameInputs, task: ComputeTask) {
+	compute_push_constants.dispatch_mode = u32(task.mode)
+	bind(frame, &render_shader_states[task.pipeline_index], .COMPUTE, &compute_push_constants)
+
+	for i: u32 = 0; i < max(task.repeat_count, 1); i += 1 {
+		compute_push_constants.solver_iteration = i
+		vk.CmdDispatch(frame.cmd, task.group.x, task.group.y, task.group.z)
+		compute_barrier(frame.cmd)
+	}
+}
 
 bind_resource :: proc(slot: u32, resource: $T, dstBinding := u32(max(u32))) {
 	w := vk.WriteDescriptorSet {
@@ -173,10 +179,10 @@ init_global_descriptors :: proc() -> bool {
 			stageFlags = {vk.ShaderStageFlag.FRAGMENT},
 		},
 		{
-			binding         = 3,
-			descriptorType  = .STORAGE_BUFFER,
+			binding = 3,
+			descriptorType = .STORAGE_BUFFER,
 			descriptorCount = 1,
-			stageFlags      = {vk.ShaderStageFlag.COMPUTE},
+			stageFlags = {vk.ShaderStageFlag.COMPUTE},
 		},
 		{
 			binding = 20,
@@ -546,7 +552,6 @@ begin_encoding :: proc(element: ^SwapchainElement) -> CommandEncoder {
 
 begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 
-	apply_compute_to_fragment_barrier(frame.cmd, &accumulation_buffer)
 	transition_swapchain_image_layout(frame.cmd, element, vk.ImageLayout.ATTACHMENT_OPTIMAL)
 
 	vk.CmdBeginRendering(

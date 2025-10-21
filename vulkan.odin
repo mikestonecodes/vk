@@ -1071,8 +1071,9 @@ init_vulkan_resources :: proc() -> bool {
 		shaders_ready = false
 		return false
 	}
+
 	init_render_resources()
-	destroy_render_shader_state(render_shader_states[:])
+
 	if !prepare_render_shaders(render_shader_configs[:]) {
 		fmt.println("Render shader preparation failed")
 		return false
