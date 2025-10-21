@@ -32,7 +32,6 @@ image_count: c.uint32_t = 0
 // Timeline semaphore for render synchronization
 timeline_semaphore: vk.Semaphore
 timeline_value: c.uint64_t = 0
-acquire_fence: vk.Fence
 
 MAX_FRAMES_IN_FLIGHT :: c.uint32_t(3)
 MAX_SWAPCHAIN_IMAGES :: c.uint32_t(4) // 4 keeps headroom for triple-buffer drivers
@@ -234,38 +233,24 @@ wait_for_timeline :: proc(value: c.uint64_t) {
 }
 
 acquire_next_image :: proc(_: c.uint32_t) -> bool {
+    acquire_info := vk.AcquireNextImageInfoKHR{
+        sType      = .ACQUIRE_NEXT_IMAGE_INFO_KHR,
+        swapchain  = swapchain,
+        timeout    = max(u64),
+        semaphore  = {}, // timeline semaphore used later
+        fence      = {},
+        deviceMask = 1,
+    }
 
-	if acquire_fence == {} {
-		fmt.println("Acquire fence not initialized")
-		return false
-	}
+    result := vk.AcquireNextImage2KHR(device, &acquire_info, &image_index)
 
-	vk.WaitForFences(device, 1, &acquire_fence, true, max(u64))
-	vk.ResetFences(device, 1, &acquire_fence)
+    if result == .ERROR_OUT_OF_DATE_KHR || result == .SUBOPTIMAL_KHR {
+        destroy_swapchain()
+        create_swapchain() or_return
+        return false
+    }
 
-	acquire_info := vk.AcquireNextImageInfoKHR {
-		sType      = vk.StructureType.ACQUIRE_NEXT_IMAGE_INFO_KHR,
-		swapchain  = swapchain,
-		timeout    = max(u64),
-		semaphore  = {},
-		fence      = acquire_fence,
-		deviceMask = 1,
-	}
-	result := vk.AcquireNextImage2KHR(device, &acquire_info, &image_index)
-
-	if result == vk.Result.ERROR_OUT_OF_DATE_KHR || result == vk.Result.SUBOPTIMAL_KHR {
-		destroy_swapchain()
-		create_swapchain() or_return
-		return false
-	}
-
-	if result != vk.Result.SUCCESS {
-		return false
-	}
-
-	vk.WaitForFences(device, 1, &acquire_fence, true, max(u64))
-
-	return true
+    return result == .SUCCESS
 }
 
 submit_commands :: proc(element: ^SwapchainElement, frame_index: u32) {
@@ -469,20 +454,11 @@ create_logical_device :: proc() -> bool {
 		extendedDynamicState = true,
 	}
 	vulkan12 := vk.PhysicalDeviceVulkan12Features {
-		sType                                  = vk.StructureType.PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-		pNext                                  = &extended_dynamic,
-		descriptorIndexing                     = true,
-		descriptorBindingPartiallyBound        = true,
-		descriptorBindingVariableDescriptorCount = true,
-		descriptorBindingSampledImageUpdateAfterBind = true,
-		descriptorBindingStorageImageUpdateAfterBind = true,
-		descriptorBindingStorageBufferUpdateAfterBind = true,
-		descriptorBindingUniformBufferUpdateAfterBind = true,
-		descriptorBindingUniformTexelBufferUpdateAfterBind = true,
-		descriptorBindingStorageTexelBufferUpdateAfterBind = true,
-		descriptorBindingUpdateUnusedWhilePending = true,
-		runtimeDescriptorArray                = true,
-		timelineSemaphore                     = true,
+		sType               = vk.StructureType.PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+		pNext               = &extended_dynamic,
+		descriptorIndexing  = true,
+		runtimeDescriptorArray = true,
+		timelineSemaphore   = true,
 	}
 	sync2 := vk.PhysicalDeviceSynchronization2Features {
 		sType            = vk.StructureType.PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
@@ -828,7 +804,7 @@ create_swapchain :: proc() -> bool {
         imageExtent = {width, height},
         imageArrayLayers = 1,
         imageUsage = {.COLOR_ATTACHMENT},
-        presentMode = .FIFO,
+        presentMode = .IMMEDIATE,
         preTransform = caps.currentTransform,
         compositeAlpha = {.OPAQUE},
         clipped = true,
@@ -955,16 +931,7 @@ init_vulkan :: proc() -> bool {
 		return false
 	}
 
-	fence_info := vk.FenceCreateInfo {
-		sType = vk.StructureType.FENCE_CREATE_INFO,
-		flags = {vk.FenceCreateFlag.SIGNALED},
-	}
-	if vk.CreateFence(device, &fence_info, nil, &acquire_fence) != vk.Result.SUCCESS {
-		vk.DestroySemaphore(device, timeline_semaphore, nil)
-		timeline_semaphore = {}
-		fmt.println("Failed to create acquire fence")
-		return false
-	}
+
 
 
 	return true
@@ -1200,10 +1167,6 @@ destroy_all_sync_objects :: proc() {
 	if timeline_semaphore != {} {
 		vk.DestroySemaphore(device, timeline_semaphore, nil)
 		timeline_semaphore = {}
-	}
-	if acquire_fence != {} {
-		vk.DestroyFence(device, acquire_fence, nil)
-		acquire_fence = {}
 	}
 }
 destroy_swapchain :: proc() {

@@ -51,6 +51,10 @@ compiling shader:
 compiling shader:
 compiling shader:
 Discovered 2 shaders: graphics.hlsl compute.hlsl 
+Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
+The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
+Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
+The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
 Window resized to 1856x1016
 compiling shader:
 compiling shader:
@@ -58,3 +62,20 @@ compiling shader:
 compiling shader:
 compiling shader:
 compiling shader:
+Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
+The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
+Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
+The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
+Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
+The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
+Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
+The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
+Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
+The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
+Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
+The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
+Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
+The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
+Validation layer: (Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
+vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
+The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
