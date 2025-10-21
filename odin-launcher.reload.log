@@ -7,25 +7,25 @@ Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
 Validation layer: Copying old device 0 into new device 0
 Validation layer: Removing driver /usr/lib/libvulkan_intel.so due to not having any physical devices
 Validation layer: Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
@@ -50,11 +50,7 @@ compiling shader:
 compiling shader:
 compiling shader:
 compiling shader:
-Discovered 2 shaders: graphics.hlsl compute.hlsl 
-Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
-The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
-Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
-The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
+Discovered 2 shaders: compute.hlsl graphics.hlsl
 Window resized to 1856x1016
 compiling shader:
 compiling shader:
@@ -62,20 +58,17 @@ compiling shader:
 compiling shader:
 compiling shader:
 compiling shader:
-Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
-The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
-Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
-The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
-Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
-The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
-Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
-The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
-Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
-The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
-Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
-The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
-Validation layer: vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
-The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
-Validation layer: (Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
-vkAcquireNextImage2KHR(): pAcquireInfo semaphore and fence are both VK_NULL_HANDLE.
-The Vulkan spec states: semaphore and fence must not both be equal to VK_NULL_HANDLE (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01782)
+Window resized to 3736x2056
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+Window resized to 1856x1016
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
+compiling shader:
