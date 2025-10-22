@@ -120,6 +120,9 @@ bind :: proc(
 global_desc_layout: vk.DescriptorSetLayout
 global_desc_set: vk.DescriptorSet
 
+dispatch_with_count :: proc(frame: FrameInputs, mode: DispatchMode, count: u32) {
+	dispatch_compute(frame, {mode = mode, group = {count, 1, 1}})
+}
 // Generic helper that respects solver_iteration etc.
 dispatch_compute :: proc(frame: FrameInputs, task: ComputeTask) {
 	compute_push_constants.dispatch_mode = u32(task.mode)

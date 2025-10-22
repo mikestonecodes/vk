@@ -69,7 +69,7 @@ ComputeTask :: struct {
 }
 
 DispatchMode :: enum u32 {
-	CAMERA_UPDATE,
+	INIT_FRAME,
 	INITIALIZE,
 	CLEAR_GRID,
 	INTEGRATE,
@@ -162,9 +162,7 @@ record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
 }
 
 physics_initialized: bool
-dispatch_with_count :: proc(frame: FrameInputs, mode: DispatchMode, count: u32) {
-	dispatch_compute(frame, {mode = mode, group = {count, 1, 1}})
-}
+
 // compute.hlsl -> accumulation_buffer
 compute :: proc(frame: FrameInputs) {
 	mouse_x, mouse_y := get_mouse_position()
@@ -192,8 +190,7 @@ compute :: proc(frame: FrameInputs) {
 	)
 
 
-	// ---- Camera update ----
-	dispatch_compute(frame, {mode = .CAMERA_UPDATE})
+	dispatch_compute(frame, {mode = .INIT_FRAME})
 
 	total_pixels := u32(window_width) * u32(window_height)
 	pixel_dispatch := (total_pixels + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
