@@ -17,8 +17,6 @@ GRID_X :: u32(512)
 GRID_Y :: u32(512)
 GRID_CELL_COUNT :: u32(GRID_X * GRID_Y)
 
-EXPLOSION_EVENT_CAPACITY :: u32(256)
-
 CameraStateGPU :: struct {
 	position: [2]f32,
 	zoom:     f32,
@@ -37,7 +35,6 @@ ComputePushConstants :: struct {
 	delta_time:       f32,
 	screen_width:     u32,
 	screen_height:    u32,
-	brightness:       f32,
 	move_forward:     b32,
 	move_backward:    b32,
 	move_right:       b32,
@@ -59,28 +56,12 @@ ComputePushConstants :: struct {
 compute_push_constants := ComputePushConstants {
 	screen_width            = u32(window_width),
 	screen_height           = u32(window_height),
-	brightness              = 1.0,
 }
-
-
-
-ExplosionEventGPU :: struct {
-	center:     [2]f32,
-	radius:     f32,
-	energy:     f32,
-	start_time: f32,
-	target_id:  u32,
-	processed:  u32,
-	reserved0:  u32,
-	reserved1:  u32,
-}
-
 SpawnStateGPU :: struct {
 	next_projectile:    u32,
-	next_explosion:     u32,
-	explosion_head:     u32,
 	active_projectiles: u32,
-	events:             [EXPLOSION_EVENT_CAPACITY]ExplosionEventGPU,
+	pad0:               u32,
+	pad1:               u32,
 }
 
 

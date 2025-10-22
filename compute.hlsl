@@ -9,10 +9,7 @@ static const float CAMERA_FAST_SCALE   = 2.4f;
 static const uint  PHYS_PROJECTILE_START = 1u;
 static const float CELL_SIZE = 2.0f;
 static const float WORLD_RANGE_LIMIT = 1e6f;
-static const uint  MAX_EXPLOSIONS = 256u;
-static const uint  MAX_CHAIN_EVENTS = 128u;
 static const uint  MAX_ACTIVE_PROJECTILES = 25000u;
-static const float EXPLOSION_LIFETIME = 1.0f;
 
 static const uint  BODY_CAPACITY = 512000u;
 static const uint  GRID_X = 512u;
@@ -51,7 +48,6 @@ struct ComputePushConstants {
     float delta_time;
     uint  screen_width;
     uint  screen_height;
-    float brightness;
     uint  move_forward;
     uint  move_backward;
     uint  move_right;
@@ -77,23 +73,11 @@ struct CameraStateData {
     float  padding;
 };
 
-struct ExplosionEvent {
-    float2 center;
-    float  radius;
-    float  energy;
-    float  start_time;
-    uint   target_id;
-    uint   processed;
-    uint   reserved0;
-    uint   reserved1;
-};
-
 struct SpawnState {
     uint next_projectile;
-    uint next_explosion;
-    uint explosion_head;
     uint active_projectiles;
-    ExplosionEvent events[MAX_EXPLOSIONS];
+    uint pad0;
+    uint pad1;
 };
 
 struct WorldCircle {
@@ -148,6 +132,13 @@ float soft_circle(float distance, float radius, float softness) {
     return saturate(1.0f - smoothstep(inner, radius, distance));
 }
 
+float2 safe_normalize(float2 v, float fallback_x) {
+    float len_sq = dot(v, v);
+    if (len_sq <= 1e-12f) {
+        return float2(fallback_x, sqrt(1.0f - fallback_x * fallback_x));
+    }
+    return v * rsqrt(len_sq);
+}
 uint wrap_int(int value, uint size_value) {
     int size = max(int(size_value), 1);
     int r = value % size;
@@ -195,6 +186,7 @@ bool world_circle_from_cell(float2 cell, out WorldCircle circle) {
     circle.energy = lerp(0.18f, 0.95f, hash11(seed + 63.5f));
     return true;
 }
+
 int float_to_delta(float value) {
     float scaled = clamp(value * DELTA_SCALE, -214748000.0f, 214748000.0f);
     return int(scaled);
@@ -225,11 +217,13 @@ void atomic_add_body_delta(uint id, float2 value) {
 }
 
 
-
 CameraStateData load_camera_state() {
     return camera_state[0];
 }
 
+uint grid_cell_count() {
+    return GRID_X * GRID_Y;
+}
 
 //MAIN STUFF
 
@@ -327,35 +321,7 @@ bool collide_world(float2 p, float expand, out float2 n_out, out float depth_out
     return hit;
 }
 
-float2 safe_normalize(float2 v, float fallback_x) {
-    float len_sq = dot(v, v);
-    if (len_sq <= 1e-12f) {
-        return float2(fallback_x, sqrt(1.0f - fallback_x * fallback_x));
-    }
-    return v * rsqrt(len_sq);
-}
 
-uint grid_cell_count() {
-    return GRID_X * GRID_Y;
-}
-
-void record_explosion_event(float2 center, float radius, float energy, float start_time, uint target_id) {
-    uint original_index;
-    InterlockedAdd(spawn_state[0].next_explosion, 1u, original_index);
-
-    uint slot = original_index % MAX_EXPLOSIONS;
-
-    ExplosionEvent ev;
-    ev.center = center;
-    ev.radius = radius;
-    ev.energy = max(energy, 0.0f);
-    ev.start_time = start_time;
-    ev.target_id = target_id;
-    ev.processed = 0u;
-    ev.reserved0 = 0u;
-    ev.reserved1 = 0u;
-    spawn_state[0].events[slot] = ev;
-}
 
 void deactivate_body(uint id) {
     if (id >= BODY_CAPACITY) {
@@ -381,34 +347,19 @@ void deactivate_body(uint id) {
     store_body_delta(id, float2(0.0f, 0.0f));
 }
 
-void trigger_projectile_explosion(uint source_id, float2 circle_center, float circle_radius, float circle_energy) {
-    if (source_id == 0u) {
-        return;
-    }
-    if (source_id < BODY_CAPACITY && body_active[source_id] >= 2u) {
-        return;
-    }
-    float base_radius = max(circle_radius, PROJECTILE_RADIUS);
-    float energy = max(circle_energy, 0.2f);
-    record_explosion_event(circle_center, base_radius, energy, push_constants.time, source_id);
-    if (source_id < BODY_CAPACITY && body_active[source_id] != 0u) {
-        body_active[source_id] = 2u; // Mark as pending explosion
-    }
-}
 
 
 void initialize_bodies(uint id) {
+    if (id == 0u) {
+        spawn_state[0].next_projectile = 0u;
+        spawn_state[0].active_projectiles = 0u;
+        spawn_state[0].pad0 = 0u;
+        spawn_state[0].pad1 = 0u;
+    }
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) {
-        if (id == 0) {
-            spawn_state[0].next_projectile = 0u;
-            spawn_state[0].next_explosion = 0u;
-            spawn_state[0].explosion_head = 0u;
-            spawn_state[0].active_projectiles = 0u;
-        }
         return;
     }
-
     bool is_player = (id == 0u);
     body_active[id] = is_player ? 1u : 0u;
     body_radius[id] = is_player ? PLAYER_RADIUS : PROJECTILE_RADIUS;
@@ -417,23 +368,6 @@ void initialize_bodies(uint id) {
     body_pos_pred[id] = body_pos[id];
     body_vel[id] = float2(0.0f, 0.0f);
     store_body_delta(id, float2(0.0f, 0.0f));
-
-    if (id == 0u) {
-        spawn_state[0].next_projectile = 0u;
-        spawn_state[0].next_explosion = 0u;
-        spawn_state[0].explosion_head = 0u;
-        spawn_state[0].active_projectiles = 0u;
-        for (uint e = 0u; e < MAX_EXPLOSIONS; ++e) {
-            spawn_state[0].events[e].center = float2(0.0f, 0.0f);
-            spawn_state[0].events[e].radius = 0.0f;
-            spawn_state[0].events[e].energy = 0.0f;
-            spawn_state[0].events[e].start_time = 0.0f;
-            spawn_state[0].events[e].target_id = 0u;
-            spawn_state[0].events[e].processed = 1u;
-            spawn_state[0].events[e].reserved0 = 0u;
-            spawn_state[0].events[e].reserved1 = 0u;
-        }
-    }
 }
 
 void clear_grid(uint id) {
@@ -706,7 +640,6 @@ void constraints_kernel(uint id) {
         float circle_energy;
         if (collide_world(xi, ri, normal, depth, circle_center, circle_radius, circle_energy)) {
             if (id >= PHYS_PROJECTILE_START) {
-                trigger_projectile_explosion(id, circle_center, circle_radius, circle_energy);
                 return;
             }
             float2 corr = -(depth)*normal * wi;
@@ -908,47 +841,6 @@ void render_kernel(uint id) {
         density = max(density, coverage);
     }
 
-    // Explosion glow
-    for (uint ei = 0u; ei < MAX_EXPLOSIONS; ++ei) {
-        ExplosionEvent ev = spawn_state[0].events[ei];
-        float born_time = ev.start_time;
-        float age = push_constants.time - born_time;
-        if (ev.processed == 0u) {
-            if (age < 0.0f) {
-                continue;
-            }
-        }
-        if (age < 0.0f || age > EXPLOSION_LIFETIME) {
-            continue;
-        }
-
-        float2 center = ev.center;
-        float base_radius = ev.radius;
-        float energy = max(ev.energy, 0.1f);
-
-        float progress = saturate(age / EXPLOSION_LIFETIME);
-        float expansion = lerp(0.35f, 1.05f + energy * 0.15f, progress);
-        float current_radius = base_radius * expansion + age * (0.45f + energy * 0.18f);
-        float thickness = max(base_radius * (0.1f + energy * 0.025f), 0.1f);
-
-        float dist = length(world - center);
-        float ring = saturate(1.0f - abs(dist - current_radius) / (thickness * 1.25f));
-        float glow = saturate(1.0f - dist / (current_radius + thickness * 2.0f));
-        float intensity = (1.0f - progress) * (0.35f + energy * 0.18f);
-
-        if (ring <= 0.0f && glow <= 0.0f) {
-            continue;
-        }
-
-        float3 inner_color = float3(1.25f, 0.65f, 0.35f);
-        float3 outer_color = float3(0.5f, 0.22f, 1.1f);
-        float3 explosion_color = lerp(inner_color, outer_color, progress);
-
-        float contribution = min(ring * 0.45f + glow * 0.12f, 0.5f) * intensity;
-        color = lerp(color, explosion_color, saturate(contribution));
-        density = max(density, contribution * 0.5f);
-    }
-
     // Dynamic bodies
     uint grid_x = GRID_X;
     uint grid_y = GRID_Y;
@@ -987,7 +879,6 @@ void render_kernel(uint id) {
         }
     }
 
-    color *= push_constants.brightness;
     color = saturate(color);
     density = saturate(density);
 
