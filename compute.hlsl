@@ -1,10 +1,4 @@
 // ============================================================================
-// GPU PHYSICS / RENDERING COMPUTE SHADER
-// Reorganized, commented, expanded and ordered 0–14
-// ============================================================================
-
-
-// ============================================================================
 // GLOBAL CONSTANTS
 // ============================================================================
 
@@ -173,15 +167,8 @@ CameraStateData load_camera_state() { return camera_state[0]; }
 
 
 
-
-
-
-
-
-
-
 // ============================================================================
-// === DISPATCH KERNELS (0–14) ===
+// === DISPATCH KERNELS ===
 // ============================================================================
 
 
@@ -229,7 +216,6 @@ void update_camera_state(float delta_time) {
 }
 
 
-// --- Body spawning from camera/mouse ---
 void maybe_spawn_bodies() {
     if (push_constants.spawn_body == 0u) return;
 
@@ -517,6 +503,7 @@ bool collide_world(
     }
     return hit;
 }
+
 void constraints_kernel(uint id) {
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) return;
@@ -672,98 +659,98 @@ void finalize_kernel(uint id) {
 
 // (14) RENDER
 void render_kernel(uint id) {
-uint width = push_constants.screen_width;
-uint height = push_constants.screen_height;
-uint total_pixels = width * height;
-if (id >= total_pixels || width == 0u || height == 0u) return;
+	uint width = push_constants.screen_width;
+	uint height = push_constants.screen_height;
+	uint total_pixels = width * height;
+	if (id >= total_pixels || width == 0u || height == 0u) return;
 
-CameraStateData cam_state = load_camera_state();
-float zoom = max(cam_state.zoom, CAMERA_MIN_ZOOM);
-float2 camera_pos = cam_state.position;
+	CameraStateData cam_state = load_camera_state();
+	float zoom = max(cam_state.zoom, CAMERA_MIN_ZOOM);
+	float2 camera_pos = cam_state.position;
 
-float2 resolution = float2(float(width), float(height));
-float2 invResolution = 1.0f / resolution;
-float2 uv = (float2(id % width, id / width) + 0.5f) * invResolution;
+	float2 resolution = float2(float(width), float(height));
+	float2 invResolution = 1.0f / resolution;
+	float2 uv = (float2(id % width, id / width) + 0.5f) * invResolution;
 
-float aspect = resolution.x / resolution.y;
-float2 view = uv * 2.0f - 1.0f;
-view.x *= aspect;
-float2 world = camera_pos + view * zoom;
+	float aspect = resolution.x / resolution.y;
+	float2 view = uv * 2.0f - 1.0f;
+	view.x *= aspect;
+	float2 world = camera_pos + view * zoom;
 
-float3 color = float3(0.016f, 0.018f, 0.020f);
-float density = 0.0f;
+	float3 color = float3(0.016f, 0.018f, 0.020f);
+	float density = 0.0f;
 
-float2 baseCell = floor(world);
+	float2 baseCell = floor(world);
 
-float world_step_x = abs(zoom) * (2.0f / resolution.x) * aspect;
-float world_step_y = abs(zoom) * (2.0f / resolution.y);
-float max_step = max(world_step_x, world_step_y);
-int extra = (int)ceil(max_step);
-int sample_radius= clamp(extra + 2, 2, 10);
+	float world_step_x = abs(zoom) * (2.0f / resolution.x) * aspect;
+	float world_step_y = abs(zoom) * (2.0f / resolution.y);
+	float max_step = max(world_step_x, world_step_y);
+	int extra = (int)ceil(max_step);
+	int sample_radius= clamp(extra + 2, 2, 10);
 
-for (int oy = -sample_radius; oy <= sample_radius; ++oy) {
-    for (int ox = -sample_radius; ox <= sample_radius; ++ox) {
-        float2 cell = baseCell + float2(ox, oy);
-        WorldBody body;
-        if (!world_body_from_cell(cell, body)) continue;
-        float dist = length(world - body.center);
-        float coverage = soft_circle(dist, body.radius, body.softness);
-        color += body.color * body.energy * coverage;
-        density = max(density, coverage);
-    }
-}
+	for (int oy = -sample_radius; oy <= sample_radius; ++oy) {
+		for (int ox = -sample_radius; ox <= sample_radius; ++ox) {
+			float2 cell = baseCell + float2(ox, oy);
+			WorldBody body;
+			if (!world_body_from_cell(cell, body)) continue;
+			float dist = length(world - body.center);
+			float coverage = soft_circle(dist, body.radius, body.softness);
+			color += body.color * body.energy * coverage;
+			density = max(density, coverage);
+		}
+	}
 
-if (density <= 0.0001f) {
-    WorldBody body;
-    body.center = float2(0.0f, 0.0f);
-    body.radius = ROOT_BODY_RADIUS;
-    body.softness = body.radius * 0.5f;
-    body.color = float3(0.85f, 0.90f, 0.98f);
-    body.energy = 0.65f;
-    float dist = length(world - body.center);
-    float coverage = soft_circle(dist, body.radius, body.softness);
-    color += body.color * body.energy * coverage;
-    density = max(density, coverage);
-}
+	if (density <= 0.0001f) {
+		WorldBody body;
+		body.center = float2(0.0f, 0.0f);
+		body.radius = ROOT_BODY_RADIUS;
+		body.softness = body.radius * 0.5f;
+		body.color = float3(0.85f, 0.90f, 0.98f);
+		body.energy = 0.65f;
+		float dist = length(world - body.center);
+		float coverage = soft_circle(dist, body.radius, body.softness);
+		color += body.color * body.energy * coverage;
+		density = max(density, coverage);
+	}
 
-uint grid_x = GRID_X, grid_y = GRID_Y;
-uint cells = grid_cell_count();
-uint2 gi = world_to_cell(world);
+	uint grid_x = GRID_X, grid_y = GRID_Y;
+	uint cells = grid_cell_count();
+	uint2 gi = world_to_cell(world);
 
-for (int oy = -1; oy <= 1; ++oy) {
-    for (int ox = -1; ox <= 1; ++ox) {
-        uint nx = wrap_int(int(gi.x) + ox, grid_x);
-        uint ny = wrap_int(int(gi.y) + oy, grid_y);
-        uint c = ny * grid_x + nx;
-        if (c >= cells) continue;
-        uint begin = cell_offsets[c];
-        uint end = cell_offsets[c + 1u];
-        for (uint k = begin; k < end; ++k) {
-            uint j = sorted_indices[k];
-            if (j >= BODY_CAPACITY || body_active[j] == 0u) continue;
-            float2 pos = body_pos[j];
-            float radius = body_radius[j];
-            float softness = max(radius * 0.6f, 0.05f);
-            float dist = length(world - pos);
-            float coverage = soft_circle(dist, radius, softness);
-            if (coverage <= 0.0f) continue;
-            float3 body_col = (j == 0u)
-                ? float3(0.80f, 0.90f, 1.15f)
-                : float3(1.65f, 0.55f, 0.25f);
-            color += body_col * coverage * 1.4f;
-            density = max(density, coverage);
-        }
-    }
-}
+	for (int oy = -1; oy <= 1; ++oy) {
+		for (int ox = -1; ox <= 1; ++ox) {
+			uint nx = wrap_int(int(gi.x) + ox, grid_x);
+			uint ny = wrap_int(int(gi.y) + oy, grid_y);
+			uint c = ny * grid_x + nx;
+			if (c >= cells) continue;
+			uint begin = cell_offsets[c];
+			uint end = cell_offsets[c + 1u];
+			for (uint k = begin; k < end; ++k) {
+				uint j = sorted_indices[k];
+				if (j >= BODY_CAPACITY || body_active[j] == 0u) continue;
+				float2 pos = body_pos[j];
+				float radius = body_radius[j];
+				float softness = max(radius * 0.6f, 0.05f);
+				float dist = length(world - pos);
+				float coverage = soft_circle(dist, radius, softness);
+				if (coverage <= 0.0f) continue;
+				float3 body_col = (j == 0u)
+					? float3(0.80f, 0.90f, 1.15f)
+					: float3(1.65f, 0.55f, 0.25f);
+				color += body_col * coverage * 1.4f;
+				density = max(density, coverage);
+			}
+		}
+	}
 
-color = saturate(color);
-density = saturate(density);
+	color = saturate(color);
+	density = saturate(density);
 
-uint accum_idx = id * 4u;
-accumulation_buffer[accum_idx + 0u] = (uint)(color.r * COLOR_SCALE);
-accumulation_buffer[accum_idx + 1u] = (uint)(color.g * COLOR_SCALE);
-accumulation_buffer[accum_idx + 2u] = (uint)(color.b * COLOR_SCALE);
-accumulation_buffer[accum_idx + 3u] = (uint)(density * COLOR_SCALE);
+	uint accum_idx = id * 4u;
+	accumulation_buffer[accum_idx + 0u] = (uint)(color.r * COLOR_SCALE);
+	accumulation_buffer[accum_idx + 1u] = (uint)(color.g * COLOR_SCALE);
+	accumulation_buffer[accum_idx + 2u] = (uint)(color.b * COLOR_SCALE);
+	accumulation_buffer[accum_idx + 3u] = (uint)(density * COLOR_SCALE);
 
 
 }
