@@ -172,7 +172,21 @@ void atomic_add_body_delta(uint id, float2 v) {
 CameraStateData load_camera_state() { return camera_state[0]; }
 
 
-// --- Update camera movement, zoom, reset ---
+
+
+
+
+
+
+
+
+// ============================================================================
+// === DISPATCH KERNELS (0–14) ===
+// ============================================================================
+
+
+// (0) INIT FRAME / CAMERA UPDATE + SPAWN
+
 void update_camera_state(float delta_time) {
     if (delta_time <= 0.0f) delta_time = 0.0f;
 
@@ -279,93 +293,6 @@ void maybe_spawn_bodies() {
     spawn_state[0].next_dynamic = next_index_base + spawn_budget;
     spawn_state[0].active_dynamic = active_current + spawn_budget;
 }
-
-
-// --- World collision query (against static cells) ---
-bool collide_world(
-    float2 p, float expand,
-    out float2 n_out, out float depth_out,
-    out float2 center_out, out float radius_out, out float energy_out
-) {
-    float2 base_cell = floor(p);
-    bool hit = false;
-    float best_depth = 0.0f;
-    float2 best_normal = float2(0.0f, 0.0f);
-    WorldBody best_body = (WorldBody)0;
-
-    for (int oy = -1; oy <= 1; ++oy) {
-        for (int ox = -1; ox <= 1; ++ox) {
-            float2 cell = base_cell + float2(ox, oy);
-            WorldBody body;
-            if (!world_body_from_cell(cell, body)) continue;
-            float2 delta = p - body.center;
-            float dist = length(delta);
-            float penetration = (body.radius + expand) - dist;
-            if (penetration > best_depth) {
-                float safe_dist = max(dist, 1e-4f);
-                best_depth = penetration;
-                best_normal = delta / safe_dist;
-                hit = true;
-                best_body = body;
-            }
-        }
-    }
-
-    if (hit) {
-        n_out = best_normal;
-        depth_out = best_depth;
-        center_out = best_body.center;
-        radius_out = best_body.radius;
-        energy_out = best_body.energy;
-    } else {
-        n_out = float2(0.0f, 0.0f);
-        depth_out = 0.0f;
-        center_out = float2(0.0f, 0.0f);
-        radius_out = 0.0f;
-        energy_out = 0.0f;
-    }
-    return hit;
-}
-
-
-// --- Deactivate body (used for cleanup/out-of-bounds) ---
-void deactivate_body(uint id) {
-    if (id >= BODY_CAPACITY) return;
-    uint state = body_active[id];
-    if (state == 0u) return;
-
-    if (id >= DYNAMIC_BODY_START) {
-        uint active = spawn_state[0].active_dynamic;
-        if (active > 0u)
-            spawn_state[0].active_dynamic = active - 1u;
-    }
-
-    float2 current = body_pos_pred[id];
-    body_active[id] = 0u;
-    body_pos[id] = current;
-    body_pos_pred[id] = current;
-    body_vel[id] = float2(0.0f, 0.0f);
-    store_body_delta(id, float2(0.0f, 0.0f));
-}
-
-
-// --- Compute world-space pixel sampling radius ---
-int compute_body_sample_radius(float zoom, float aspect, float2 resolution) {
-    float world_step_x = abs(zoom) * (2.0f / resolution.x) * aspect;
-    float world_step_y = abs(zoom) * (2.0f / resolution.y);
-    float max_step = max(world_step_x, world_step_y);
-    int extra = (int)ceil(max_step);
-    return clamp(extra + 2, 2, 10);
-}
-
-
-
-// ============================================================================
-// === DISPATCH KERNELS (0–14) ===
-// ============================================================================
-
-
-// (0) INIT FRAME / CAMERA UPDATE + SPAWN
 void init_frame(uint id) {
     if (id == 0) {
         update_camera_state(push_constants.delta_time);
@@ -544,6 +471,52 @@ void zero_deltas(uint id) {
 
 
 // (11) CONSTRAINTS
+
+// --- World collision query (against static cells) ---
+bool collide_world(
+    float2 p, float expand,
+    out float2 n_out, out float depth_out,
+    out float2 center_out, out float radius_out, out float energy_out
+) {
+    float2 base_cell = floor(p);
+    bool hit = false;
+    float best_depth = 0.0f;
+    float2 best_normal = float2(0.0f, 0.0f);
+    WorldBody best_body = (WorldBody)0;
+
+    for (int oy = -1; oy <= 1; ++oy) {
+        for (int ox = -1; ox <= 1; ++ox) {
+            float2 cell = base_cell + float2(ox, oy);
+            WorldBody body;
+            if (!world_body_from_cell(cell, body)) continue;
+            float2 delta = p - body.center;
+            float dist = length(delta);
+            float penetration = (body.radius + expand) - dist;
+            if (penetration > best_depth) {
+                float safe_dist = max(dist, 1e-4f);
+                best_depth = penetration;
+                best_normal = delta / safe_dist;
+                hit = true;
+                best_body = body;
+            }
+        }
+    }
+
+    if (hit) {
+        n_out = best_normal;
+        depth_out = best_depth;
+        center_out = best_body.center;
+        radius_out = best_body.radius;
+        energy_out = best_body.energy;
+    } else {
+        n_out = float2(0.0f, 0.0f);
+        depth_out = 0.0f;
+        center_out = float2(0.0f, 0.0f);
+        radius_out = 0.0f;
+        energy_out = 0.0f;
+    }
+    return hit;
+}
 void constraints_kernel(uint id) {
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) return;
@@ -625,6 +598,26 @@ void apply_deltas(uint id) {
 
 
 // (13) FINALIZE
+
+void deactivate_body(uint id) {
+    if (id >= BODY_CAPACITY) return;
+    uint state = body_active[id];
+    if (state == 0u) return;
+
+    if (id >= DYNAMIC_BODY_START) {
+        uint active = spawn_state[0].active_dynamic;
+        if (active > 0u)
+            spawn_state[0].active_dynamic = active - 1u;
+    }
+
+    float2 current = body_pos_pred[id];
+    body_active[id] = 0u;
+    body_pos[id] = current;
+    body_pos_pred[id] = current;
+    body_vel[id] = float2(0.0f, 0.0f);
+    store_body_delta(id, float2(0.0f, 0.0f));
+}
+
 void finalize_kernel(uint id) {
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) return;
@@ -701,7 +694,12 @@ float3 color = float3(0.016f, 0.018f, 0.020f);
 float density = 0.0f;
 
 float2 baseCell = floor(world);
-int sample_radius = compute_body_sample_radius(zoom, aspect, resolution);
+
+float world_step_x = abs(zoom) * (2.0f / resolution.x) * aspect;
+float world_step_y = abs(zoom) * (2.0f / resolution.y);
+float max_step = max(world_step_x, world_step_y);
+int extra = (int)ceil(max_step);
+int sample_radius= clamp(extra + 2, 2, 10);
 
 for (int oy = -sample_radius; oy <= sample_radius; ++oy) {
     for (int ox = -sample_radius; ox <= sample_radius; ++ox) {
