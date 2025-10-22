@@ -46,3 +46,13 @@ Validation layer:    <Device>
 Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "/usr/lib/libGLX_nvidia.so.0"
 compiling shader: compute.hlsl
 compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+Discovered 2 shaders: graphics.hlsl compute.hlsl 
+Window resized to 1856x1016

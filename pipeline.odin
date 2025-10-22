@@ -120,19 +120,11 @@ bind :: proc(
 global_desc_layout: vk.DescriptorSetLayout
 global_desc_set: vk.DescriptorSet
 
-dispatch_with_count :: proc(frame: FrameInputs, mode: DispatchMode, count: u32) {
-	dispatch_compute(frame, {mode = mode, group = {count, 1, 1}})
-}
 // Generic helper that respects solver_iteration etc.
-dispatch_compute :: proc(frame: FrameInputs, task: ComputeTask) {
-	compute_push_constants.dispatch_mode = u32(task.mode)
-	bind(frame, &render_shader_states[task.pipeline_index], .COMPUTE, &compute_push_constants)
-	vk.CmdDispatch(
-		frame.cmd,
-		task.group.x if task.group.x != 0 else 1,
-		task.group.y if task.group.y != 0 else 1,
-		task.group.z if task.group.z != 0 else 1,
-	)
+dispatch_compute :: proc(frame: FrameInputs, task: DispatchMode, count: u32) {
+	compute_push_constants.dispatch_mode = u32(task)
+	bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
+	vk.CmdDispatch(frame.cmd, count, 1, 1)
 	compute_barrier(frame.cmd)
 }
 

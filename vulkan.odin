@@ -295,6 +295,7 @@ render_frame :: proc(start_time: time.Time) -> bool {
 	// 4. Record rendering commands
 	encoder, frame := begin_frame_commands(element, start_time)
 	record_commands(element, frame)
+	transition_swapchain_image_layout(frame.cmd, element, .PRESENT_SRC_KHR)
 	vk.EndCommandBuffer(encoder.command_buffer)
 
 	// 5. Submit draw work

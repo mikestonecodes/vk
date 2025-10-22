@@ -226,7 +226,6 @@ void maybe_spawn_bodies() {
     if (pool == 0u) return;
 
     CameraStateData cam = camera_state[0];
-    float2 root = body_pos[0u];
 
     float aspect = (push_constants.screen_height > 0u)
         ? (float(push_constants.screen_width) / float(push_constants.screen_height))
@@ -237,7 +236,8 @@ void maybe_spawn_bodies() {
     view.x *= aspect;
     float zoom = max(cam.zoom, 0.001f);
     float2 target_world = cam.position + view * zoom;
-    float2 dir = target_world - root;
+    float2 center = float2(0.0f, 0.0f);
+    float2 dir = target_world - center;
     float len_sq = dot(dir, dir);
     dir = (len_sq <= 1e-8f) ? float2(1.0f, 0.0f) : dir * rsqrt(len_sq);
 
@@ -263,8 +263,8 @@ void maybe_spawn_bodies() {
         );
 
         float spread = 0.6f + 0.15f * float(n % 4u);
-        float spawn_offset = ROOT_BODY_RADIUS + DYNAMIC_BODY_RADIUS + 0.05f + jitter * 0.1f;
-        float2 spawn_pos = root + rotated * spawn_offset;
+        float spawn_offset = DYNAMIC_BODY_RADIUS + 0.05f + jitter * 0.1f;
+        float2 spawn_pos = center + rotated * spawn_offset;
         float2 velocity = rotated * (DYNAMIC_BODY_SPEED * spread);
 
         body_active[slot] = 1u;
@@ -279,6 +279,7 @@ void maybe_spawn_bodies() {
     spawn_state[0].next_dynamic = next_index_base + spawn_budget;
     spawn_state[0].active_dynamic = active_current + spawn_budget;
 }
+
 void init_frame(uint id) {
     if (id == 0) {
         update_camera_state(push_constants.delta_time);
@@ -298,10 +299,9 @@ void initialize_bodies(uint id) {
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) return;
 
-    bool is_root = (id == 0u);
-    body_active[id] = is_root ? 1u : 0u;
-    body_radius[id] = is_root ? ROOT_BODY_RADIUS : DYNAMIC_BODY_RADIUS;
-    body_inv_mass[id] = is_root ? 0.0f : 1.0f;
+    body_active[id] = 0u;
+    body_radius[id] = DYNAMIC_BODY_RADIUS;
+    body_inv_mass[id] = 1.0f;
     body_pos[id] = float2(0.0f, 0.0f);
     body_pos_pred[id] = body_pos[id];
     body_vel[id] = float2(0.0f, 0.0f);
@@ -552,7 +552,7 @@ void constraints_kernel(uint id) {
 
                 float dist = sqrt(dist_sq);
                 float2 n = delta / max(dist, 1e-6f);
-                float penetration = target - dist;
+				float penetration = target - dist;
                 float wsum = wi + wj;
                 if (wsum <= 0.0f) continue;
 
@@ -575,7 +575,7 @@ void apply_deltas(uint id) {
 
     float2 dp = load_body_delta(id) * RELAXATION;
     float mag = length(dp);
-    float max_shift = DYNAMIC_BODY_RADIUS * 2.0f + ROOT_BODY_RADIUS;
+    float max_shift = DYNAMIC_BODY_RADIUS * 2.0f;
     if (mag > max_shift) dp *= (max_shift / max(mag, 1e-4f));
 
     if (body_inv_mass[id] > 0.0f) {
@@ -761,22 +761,22 @@ void render_kernel(uint id) {
 
 [numthreads(128, 1, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
-uint id = tid.x;
-switch (push_constants.dispatch_mode) {
-case 0u: init_frame(id); break; // CAMERA UPDATE / INIT
-case 1u: initialize_bodies(id); break;
-case 2u: clear_grid(id); break;
-case 3u: integrate_predict(id); break;
-case 4u: histogram_kernel(id); break;
-case 5u: prefix_copy_kernel(id); break;
-case 6u: prefix_scan_step(id, push_constants.scan_source, push_constants.scan_offset); break;
-case 7u: prefix_copy_source(id); break;
-case 8u: prefix_finalize_kernel(id, push_constants.scan_source); break;
-case 9u: scatter_kernel(id); break;
-case 10u: zero_deltas(id); break;
-case 11u: constraints_kernel(id); break;
-case 12u: apply_deltas(id); break;
-case 13u: finalize_kernel(id); break;
-case 14u: render_kernel(id); break;
-}
+	uint id = tid.x;
+	switch (push_constants.dispatch_mode) {
+		case 0u: init_frame(id); break; // CAMERA UPDATE / INIT
+		case 1u: initialize_bodies(id); break;
+		case 2u: clear_grid(id); break;
+		case 3u: integrate_predict(id); break;
+		case 4u: histogram_kernel(id); break;
+		case 5u: prefix_copy_kernel(id); break;
+		case 6u: prefix_scan_step(id, push_constants.scan_source, push_constants.scan_offset); break;
+		case 7u: prefix_copy_source(id); break;
+		case 8u: prefix_finalize_kernel(id, push_constants.scan_source); break;
+		case 9u: scatter_kernel(id); break;
+		case 10u: zero_deltas(id); break;
+		case 11u: constraints_kernel(id); break;
+		case 12u: apply_deltas(id); break;
+		case 13u: finalize_kernel(id); break;
+		case 14u: render_kernel(id); break;
+	}
 }

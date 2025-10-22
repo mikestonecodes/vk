@@ -25,51 +25,45 @@ PostProcessPushConstants :: struct {
 	screen_width:  u32,
 	screen_height: u32,
 }
-post_process_push_constants := PostProcessPushConstants {}
+post_process_push_constants := PostProcessPushConstants{}
 
 ComputePushConstants :: struct {
-	time:             f32,
-	delta_time:       f32,
-	screen_width:     u32,
-	screen_height:    u32,
-	move_forward:     b32,
-	move_backward:    b32,
-	move_right:       b32,
-	move_left:        b32,
-	zoom_in:          b32,
-	zoom_out:         b32,
-	speed:            b32,
-	reset_camera:     b32,
-	dispatch_mode:    u32,
-	scan_offset:      u32,
-	scan_source:      u32,
-	spawn_body:       b32,
-	mouse_ndc_x:      f32,
-	mouse_ndc_y:      f32,
-	_pad0:            u32,
-	_pad1:            u32,
+	time:          f32,
+	delta_time:    f32,
+	screen_width:  u32,
+	screen_height: u32,
+	move_forward:  b32,
+	move_backward: b32,
+	move_right:    b32,
+	move_left:     b32,
+	zoom_in:       b32,
+	zoom_out:      b32,
+	speed:         b32,
+	reset_camera:  b32,
+	dispatch_mode: u32,
+	scan_offset:   u32,
+	scan_source:   u32,
+	spawn_body:    b32,
+	mouse_ndc_x:   f32,
+	mouse_ndc_y:   f32,
+	_pad0:         u32,
+	_pad1:         u32,
 }
 
 compute_push_constants := ComputePushConstants {
-	screen_width            = u32(window_width),
-	screen_height           = u32(window_height),
+	screen_width  = u32(window_width),
+	screen_height = u32(window_height),
 }
 SpawnStateGPU :: struct {
-	next_dynamic:       u32,
-	active_dynamic:     u32,
-	pad0:               u32,
-	pad1:               u32,
+	next_dynamic:   u32,
+	active_dynamic: u32,
+	pad0:           u32,
+	pad1:           u32,
 }
 
-
-ComputeTask :: struct {
-	mode:           DispatchMode,
-	group:          [3]u32,
-	pipeline_index: u32,
-}
 
 DispatchMode :: enum u32 {
-	INIT_FRAME,
+	CAMERA_UPDATE,
 	INITIALIZE,
 	CLEAR_GRID,
 	INTEGRATE,
@@ -144,6 +138,20 @@ render_shader_configs := []ShaderProgramConfig {
 	},
 }
 
+key_bindings := []struct {
+	key:   i32,
+	field: ^b32,
+} {
+	{i32(glfw.KEY_W), &compute_push_constants.move_forward},
+	{i32(glfw.KEY_S), &compute_push_constants.move_backward},
+	{i32(glfw.KEY_D), &compute_push_constants.move_right},
+	{i32(glfw.KEY_A), &compute_push_constants.move_left},
+	{i32(glfw.KEY_E), &compute_push_constants.zoom_in},
+	{i32(glfw.KEY_Q), &compute_push_constants.zoom_out},
+	{i32(glfw.KEY_T), &compute_push_constants.speed},
+	{i32(glfw.KEY_R), &compute_push_constants.reset_camera},
+}
+
 
 resize :: proc() {
 	destroy_buffer(&buffers.data[0])
@@ -171,17 +179,12 @@ compute :: proc(frame: FrameInputs) {
 	compute_push_constants.screen_width = u32(window_width)
 	compute_push_constants.screen_height = u32(window_height)
 
-	compute_push_constants.move_forward = b32(is_key_pressed(i32(glfw.KEY_W)))
-	compute_push_constants.move_backward = b32(is_key_pressed(i32(glfw.KEY_S)))
-	compute_push_constants.move_right = b32(is_key_pressed(i32(glfw.KEY_D)))
-	compute_push_constants.move_left = b32(is_key_pressed(i32(glfw.KEY_A)))
-	compute_push_constants.zoom_in = b32(is_key_pressed(i32(glfw.KEY_E)))
-	compute_push_constants.zoom_out = b32(is_key_pressed(i32(glfw.KEY_Q)))
-	compute_push_constants.speed = b32(is_key_pressed(i32(glfw.KEY_T)))
-	compute_push_constants.reset_camera = b32(is_key_pressed(i32(glfw.KEY_R)))
+
+	for binding in key_bindings {
+		binding.field^ = b32(is_key_pressed(binding.key))
+	}
 
 	compute_push_constants.spawn_body = b32(is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT))
-
 	compute_push_constants.mouse_ndc_x = f32(
 		clamp(mouse_x / max(f64(window_width), 1.0), 0.0, 1.0),
 	)
@@ -190,18 +193,19 @@ compute :: proc(frame: FrameInputs) {
 	)
 
 
-	dispatch_compute(frame, {mode = .INIT_FRAME})
+	// ---- Camera update ----
+	dispatch_compute(frame, .CAMERA_UPDATE, 1)
 
 	total_pixels := u32(window_width) * u32(window_height)
 	pixel_dispatch := (total_pixels + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
-	physics(frame,pixel_dispatch)
+	physics(frame, pixel_dispatch)
 
 	zero_buffer(frame, &buffers.data[0])
 	transfer_to_compute_barrier(frame.cmd, &buffers.data[0])
-	dispatch_with_count(frame, .RENDER, pixel_dispatch)
+	dispatch_compute(frame, .RENDER, pixel_dispatch)
 }
 
-physics :: proc(frame:FrameInputs,pixel_dispatch:u32) {
+physics :: proc(frame: FrameInputs, pixel_dispatch: u32) {
 
 	substep_count_f := f32(PHYS_SUBSTEPS)
 	if substep_count_f <= 0.0 {substep_count_f = 1.0}
@@ -209,7 +213,7 @@ physics :: proc(frame:FrameInputs,pixel_dispatch:u32) {
 	if physics_dt < 0.0 {physics_dt = 0.0}
 
 	if !physics_initialized {
-		dispatch_compute(frame, {mode = .INITIALIZE})
+		dispatch_compute(frame, .INITIALIZE,1)
 		physics_initialized = true
 	}
 
@@ -220,35 +224,34 @@ physics :: proc(frame:FrameInputs,pixel_dispatch:u32) {
 		compute_push_constants.delta_time = physics_dt
 
 		// Clear cell grid
-		dispatch_with_count(frame, .CLEAR_GRID, grid_dispatch)
-
+		dispatch_compute(frame, .CLEAR_GRID, grid_dispatch)
 		// Integrate and predict
-		dispatch_with_count(frame, .INTEGRATE, body_dispatch)
-		dispatch_with_count(frame, .HISTOGRAM, body_dispatch)
-		dispatch_with_count(frame, .PREFIX_COPY, grid_dispatch)
+		dispatch_compute(frame, .INTEGRATE, body_dispatch)
+		dispatch_compute(frame, .HISTOGRAM, body_dispatch)
+		dispatch_compute(frame, .PREFIX_COPY, grid_dispatch)
 		parity: u32 = 0
 		offset: u32 = 1
 		for offset < GRID_CELL_COUNT {
 			compute_push_constants.scan_offset = offset
 			compute_push_constants.scan_source = parity
-			dispatch_with_count(frame, .PREFIX_SCAN, grid_dispatch)
+			dispatch_compute(frame, .PREFIX_SCAN, grid_dispatch)
 			parity = 1 - parity
 			offset <<= 1
 		}
 		if parity == 0 {
-			dispatch_with_count(frame, .PREFIX_COPY_SOURCE, grid_dispatch)
+			dispatch_compute(frame, .PREFIX_COPY_SOURCE, grid_dispatch)
 			parity = 1
 		}
 		compute_push_constants.scan_source = parity
-		dispatch_with_count(frame, .PREFIX_FINALIZE, grid_dispatch)
-		dispatch_with_count(frame, .SCATTER, body_dispatch)
+		dispatch_compute(frame, .PREFIX_FINALIZE, grid_dispatch)
+		dispatch_compute(frame, .SCATTER, body_dispatch)
 		for iter: u32 = 0; iter < PHYS_SOLVER_ITERATIONS; iter += 1 {
-			dispatch_with_count(frame, .ZERO_DELTAS, body_dispatch)
-			dispatch_with_count(frame, .CONSTRAINTS, body_dispatch)
-			dispatch_with_count(frame, .APPLY_DELTAS, body_dispatch)
+			dispatch_compute(frame, .ZERO_DELTAS, body_dispatch)
+			dispatch_compute(frame, .CONSTRAINTS, body_dispatch)
+			dispatch_compute(frame, .APPLY_DELTAS, body_dispatch)
 		}
 	}
-	dispatch_with_count(frame, .FINALIZE, body_dispatch)
+	dispatch_compute(frame, .FINALIZE, body_dispatch)
 
 }
 
@@ -260,10 +263,7 @@ graphics :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 		frame,
 		&render_shader_states[1],
 		.GRAPHICS,
-		&PostProcessPushConstants {
-			u32(window_width),
-			u32(window_height),
-		},
+		&PostProcessPushConstants{u32(window_width), u32(window_height)},
 	)
 	draw(frame, 3, 1, 0, 0)
 	end_rendering(frame)
