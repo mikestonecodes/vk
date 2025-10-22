@@ -280,7 +280,7 @@ void maybe_spawn_bodies() {
     spawn_state[0].active_dynamic = active_current + spawn_budget;
 }
 
-void init_frame(uint id) {
+void begin_frame(uint id) {
     if (id == 0) {
         update_camera_state(push_constants.delta_time);
         maybe_spawn_bodies();
@@ -552,7 +552,7 @@ void constraints_kernel(uint id) {
 
                 float dist = sqrt(dist_sq);
                 float2 n = delta / max(dist, 1e-6f);
-				float penetration = target - dist;
+                float penetration = target - dist;
                 float wsum = wi + wj;
                 if (wsum <= 0.0f) continue;
 
@@ -763,7 +763,7 @@ void render_kernel(uint id) {
 void main(uint3 tid : SV_DispatchThreadID) {
 	uint id = tid.x;
 	switch (push_constants.dispatch_mode) {
-		case 0u: init_frame(id); break; // CAMERA UPDATE / INIT
+		case 0u: begin_frame(id); break; // CAMERA UPDATE / INIT
 		case 1u: initialize_bodies(id); break;
 		case 2u: clear_grid(id); break;
 		case 3u: integrate_predict(id); break;

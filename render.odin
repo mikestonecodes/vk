@@ -63,7 +63,7 @@ SpawnStateGPU :: struct {
 
 
 DispatchMode :: enum u32 {
-	CAMERA_UPDATE,
+	BEGIN_FRAME,
 	INITIALIZE,
 	CLEAR_GRID,
 	INTEGRATE,
@@ -166,7 +166,6 @@ resize :: proc() {
 record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
 	compute(frame)
 	graphics(frame, element)
-	transition_swapchain_image_layout(frame.cmd, element, .PRESENT_SRC_KHR)
 }
 
 physics_initialized: bool
@@ -194,7 +193,7 @@ compute :: proc(frame: FrameInputs) {
 
 
 	// ---- Camera update ----
-	dispatch_compute(frame, .CAMERA_UPDATE, 1)
+	dispatch_compute(frame, .BEGIN_FRAME, 1)
 
 	total_pixels := u32(window_width) * u32(window_height)
 	pixel_dispatch := (total_pixels + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
@@ -205,6 +204,23 @@ compute :: proc(frame: FrameInputs) {
 	dispatch_compute(frame, .RENDER, pixel_dispatch)
 }
 
+prefix_scan :: proc(frame: FrameInputs, grid_dispatch: u32) {
+	parity: u32 = 0
+	offset: u32 = 1
+	for offset < GRID_CELL_COUNT {
+		compute_push_constants.scan_offset = offset
+		compute_push_constants.scan_source = parity
+		dispatch_compute(frame, .PREFIX_SCAN, grid_dispatch)
+		parity = 1 - parity
+		offset <<= 1
+	}
+	if parity == 0 {
+		dispatch_compute(frame, .PREFIX_COPY_SOURCE, grid_dispatch)
+		parity = 1
+	}
+	compute_push_constants.scan_source = parity
+}
+
 physics :: proc(frame: FrameInputs, pixel_dispatch: u32) {
 
 	substep_count_f := f32(PHYS_SUBSTEPS)
@@ -213,7 +229,7 @@ physics :: proc(frame: FrameInputs, pixel_dispatch: u32) {
 	if physics_dt < 0.0 {physics_dt = 0.0}
 
 	if !physics_initialized {
-		dispatch_compute(frame, .INITIALIZE,1)
+		dispatch_compute(frame, .INITIALIZE, 1)
 		physics_initialized = true
 	}
 
@@ -223,26 +239,11 @@ physics :: proc(frame: FrameInputs, pixel_dispatch: u32) {
 	for substep_index: u32 = 0; substep_index < PHYS_SUBSTEPS; substep_index += 1 {
 		compute_push_constants.delta_time = physics_dt
 
-		// Clear cell grid
 		dispatch_compute(frame, .CLEAR_GRID, grid_dispatch)
-		// Integrate and predict
 		dispatch_compute(frame, .INTEGRATE, body_dispatch)
 		dispatch_compute(frame, .HISTOGRAM, body_dispatch)
 		dispatch_compute(frame, .PREFIX_COPY, grid_dispatch)
-		parity: u32 = 0
-		offset: u32 = 1
-		for offset < GRID_CELL_COUNT {
-			compute_push_constants.scan_offset = offset
-			compute_push_constants.scan_source = parity
-			dispatch_compute(frame, .PREFIX_SCAN, grid_dispatch)
-			parity = 1 - parity
-			offset <<= 1
-		}
-		if parity == 0 {
-			dispatch_compute(frame, .PREFIX_COPY_SOURCE, grid_dispatch)
-			parity = 1
-		}
-		compute_push_constants.scan_source = parity
+		prefix_scan(frame, grid_dispatch)
 		dispatch_compute(frame, .PREFIX_FINALIZE, grid_dispatch)
 		dispatch_compute(frame, .SCATTER, body_dispatch)
 		for iter: u32 = 0; iter < PHYS_SOLVER_ITERATIONS; iter += 1 {
