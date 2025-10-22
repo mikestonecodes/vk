@@ -7,9 +7,6 @@ COMPUTE_GROUP_SIZE :: u32(128)
 PIPELINE_COUNT :: 2
 // Physics configuration
 PHYS_MAX_BODIES :: u32(512000)
-PHYS_PLAYER_INDEX :: u32(0)
-PHYS_PROJECTILE_START :: u32(1)
-PHYS_PROJECTILE_POOL :: u32(60000)
 PHYS_SOLVER_ITERATIONS :: u32(4)
 PHYS_SUBSTEPS :: u32(1)
 
@@ -46,7 +43,7 @@ ComputePushConstants :: struct {
 	dispatch_mode:    u32,
 	scan_offset:      u32,
 	scan_source:      u32,
-	spawn_projectile: b32,
+	spawn_circle:     b32,
 	mouse_ndc_x:      f32,
 	mouse_ndc_y:      f32,
 	_pad0:            u32,
@@ -58,8 +55,8 @@ compute_push_constants := ComputePushConstants {
 	screen_height           = u32(window_height),
 }
 SpawnStateGPU :: struct {
-	next_projectile:    u32,
-	active_projectiles: u32,
+	next_dynamic:       u32,
+	active_dynamic:     u32,
 	pad0:               u32,
 	pad1:               u32,
 }
@@ -75,7 +72,6 @@ DispatchMode :: enum u32 {
 	CAMERA_UPDATE,
 	INITIALIZE,
 	CLEAR_GRID,
-	SPAWN_PROJECTILE,
 	INTEGRATE,
 	HISTOGRAM,
 	PREFIX_COPY,
@@ -183,7 +179,7 @@ compute :: proc(frame: FrameInputs) {
 	compute_push_constants.speed = b32(is_key_pressed(i32(glfw.KEY_T)))
 	compute_push_constants.reset_camera = b32(is_key_pressed(i32(glfw.KEY_R)))
 
-	compute_push_constants.spawn_projectile = b32(is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT))
+	compute_push_constants.spawn_circle = b32(is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT))
 
 	compute_push_constants.mouse_ndc_x = f32(
 		clamp(mouse_x / max(f64(window_width), 1.0), 0.0, 1.0),
@@ -226,10 +222,6 @@ physics :: proc(frame:FrameInputs,pixel_dispatch:u32) {
 		// Clear cell grid
 		dispatch_compute(frame, {mode = .CLEAR_GRID, group = {grid_dispatch, 1, 1}})
 
-		// Spawn projectile (only if requested)
-		if compute_push_constants.spawn_projectile {
-			dispatch_compute(frame, ComputeTask{mode = .SPAWN_PROJECTILE})
-		}
 		// Integrate and predict
 		dispatch_compute(frame, {mode = .INTEGRATE, group = {body_dispatch, 1, 1}})
 		dispatch_compute(frame, {mode = .HISTOGRAM, group = {body_dispatch, 1, 1}})

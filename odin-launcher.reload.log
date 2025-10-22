@@ -50,98 +50,9 @@ compiled shader successfully! ignore previous compile errors for this file: grap
 compiling shader: graphics.hlsl
 compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 compiling shader: compute.hlsl
-Validation layer: vkCreateShadersEXT(): pCreateInfos[0] SPIR-V (VK_SHADER_STAGE_COMPUTE_BIT) has a push constant buffer Block with range [0, 84] which outside the VkPushConstantRange of [0, 80].
-The Vulkan spec states: If codeType is VK_SHADER_CODE_TYPE_SPIRV_EXT, and if a push constant block is declared in a shader, the block must be contained inside the element of pPushConstantRanges that matches the stage (https://docs.vulkan.org/spec/latest/chapters/shaders.html#VUID-VkShaderCreateInfoEXT-codeType-10065)
 compiling shader: graphics.hlsl
 compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 compiling shader: graphics.hlsl
 compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 Discovered 2 shaders: graphics.hlsl compute.hlsl 
-Window resized to 1856x656
-Recompiling compute.hlsl
-compiling shader: compute.hlsl
-compiling shader: compute.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: compute.hlsl
-Validation layer: vkCreateShadersEXT(): pCreateInfos[0] SPIR-V (VK_SHADER_STAGE_COMPUTE_BIT) has a push constant buffer Block with range [0, 84] which outside the VkPushConstantRange of [0, 80].
-The Vulkan spec states: If codeType is VK_SHADER_CODE_TYPE_SPIRV_EXT, and if a push constant block is declared in a shader, the block must be contained inside the element of pPushConstantRanges that matches the stage (https://docs.vulkan.org/spec/latest/chapters/shaders.html#VUID-VkShaderCreateInfoEXT-codeType-10065)
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-Recompiling compute.hlsl
-compiling shader: compute.hlsl
-compiling shader: compute.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: compute.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-Recompiling compute.hlsl
-compiling shader: compute.hlsl
-compiling shader: compute.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: compute.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-Recompiling compute.hlsl
-compiling shader: compute.hlsl
-compiling shader: compute.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: compute.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-Recompiling compute.hlsl
-compiling shader: compute.hlsl
-compiling shader: compute.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: compute.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-Recompiling compute.hlsl
-compiling shader: compute.hlsl
-compiling shader: compute.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: compute.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-Recompiling compute.hlsl
-compiling shader: compute.hlsl
-compiling shader: compute.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: compute.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 Window resized to 1856x1016

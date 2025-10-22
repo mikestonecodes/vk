@@ -6,20 +6,20 @@ static const float CAMERA_MAX_ZOOM     = 5000.0f;
 static const float CAMERA_ZOOM_RATE    = 2.2f;
 static const float CAMERA_FAST_SCALE   = 2.4f;
 
-static const uint  PHYS_PROJECTILE_START = 1u;
 static const float CELL_SIZE = 2.0f;
 static const float WORLD_RANGE_LIMIT = 1e6f;
-static const uint  MAX_ACTIVE_PROJECTILES = 25000u;
+static const uint  DYNAMIC_BODY_START = 1u;
+static const uint  MAX_ACTIVE_DYNAMIC = 25000u;
 
 static const uint  BODY_CAPACITY = 512000u;
 static const uint  GRID_X = 512u;
 static const uint  GRID_Y = 512u;
-static const uint  PROJECTILE_POOL = 60000u;
-static const float PROJECTILE_SPEED = 42.0f;
-static const float PROJECTILE_RADIUS = 0.20f;
-static const float PROJECTILE_MAX_DISTANCE = 450.0f;
-static const float PLAYER_RADIUS = 0.65f;
-static const float PLAYER_DAMPING = 0.02f;
+static const uint  DYNAMIC_BODY_POOL = 60000u;
+static const float DYNAMIC_BODY_SPEED = 42.0f;
+static const float DYNAMIC_BODY_RADIUS = 0.20f;
+static const float DYNAMIC_BODY_MAX_DISTANCE = 450.0f;
+static const float ROOT_BODY_RADIUS = 0.65f;
+static const float BODY_DAMPING = 0.02f;
 static const float RELAXATION = 1.0f;
 static const float DT_CLAMP = 1.0f / 30.0f;
 static const uint  PHYS_SUBSTEPS = 1u;
@@ -28,19 +28,18 @@ static const float DELTA_SCALE = 32768.0f;
 static const uint DISPATCH_CAMERA_UPDATE      = 0u;
 static const uint DISPATCH_INITIALIZE         = 1u;
 static const uint DISPATCH_CLEAR_GRID         = 2u;
-static const uint DISPATCH_SPAWN_PROJECTILE   = 3u;
-static const uint DISPATCH_INTEGRATE          = 4u;
-static const uint DISPATCH_HISTOGRAM          = 5u;
-static const uint DISPATCH_PREFIX_COPY        = 6u;
-static const uint DISPATCH_PREFIX_SCAN        = 7u;
-static const uint DISPATCH_PREFIX_COPY_SOURCE = 8u;
-static const uint DISPATCH_PREFIX_FINALIZE    = 9u;
-static const uint DISPATCH_SCATTER            = 10u;
-static const uint DISPATCH_ZERO_DELTAS        = 11u;
-static const uint DISPATCH_CONSTRAINTS        = 12u;
-static const uint DISPATCH_APPLY_DELTAS       = 13u;
-static const uint DISPATCH_FINALIZE           = 14u;
-static const uint DISPATCH_RENDER             = 15u;
+static const uint DISPATCH_INTEGRATE          = 3u;
+static const uint DISPATCH_HISTOGRAM          = 4u;
+static const uint DISPATCH_PREFIX_COPY        = 5u;
+static const uint DISPATCH_PREFIX_SCAN        = 6u;
+static const uint DISPATCH_PREFIX_COPY_SOURCE = 7u;
+static const uint DISPATCH_PREFIX_FINALIZE    = 8u;
+static const uint DISPATCH_SCATTER            = 9u;
+static const uint DISPATCH_ZERO_DELTAS        = 10u;
+static const uint DISPATCH_CONSTRAINTS        = 11u;
+static const uint DISPATCH_APPLY_DELTAS       = 12u;
+static const uint DISPATCH_FINALIZE           = 13u;
+static const uint DISPATCH_RENDER             = 14u;
 
 // GPU physics compute pipeline
 struct ComputePushConstants {
@@ -59,7 +58,7 @@ struct ComputePushConstants {
     uint  dispatch_mode;
     uint  scan_offset;
     uint  scan_source;
-    uint  spawn_projectile;
+    uint  spawn_circle;
     float mouse_ndc_x;
     float mouse_ndc_y;
     uint  pad0;
@@ -74,8 +73,8 @@ struct CameraStateData {
 };
 
 struct SpawnState {
-    uint next_projectile;
-    uint active_projectiles;
+    uint next_dynamic;
+    uint active_dynamic;
     uint pad0;
     uint pad1;
 };
@@ -332,10 +331,10 @@ void deactivate_body(uint id) {
         return;
     }
 
-    if (id >= PHYS_PROJECTILE_START) {
-        uint active = spawn_state[0].active_projectiles;
+    if (id >= DYNAMIC_BODY_START) {
+        uint active = spawn_state[0].active_dynamic;
         if (active > 0u) {
-            spawn_state[0].active_projectiles = active - 1u;
+            spawn_state[0].active_dynamic = active - 1u;
         }
     }
 
@@ -351,8 +350,8 @@ void deactivate_body(uint id) {
 
 void initialize_bodies(uint id) {
     if (id == 0u) {
-        spawn_state[0].next_projectile = 0u;
-        spawn_state[0].active_projectiles = 0u;
+        spawn_state[0].next_dynamic = 0u;
+        spawn_state[0].active_dynamic = 0u;
         spawn_state[0].pad0 = 0u;
         spawn_state[0].pad1 = 0u;
     }
@@ -360,10 +359,10 @@ void initialize_bodies(uint id) {
     if (id >= capacity) {
         return;
     }
-    bool is_player = (id == 0u);
-    body_active[id] = is_player ? 1u : 0u;
-    body_radius[id] = is_player ? PLAYER_RADIUS : PROJECTILE_RADIUS;
-    body_inv_mass[id] = is_player ? 0.0f : 1.0f;
+    bool is_root = (id == 0u);
+    body_active[id] = is_root ? 1u : 0u;
+    body_radius[id] = is_root ? ROOT_BODY_RADIUS : DYNAMIC_BODY_RADIUS;
+    body_inv_mass[id] = is_root ? 0.0f : 1.0f;
     body_pos[id] = float2(0.0f, 0.0f);
     body_pos_pred[id] = body_pos[id];
     body_vel[id] = float2(0.0f, 0.0f);
@@ -379,18 +378,17 @@ void clear_grid(uint id) {
     cell_scratch[id] = 0u;
 }
 
-void spawn_projectile_kernel(uint id) {
-    if (id != 0u || push_constants.spawn_projectile == 0u) {
+void maybe_spawn_circles() {
+    if (push_constants.spawn_circle == 0u) {
         return;
     }
 
     uint capacity = BODY_CAPACITY;
-    if (capacity <= PHYS_PROJECTILE_START) {
+    if (capacity <= DYNAMIC_BODY_START) {
         return;
     }
 
-    uint pool = PROJECTILE_POOL;
-    pool = min(pool, capacity - PHYS_PROJECTILE_START);
+    uint pool = min(DYNAMIC_BODY_POOL, capacity - DYNAMIC_BODY_START);
     if (pool == 0u) {
         return;
     }
@@ -415,20 +413,21 @@ void spawn_projectile_kernel(uint id) {
     }
 
     const uint SPAWN_BATCH = 16u;
-    uint active_current = spawn_state[0].active_projectiles;
-    if (active_current >= MAX_ACTIVE_PROJECTILES) {
+    uint active_current = spawn_state[0].active_dynamic;
+    if (active_current >= MAX_ACTIVE_DYNAMIC) {
         return;
     }
 
-    uint spawn_budget = min(SPAWN_BATCH, MAX_ACTIVE_PROJECTILES - active_current);
+    uint spawn_budget = min(SPAWN_BATCH, MAX_ACTIVE_DYNAMIC - active_current);
     if (spawn_budget == 0u) {
         return;
     }
 
+    uint next_index_base = spawn_state[0].next_dynamic;
+
     for (uint n = 0u; n < spawn_budget; ++n) {
-        uint next_index;
-        InterlockedAdd(spawn_state[0].next_projectile, 1u, next_index);
-        uint slot = PHYS_PROJECTILE_START + (next_index % pool);
+        uint next_index = next_index_base + n;
+        uint slot = DYNAMIC_BODY_START + (next_index % pool);
         if (slot >= capacity) {
             slot = capacity - 1u;
         }
@@ -441,12 +440,12 @@ void spawn_projectile_kernel(uint id) {
         );
 
         float spread = 0.6f + 0.15f * float(n % 4u);
-        float spawn_offset = PLAYER_RADIUS + PROJECTILE_RADIUS + 0.05f + jitter * 0.1f;
+        float spawn_offset = ROOT_BODY_RADIUS + DYNAMIC_BODY_RADIUS + 0.05f + jitter * 0.1f;
         float2 spawn_pos = root + rotated * spawn_offset;
-        float2 velocity = rotated * (PROJECTILE_SPEED * spread);
+        float2 velocity = rotated * (DYNAMIC_BODY_SPEED * spread);
 
         body_active[slot] = 1u;
-        body_radius[slot] = PROJECTILE_RADIUS;
+        body_radius[slot] = DYNAMIC_BODY_RADIUS;
         body_inv_mass[slot] = 1.0f;
         body_pos[slot] = spawn_pos;
         body_pos_pred[slot] = spawn_pos;
@@ -454,7 +453,8 @@ void spawn_projectile_kernel(uint id) {
         store_body_delta(slot, float2(0.0f, 0.0f));
     }
 
-    spawn_state[0].active_projectiles = active_current + spawn_budget;
+    spawn_state[0].next_dynamic = next_index_base + spawn_budget;
+    spawn_state[0].active_dynamic = active_current + spawn_budget;
 }
 
 void integrate_predict(uint id) {
@@ -639,7 +639,7 @@ void constraints_kernel(uint id) {
         float circle_radius;
         float circle_energy;
         if (collide_world(xi, ri, normal, depth, circle_center, circle_radius, circle_energy)) {
-            if (id >= PHYS_PROJECTILE_START) {
+            if (id >= DYNAMIC_BODY_START) {
                 return;
             }
             float2 corr = -(depth)*normal * wi;
@@ -711,7 +711,7 @@ void apply_deltas(uint id) {
 
     float2 dp = load_body_delta(id) * RELAXATION;
     float mag = length(dp);
-    float max_shift = PROJECTILE_RADIUS * 2.0f + PLAYER_RADIUS;
+    float max_shift = DYNAMIC_BODY_RADIUS * 2.0f + ROOT_BODY_RADIUS;
     if (mag > max_shift) {
         dp *= (max_shift / max(mag, 1e-4f));
     }
@@ -745,7 +745,7 @@ void finalize_kernel(uint id) {
     }
 
     float2 vel = (x1 - x0) / dt;
-    float damping = saturate(1.0f - PLAYER_DAMPING);
+    float damping = saturate(1.0f - BODY_DAMPING);
     vel *= damping;
 
     if (!all(isfinite(vel)) || !all(isfinite(x1))) {
@@ -768,9 +768,9 @@ void finalize_kernel(uint id) {
     body_pos[id] = x1;
     body_pos_pred[id] = x1;
 
-    if (id >= PHYS_PROJECTILE_START && inv_mass > 0.0f) {
+    if (id >= DYNAMIC_BODY_START && inv_mass > 0.0f) {
         float dist_sq = dot(x1, x1);
-        float limit = PROJECTILE_MAX_DISTANCE;
+        float limit = DYNAMIC_BODY_MAX_DISTANCE;
         if (dist_sq > limit * limit) {
             body_vel[id] = float2(0.0f, 0.0f);
             deactivate_body(id);
@@ -831,7 +831,7 @@ void render_kernel(uint id) {
     if (density <= 0.0001f) {
         WorldCircle circle;
         circle.center = float2(0.0f, 0.0f);
-        circle.radius = PLAYER_RADIUS;
+        circle.radius = ROOT_BODY_RADIUS;
         circle.softness = circle.radius * 0.5f;
         circle.color = float3(0.85f, 0.90f, 0.98f);
         circle.energy = 0.65f;
@@ -897,6 +897,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
         case DISPATCH_CAMERA_UPDATE: {
             if (tid.x == 0u) {
                 update_camera_state(push_constants.delta_time);
+                maybe_spawn_circles();
             }
             break;
         }
@@ -906,10 +907,6 @@ void main(uint3 tid : SV_DispatchThreadID) {
         }
         case DISPATCH_CLEAR_GRID: {
             clear_grid(tid.x);
-            break;
-        }
-        case DISPATCH_SPAWN_PROJECTILE: {
-            spawn_projectile_kernel(tid.x);
             break;
         }
         case DISPATCH_INTEGRATE: {
