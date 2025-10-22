@@ -1150,9 +1150,6 @@ destroy_texture :: proc(resource: ^TextureResource) {
 	}
 	resource^ = TextureResource{}
 }
-command_dispatch :: proc(cmd: vk.CommandBuffer, x, y, z: u32) {
-	vk.CmdDispatch(cmd, x, y, z)
-}
 compute_barrier :: proc(cmd: vk.CommandBuffer) {
 	barrier := vk.MemoryBarrier2 {
 		sType         = .MEMORY_BARRIER_2,

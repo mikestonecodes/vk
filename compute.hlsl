@@ -58,7 +58,7 @@ struct ComputePushConstants {
     uint  dispatch_mode;
     uint  scan_offset;
     uint  scan_source;
-    uint  spawn_circle;
+    uint  spawn_body;
     float mouse_ndc_x;
     float mouse_ndc_y;
     uint  pad0;
@@ -79,7 +79,7 @@ struct SpawnState {
     uint pad1;
 };
 
-struct WorldCircle {
+struct WorldBody {
     float2 center;
     float  radius;
     float  softness;
@@ -163,26 +163,26 @@ uint cell_index(uint2 g) {
     uint grid_x = GRID_X;
     return g.y * grid_x + g.x;
 }
-bool world_circle_from_cell(float2 cell, out WorldCircle circle) {
+bool world_body_from_cell(float2 cell, out WorldBody body) {
     float seed = dot(cell, float2(53.34f, 19.13f));
     float presence = hash11(seed);
     if (presence < 0.97f) {
-        circle = (WorldCircle)0;
+        body = (WorldBody)0;
         return false;
     }
 
     float2 jitter = hash21(cell) - 0.5f;
-    circle.center = cell + jitter * 0.9f;
-    circle.radius = lerp(0.35f, 0.10f, hash11(seed + 17.23f));
-    circle.softness = lerp(0.20f, 0.55f, hash11(seed + 41.07f));
+    body.center = cell + jitter * 0.9f;
+    body.radius = lerp(0.35f, 0.10f, hash11(seed + 17.23f));
+    body.softness = lerp(0.20f, 0.55f, hash11(seed + 41.07f));
 
     float3 randomColor = hash31(cell);
-    circle.color = float3(
+    body.color = float3(
         pow(randomColor.x, 1.8f),
         pow(randomColor.y, 1.6f),
         pow(randomColor.z, 1.4f)
     );
-    circle.energy = lerp(0.18f, 0.95f, hash11(seed + 63.5f));
+    body.energy = lerp(0.18f, 0.95f, hash11(seed + 63.5f));
     return true;
 }
 
@@ -282,24 +282,24 @@ bool collide_world(float2 p, float expand, out float2 n_out, out float depth_out
     bool hit = false;
     float best_depth = 0.0f;
     float2 best_normal = float2(0.0f, 0.0f);
-    WorldCircle best_circle = (WorldCircle)0;
+    WorldBody best_body = (WorldBody)0;
 
     for (int oy = -1; oy <= 1; ++oy) {
         for (int ox = -1; ox <= 1; ++ox) {
             float2 cell = base_cell + float2(ox, oy);
-            WorldCircle circle;
-            if (!world_circle_from_cell(cell, circle)) {
+            WorldBody body;
+            if (!world_body_from_cell(cell, body)) {
                 continue;
             }
-            float2 delta = p - circle.center;
+            float2 delta = p - body.center;
             float dist = length(delta);
-            float penetration = (circle.radius + expand) - dist;
+            float penetration = (body.radius + expand) - dist;
             if (penetration > best_depth) {
                 float safe_dist = max(dist, 1e-4f);
                 best_depth = penetration;
                 best_normal = delta / safe_dist;
                 hit = true;
-                best_circle = circle;
+                best_body = body;
             }
         }
     }
@@ -307,9 +307,9 @@ bool collide_world(float2 p, float expand, out float2 n_out, out float depth_out
     if (hit) {
         n_out = best_normal;
         depth_out = best_depth;
-        center_out = best_circle.center;
-        radius_out = best_circle.radius;
-        energy_out = best_circle.energy;
+        center_out = best_body.center;
+        radius_out = best_body.radius;
+        energy_out = best_body.energy;
     } else {
         n_out = float2(0.0f, 0.0f);
         depth_out = 0.0f;
@@ -378,8 +378,8 @@ void clear_grid(uint id) {
     cell_scratch[id] = 0u;
 }
 
-void maybe_spawn_circles() {
-    if (push_constants.spawn_circle == 0u) {
+void maybe_spawn_bodies() {
+    if (push_constants.spawn_body == 0u) {
         return;
     }
 
@@ -635,10 +635,10 @@ void constraints_kernel(uint id) {
     if (wi > 0.0f) {
         float2 normal;
         float depth;
-        float2 circle_center;
-        float circle_radius;
-        float circle_energy;
-        if (collide_world(xi, ri, normal, depth, circle_center, circle_radius, circle_energy)) {
+        float2 body_center;
+        float body_radius_out;
+        float body_energy;
+        if (collide_world(xi, ri, normal, depth, body_center, body_radius_out, body_energy)) {
             if (id >= DYNAMIC_BODY_START) {
                 return;
             }
@@ -779,7 +779,7 @@ void finalize_kernel(uint id) {
     }
 }
 
-int compute_circle_sample_radius(float zoom, float aspect, float2 resolution) {
+int compute_body_sample_radius(float zoom, float aspect, float2 resolution) {
     float world_step_x = abs(zoom) * (2.0f / resolution.x) * aspect;
     float world_step_y = abs(zoom) * (2.0f / resolution.y);
     float max_step = max(world_step_x, world_step_y);
@@ -812,32 +812,32 @@ void render_kernel(uint id) {
     float density = 0.0f;
 
     float2 baseCell = floor(world);
-    int sample_radius = compute_circle_sample_radius(zoom, aspect, resolution);
+    int sample_radius = compute_body_sample_radius(zoom, aspect, resolution);
 
     for (int oy = -sample_radius; oy <= sample_radius; ++oy) {
         for (int ox = -sample_radius; ox <= sample_radius; ++ox) {
             float2 cell = baseCell + float2(ox, oy);
-            WorldCircle circle;
-            if (!world_circle_from_cell(cell, circle)) {
+            WorldBody body;
+            if (!world_body_from_cell(cell, body)) {
                 continue;
             }
-            float dist = length(world - circle.center);
-            float coverage = soft_circle(dist, circle.radius, circle.softness);
-            color += circle.color * circle.energy * coverage;
+            float dist = length(world - body.center);
+            float coverage = soft_circle(dist, body.radius, body.softness);
+            color += body.color * body.energy * coverage;
             density = max(density, coverage);
         }
     }
 
     if (density <= 0.0001f) {
-        WorldCircle circle;
-        circle.center = float2(0.0f, 0.0f);
-        circle.radius = ROOT_BODY_RADIUS;
-        circle.softness = circle.radius * 0.5f;
-        circle.color = float3(0.85f, 0.90f, 0.98f);
-        circle.energy = 0.65f;
-        float dist = length(world - circle.center);
-        float coverage = soft_circle(dist, circle.radius, circle.softness);
-        color += circle.color * circle.energy * coverage;
+        WorldBody body;
+        body.center = float2(0.0f, 0.0f);
+        body.radius = ROOT_BODY_RADIUS;
+        body.softness = body.radius * 0.5f;
+        body.color = float3(0.85f, 0.90f, 0.98f);
+        body.energy = 0.65f;
+        float dist = length(world - body.center);
+        float coverage = soft_circle(dist, body.radius, body.softness);
+        color += body.color * body.energy * coverage;
         density = max(density, coverage);
     }
 
@@ -897,7 +897,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
         case DISPATCH_CAMERA_UPDATE: {
             if (tid.x == 0u) {
                 update_camera_state(push_constants.delta_time);
-                maybe_spawn_circles();
+                maybe_spawn_bodies();
             }
             break;
         }

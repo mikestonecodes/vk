@@ -43,7 +43,7 @@ ComputePushConstants :: struct {
 	dispatch_mode:    u32,
 	scan_offset:      u32,
 	scan_source:      u32,
-	spawn_circle:     b32,
+	spawn_body:       b32,
 	mouse_ndc_x:      f32,
 	mouse_ndc_y:      f32,
 	_pad0:            u32,
@@ -162,6 +162,9 @@ record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
 }
 
 physics_initialized: bool
+dispatch_with_count :: proc(frame: FrameInputs, mode: DispatchMode, count: u32) {
+	dispatch_compute(frame, {mode = mode, group = {count, 1, 1}})
+}
 // compute.hlsl -> accumulation_buffer
 compute :: proc(frame: FrameInputs) {
 	mouse_x, mouse_y := get_mouse_position()
@@ -179,7 +182,7 @@ compute :: proc(frame: FrameInputs) {
 	compute_push_constants.speed = b32(is_key_pressed(i32(glfw.KEY_T)))
 	compute_push_constants.reset_camera = b32(is_key_pressed(i32(glfw.KEY_R)))
 
-	compute_push_constants.spawn_circle = b32(is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT))
+	compute_push_constants.spawn_body = b32(is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT))
 
 	compute_push_constants.mouse_ndc_x = f32(
 		clamp(mouse_x / max(f64(window_width), 1.0), 0.0, 1.0),
@@ -198,7 +201,7 @@ compute :: proc(frame: FrameInputs) {
 
 	zero_buffer(frame, &buffers.data[0])
 	transfer_to_compute_barrier(frame.cmd, &buffers.data[0])
-	dispatch_compute(frame, {mode = .RENDER, group = {pixel_dispatch, 1, 1}})
+	dispatch_with_count(frame, .RENDER, pixel_dispatch)
 }
 
 physics :: proc(frame:FrameInputs,pixel_dispatch:u32) {
@@ -220,38 +223,35 @@ physics :: proc(frame:FrameInputs,pixel_dispatch:u32) {
 		compute_push_constants.delta_time = physics_dt
 
 		// Clear cell grid
-		dispatch_compute(frame, {mode = .CLEAR_GRID, group = {grid_dispatch, 1, 1}})
+		dispatch_with_count(frame, .CLEAR_GRID, grid_dispatch)
 
 		// Integrate and predict
-		dispatch_compute(frame, {mode = .INTEGRATE, group = {body_dispatch, 1, 1}})
-		dispatch_compute(frame, {mode = .HISTOGRAM, group = {body_dispatch, 1, 1}})
-		dispatch_compute(frame, {mode = .PREFIX_COPY, group = {grid_dispatch, 1, 1}})
+		dispatch_with_count(frame, .INTEGRATE, body_dispatch)
+		dispatch_with_count(frame, .HISTOGRAM, body_dispatch)
+		dispatch_with_count(frame, .PREFIX_COPY, grid_dispatch)
 		parity: u32 = 0
 		offset: u32 = 1
 		for offset < GRID_CELL_COUNT {
-			compute_push_constants.dispatch_mode = u32(DispatchMode.PREFIX_SCAN)
 			compute_push_constants.scan_offset = offset
 			compute_push_constants.scan_source = parity
-			bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-			command_dispatch(frame.cmd, grid_dispatch, 1, 1)
-			compute_barrier(frame.cmd)
+			dispatch_with_count(frame, .PREFIX_SCAN, grid_dispatch)
 			parity = 1 - parity
 			offset <<= 1
 		}
 		if parity == 0 {
-			dispatch_compute(frame, {mode = .PREFIX_COPY_SOURCE, group = {grid_dispatch, 1, 1}})
+			dispatch_with_count(frame, .PREFIX_COPY_SOURCE, grid_dispatch)
 			parity = 1
 		}
 		compute_push_constants.scan_source = parity
-		dispatch_compute(frame, {mode = .PREFIX_FINALIZE, group = {grid_dispatch, 1, 1}})
-		dispatch_compute(frame, {mode = .SCATTER, group = {body_dispatch, 1, 1}})
+		dispatch_with_count(frame, .PREFIX_FINALIZE, grid_dispatch)
+		dispatch_with_count(frame, .SCATTER, body_dispatch)
 		for iter: u32 = 0; iter < PHYS_SOLVER_ITERATIONS; iter += 1 {
-			dispatch_compute(frame, {mode = .ZERO_DELTAS, group = {body_dispatch, 1, 1}})
-			dispatch_compute(frame, {mode = .CONSTRAINTS, group = {body_dispatch, 1, 1}})
-			dispatch_compute(frame, {mode = .APPLY_DELTAS, group = {body_dispatch, 1, 1}})
+			dispatch_with_count(frame, .ZERO_DELTAS, body_dispatch)
+			dispatch_with_count(frame, .CONSTRAINTS, body_dispatch)
+			dispatch_with_count(frame, .APPLY_DELTAS, body_dispatch)
 		}
 	}
-	dispatch_compute(frame, {mode = .FINALIZE, group = {body_dispatch, 1, 1}})
+	dispatch_with_count(frame, .FINALIZE, body_dispatch)
 
 }
 
