@@ -1,8 +1,5 @@
 package main
 
-import "vendor:glfw"
-import vk "vendor:vulkan"
-
 COMPUTE_GROUP_SIZE :: u32(128)
 PIPELINE_COUNT :: 2
 // Physics configuration
@@ -116,10 +113,11 @@ buffer_specs := []struct {
 
 DescriptorBindingSpec :: struct {
 	binding:          u32,
-	descriptor_type:  vk.DescriptorType,
+	descriptor_type:  DescriptorType,
 	descriptor_count: u32,
-	stage_flags:      vk.ShaderStageFlags,
+	stage_flags:      ShaderStageFlags,
 }
+
 global_descriptor_extras :: []DescriptorBindingSpec {
 	{1, .SAMPLED_IMAGE, 2, {.FRAGMENT}},
 	{2, .SAMPLER, 2, {.FRAGMENT}},
@@ -142,14 +140,14 @@ key_bindings := []struct {
 	key:   i32,
 	field: ^b32,
 } {
-	{i32(glfw.KEY_W), &compute_push_constants.move_forward},
-	{i32(glfw.KEY_S), &compute_push_constants.move_backward},
-	{i32(glfw.KEY_D), &compute_push_constants.move_right},
-	{i32(glfw.KEY_A), &compute_push_constants.move_left},
-	{i32(glfw.KEY_E), &compute_push_constants.zoom_in},
-	{i32(glfw.KEY_Q), &compute_push_constants.zoom_out},
-	{i32(glfw.KEY_T), &compute_push_constants.speed},
-	{i32(glfw.KEY_R), &compute_push_constants.reset_camera},
+	{i32(KEY_W), &compute_push_constants.move_forward},
+	{i32(KEY_S), &compute_push_constants.move_backward},
+	{i32(KEY_D), &compute_push_constants.move_right},
+	{i32(KEY_A), &compute_push_constants.move_left},
+	{i32(KEY_E), &compute_push_constants.zoom_in},
+	{i32(KEY_Q), &compute_push_constants.zoom_out},
+	{i32(KEY_T), &compute_push_constants.speed},
+	{i32(KEY_R), &compute_push_constants.reset_camera},
 }
 
 
@@ -183,7 +181,7 @@ compute :: proc(frame: FrameInputs) {
 		binding.field^ = b32(is_key_pressed(binding.key))
 	}
 
-	compute_push_constants.spawn_body = b32(is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT))
+	compute_push_constants.spawn_body = b32(is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
 	compute_push_constants.mouse_ndc_x = f32(
 		clamp(mouse_x / max(f64(window_width), 1.0), 0.0, 1.0),
 	)

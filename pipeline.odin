@@ -42,6 +42,7 @@ DeviceSize :: vk.DeviceSize
 
 BufferUsageFlags :: vk.BufferUsageFlags
 ShaderStageFlags :: vk.ShaderStageFlags
+DescriptorType :: vk.DescriptorType
 
 buffers: Array(32, BufferResource)
 last_frame_time: f32
