@@ -56,3 +56,336 @@ compiling shader: graphics.hlsl
 compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 Discovered 2 shaders: graphics.hlsl compute.hlsl 
 Window resized to 1856x2056
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compute.hlsl:303:5: error: use of undeclared identifier 'body_active'
+    body_active[id] = 0u;
+    ^
+compute.hlsl:326:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:357:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:435:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:455:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:511:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:543:21: error: use of undeclared identifier 'body_active'
+                if (body_active[j] == 0u) continue;
+                    ^
+compute.hlsl:575:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:592:18: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+    uint state = body_active[id];
+                 ^~~~~~~~~~~
+                 body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+compute.hlsl:602:5: error: use of undeclared identifier 'body_active'
+    body_active[id] = 0u;
+    ^
+compute.hlsl:612:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:731:31: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+                                if (j >= BODY_CAPACITY || body_active[j] == 0u) continue;
+                                                          ^~~~~~~~~~~
+                                                          body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compute.hlsl:455:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:511:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:543:21: error: use of undeclared identifier 'body_active'
+                if (body_active[j] == 0u) continue;
+                    ^
+compute.hlsl:575:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:592:18: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+    uint state = body_active[id];
+                 ^~~~~~~~~~~
+                 body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+compute.hlsl:602:5: error: use of undeclared identifier 'body_active'
+    body_active[id] = 0u;
+    ^
+compute.hlsl:612:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:731:31: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+                                if (j >= BODY_CAPACITY || body_active[j] == 0u) continue;
+                                                          ^~~~~~~~~~~
+                                                          body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compute.hlsl:455:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:511:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:543:21: error: use of undeclared identifier 'body_active'
+                if (body_active[j] == 0u) continue;
+                    ^
+compute.hlsl:575:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:592:18: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+    uint state = body_active[id];
+                 ^~~~~~~~~~~
+                 body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+compute.hlsl:602:5: error: use of undeclared identifier 'body_active'
+    body_active[id] = 0u;
+    ^
+compute.hlsl:612:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:731:31: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+                                if (j >= BODY_CAPACITY || body_active[j] == 0u) continue;
+                                                          ^~~~~~~~~~~
+                                                          body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compute.hlsl:511:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:543:21: error: use of undeclared identifier 'body_active'
+                if (body_active[j] == 0u) continue;
+                    ^
+compute.hlsl:575:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:592:18: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+    uint state = body_active[id];
+                 ^~~~~~~~~~~
+                 body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+compute.hlsl:602:5: error: use of undeclared identifier 'body_active'
+    body_active[id] = 0u;
+    ^
+compute.hlsl:612:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:731:31: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+                                if (j >= BODY_CAPACITY || body_active[j] == 0u) continue;
+                                                          ^~~~~~~~~~~
+                                                          body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compute.hlsl:511:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:543:21: error: use of undeclared identifier 'body_active'
+                if (body_active[j] == 0u) continue;
+                    ^
+compute.hlsl:575:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:592:18: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+    uint state = body_active[id];
+                 ^~~~~~~~~~~
+                 body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+compute.hlsl:602:5: error: use of undeclared identifier 'body_active'
+    body_active[id] = 0u;
+    ^
+compute.hlsl:612:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:731:31: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+                                if (j >= BODY_CAPACITY || body_active[j] == 0u) continue;
+                                                          ^~~~~~~~~~~
+                                                          body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compute.hlsl:511:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:543:21: error: use of undeclared identifier 'body_active'
+                if (body_active[j] == 0u) continue;
+                    ^
+compute.hlsl:575:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:592:18: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+    uint state = body_active[id];
+                 ^~~~~~~~~~~
+                 body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+compute.hlsl:602:5: error: use of undeclared identifier 'body_active'
+    body_active[id] = 0u;
+    ^
+compute.hlsl:612:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:731:31: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+                                if (j >= BODY_CAPACITY || body_active[j] == 0u) continue;
+                                                          ^~~~~~~~~~~
+                                                          body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compute.hlsl:511:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:543:21: error: use of undeclared identifier 'body_active'
+                if (body_active[j] == 0u) continue;
+                    ^
+compute.hlsl:575:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:592:18: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+    uint state = body_active[id];
+                 ^~~~~~~~~~~
+                 body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+compute.hlsl:602:5: error: use of undeclared identifier 'body_active'
+    body_active[id] = 0u;
+    ^
+compute.hlsl:612:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:731:31: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+                                if (j >= BODY_CAPACITY || body_active[j] == 0u) continue;
+                                                          ^~~~~~~~~~~
+                                                          body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compute.hlsl:511:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:543:21: error: use of undeclared identifier 'body_active'
+                if (body_active[j] == 0u) continue;
+                    ^
+compute.hlsl:575:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:592:18: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+    uint state = body_active[id];
+                 ^~~~~~~~~~~
+                 body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+compute.hlsl:602:5: error: use of undeclared identifier 'body_active'
+    body_active[id] = 0u;
+    ^
+compute.hlsl:612:9: error: use of undeclared identifier 'body_active'
+    if (body_active[id] == 0u) return;
+        ^
+compute.hlsl:731:31: error: use of undeclared identifier 'body_active'; did you mean 'body_type'?
+                                if (j >= BODY_CAPACITY || body_active[j] == 0u) continue;
+                                                          ^~~~~~~~~~~
+                                                          body_type
+compute.hlsl:77:51: note: 'body_type' declared here
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
+                                                  ^
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl

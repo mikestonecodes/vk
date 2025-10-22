@@ -97,18 +97,18 @@ buffer_specs := []struct {
 		{.COMPUTE, .FRAGMENT},
 	},
 	{DeviceSize(size_of(CameraStateGPU)), {.STORAGE_BUFFER, .TRANSFER_DST}, 3, {.COMPUTE}},
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 20, {.COMPUTE}},
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 21, {.COMPUTE}},
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 22, {.COMPUTE}},
-	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 23, {.COMPUTE}},
-	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 24, {.COMPUTE}},
-	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 25, {.COMPUTE}},
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 26, {.COMPUTE}},
-	{DeviceSize(size_of(SpawnStateGPU)), {.STORAGE_BUFFER}, 27, {.COMPUTE}},
-	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 30, {.COMPUTE}},
-	{DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size, {.STORAGE_BUFFER}, 31, {.COMPUTE}},
-	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 32, {.COMPUTE}},
-	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 33, {.COMPUTE}},
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 20, {.COMPUTE}}, //body_pos
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 21, {.COMPUTE}}, //body_pos_pred
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 22, {.COMPUTE}}, //body_vel
+	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 23, {.COMPUTE}}, //body_radius
+	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 24, {.COMPUTE}}, //body_inv_mass
+	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 25, {.COMPUTE}}, //body_flags
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 26, {.COMPUTE}}, //body_delta
+	{DeviceSize(size_of(SpawnStateGPU)), {.STORAGE_BUFFER}, 27, {.COMPUTE}}, //spawn_state
+	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 30, {.COMPUTE}}, //grid_count
+	{DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size, {.STORAGE_BUFFER}, 31, {.COMPUTE}}, //grid_offset
+	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 32, {.COMPUTE}}, //grid_scan
+	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 33, {.COMPUTE}},//body_grid_index
 }
 
 DescriptorBindingSpec :: struct {

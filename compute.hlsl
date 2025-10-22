@@ -74,13 +74,14 @@ struct WorldBody        { float2 center; float radius; float softness; float3 co
 [[vk::binding(22, 0)]] RWStructuredBuffer<float2> body_vel;
 [[vk::binding(23, 0)]] RWStructuredBuffer<float>  body_radius;
 [[vk::binding(24, 0)]] RWStructuredBuffer<float>  body_inv_mass;
-[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_active;
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
 [[vk::binding(26, 0)]] RWStructuredBuffer<int2>   body_delta_accum;
 [[vk::binding(27, 0)]] RWStructuredBuffer<SpawnState> spawn_state;
 [[vk::binding(30, 0)]] RWStructuredBuffer<uint> cell_counts;
 [[vk::binding(31, 0)]] RWStructuredBuffer<uint> cell_offsets;
 [[vk::binding(32, 0)]] RWStructuredBuffer<uint> cell_scratch;
 [[vk::binding(33, 0)]] RWStructuredBuffer<uint> sorted_indices;
+
 
 
 // ============================================================================
@@ -267,7 +268,7 @@ void maybe_spawn_bodies() {
         float2 spawn_pos = center + rotated * spawn_offset;
         float2 velocity = rotated * (DYNAMIC_BODY_SPEED * spread);
 
-        body_active[slot] = 1u;
+        body_type[slot] = (n % 2u == 0u) ? 1u : 2u;
         body_radius[slot] = DYNAMIC_BODY_RADIUS;
         body_inv_mass[slot] = 1.0f;
         body_pos[slot] = spawn_pos;
@@ -299,7 +300,7 @@ void initialize_bodies(uint id) {
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) return;
 
-    body_active[id] = 0u;
+    body_type[id] = 0u;
     body_radius[id] = DYNAMIC_BODY_RADIUS;
     body_inv_mass[id] = 1.0f;
     body_pos[id] = float2(0.0f, 0.0f);
@@ -322,7 +323,7 @@ void clear_grid(uint id) {
 void integrate_predict(uint id) {
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) return;
-    if (body_active[id] == 0u) return;
+    if (body_type[id] == 0u) return;
 
     float dt = min(push_constants.delta_time, DT_CLAMP);
     dt = max(dt, 0.0f);
@@ -353,7 +354,7 @@ void integrate_predict(uint id) {
 void histogram_kernel(uint id) {
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) return;
-    if (body_active[id] == 0u) return;
+    if (body_type[id] == 0u) return;
 
     float2 pos = body_pos_pred[id];
     if (!all(isfinite(pos))) return;
@@ -431,7 +432,7 @@ void prefix_finalize_kernel(uint id, uint source) {
 void scatter_kernel(uint id) {
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) return;
-    if (body_active[id] == 0u) return;
+    if (body_type[id] == 0u) return;
 
     float2 pos = body_pos_pred[id];
     if (!all(isfinite(pos))) return;
@@ -451,7 +452,7 @@ void scatter_kernel(uint id) {
 void zero_deltas(uint id) {
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) return;
-    if (body_active[id] == 0u) return;
+    if (body_type[id] == 0u) return;
     store_body_delta(id, float2(0.0f, 0.0f));
 }
 
@@ -507,7 +508,7 @@ bool collide_world(
 void constraints_kernel(uint id) {
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) return;
-    if (body_active[id] == 0u) return;
+    if (body_type[id] == 0u) return;
 
     float2 xi = body_pos_pred[id];
     float  ri = body_radius[id];
@@ -539,7 +540,7 @@ void constraints_kernel(uint id) {
             for (uint k = begin; k < end; ++k) {
                 uint j = sorted_indices[k];
                 if (j <= id || j >= capacity) continue;
-                if (body_active[j] == 0u) continue;
+                if (body_type[j] == 0u) continue;
 
                 float2 xj = body_pos_pred[j];
                 float  rj = body_radius[j];
@@ -571,7 +572,7 @@ void constraints_kernel(uint id) {
 void apply_deltas(uint id) {
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) return;
-    if (body_active[id] == 0u) return;
+    if (body_type[id] == 0u) return;
 
     float2 dp = load_body_delta(id) * RELAXATION;
     float mag = length(dp);
@@ -588,7 +589,7 @@ void apply_deltas(uint id) {
 
 void deactivate_body(uint id) {
     if (id >= BODY_CAPACITY) return;
-    uint state = body_active[id];
+    uint state = body_type[id];
     if (state == 0u) return;
 
     if (id >= DYNAMIC_BODY_START) {
@@ -598,7 +599,7 @@ void deactivate_body(uint id) {
     }
 
     float2 current = body_pos_pred[id];
-    body_active[id] = 0u;
+    body_type[id] = 0u;
     body_pos[id] = current;
     body_pos_pred[id] = current;
     body_vel[id] = float2(0.0f, 0.0f);
@@ -608,7 +609,7 @@ void deactivate_body(uint id) {
 void finalize_kernel(uint id) {
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) return;
-    if (body_active[id] == 0u) return;
+    if (body_type[id] == 0u) return;
 
     float dt = min(push_constants.delta_time, DT_CLAMP);
     dt = max(dt, 1e-4f);
@@ -727,17 +728,16 @@ void render_kernel(uint id) {
 			uint end = cell_offsets[c + 1u];
 			for (uint k = begin; k < end; ++k) {
 				uint j = sorted_indices[k];
-				if (j >= BODY_CAPACITY || body_active[j] == 0u) continue;
+				if (j >= BODY_CAPACITY || body_type[j] == 0u) continue;
 				float2 pos = body_pos[j];
 				float radius = body_radius[j];
+				int type = body_type[j];
 				float softness = max(radius * 0.6f, 0.05f);
 				float dist = length(world - pos);
 				float coverage = soft_circle(dist, radius, softness);
 				if (coverage <= 0.0f) continue;
-				float3 body_col = (j == 0u)
-					? float3(0.80f, 0.90f, 1.15f)
-					: float3(1.65f, 0.55f, 0.25f);
-				color += body_col * coverage * 1.4f;
+				float3 body_col = (type == 2) ? float3(0.85f, 0.15f, 0.15f) : float3(0.65f, 0.55f, 0.25f);
+				color += body_col * coverage * 0.4f;
 				density = max(density, coverage);
 			}
 		}
