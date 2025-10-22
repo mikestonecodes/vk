@@ -5,8 +5,6 @@ import vk "vendor:vulkan"
 
 COMPUTE_GROUP_SIZE :: u32(128)
 PIPELINE_COUNT :: 2
-CAMERA_UPDATE_FLAG :: u32(1 << 0)
-
 // Physics configuration
 PHYS_MAX_BODIES :: u32(512000)
 PHYS_PLAYER_INDEX :: u32(0)
@@ -21,28 +19,10 @@ GRID_CELL_COUNT :: u32(GRID_X * GRID_Y)
 
 EXPLOSION_EVENT_CAPACITY :: u32(256)
 
-KeyBinding :: struct {
-	key:   u32,
-	field: ^b32,
-}
-
-key_bindings := []KeyBinding {
-	{glfw.KEY_W, &compute_push_constants.move_forward},
-	{glfw.KEY_S, &compute_push_constants.move_backward},
-	{glfw.KEY_D, &compute_push_constants.move_right},
-	{glfw.KEY_A, &compute_push_constants.move_left},
-	{glfw.KEY_E, &compute_push_constants.zoom_in},
-	{glfw.KEY_Q, &compute_push_constants.zoom_out},
-	{glfw.KEY_T, &compute_push_constants.speed},
-	{glfw.KEY_R, &compute_push_constants.reset_camera},
-}
-
 CameraStateGPU :: struct {
-	position:    [2]f32,
-	zoom:        f32,
-	pad0:        f32,
-	initialized: u32,
-	pad1:        [3]u32,
+	position: [2]f32,
+	zoom:     f32,
+	pad:      f32,
 }
 
 
@@ -53,61 +33,33 @@ PostProcessPushConstants :: struct {
 post_process_push_constants := PostProcessPushConstants {}
 
 ComputePushConstants :: struct {
-	time:                    f32,
-	delta_time:              f32,
-	screen_width:            u32,
-	screen_height:           u32,
-	brightness:              f32,
-	move_forward:            b32,
-	move_backward:           b32,
-	move_right:              b32,
-	move_left:               b32,
-	zoom_in:                 b32,
-	zoom_out:                b32,
-	speed:                   b32,
-	reset_camera:            b32,
-	options:                 u32,
-	dispatch_mode:           u32,
-	scan_offset:             u32,
-	scan_source:             u32,
-	solver_iteration:        u32,
-	substep_index:           u32,
-	substep_count:           u32,
-	body_capacity:           u32,
-	grid_x:                  u32,
-	grid_y:                  u32,
-	solver_iterations_total: u32,
-	relaxation:              f32,
-	dt_clamp:                f32,
-	projectile_speed:        f32,
-	projectile_radius:       f32,
-	projectile_max_distance: f32,
-	player_radius:           f32,
-	player_damping:          f32,
-	spawn_projectile:        b32,
-	mouse_ndc_x:             f32,
-	mouse_ndc_y:             f32,
-	projectile_pool:         u32,
-	_pad0:                   u32,
+	time:             f32,
+	delta_time:       f32,
+	screen_width:     u32,
+	screen_height:    u32,
+	brightness:       f32,
+	move_forward:     b32,
+	move_backward:    b32,
+	move_right:       b32,
+	move_left:        b32,
+	zoom_in:          b32,
+	zoom_out:         b32,
+	speed:            b32,
+	reset_camera:     b32,
+	dispatch_mode:    u32,
+	scan_offset:      u32,
+	scan_source:      u32,
+	spawn_projectile: b32,
+	mouse_ndc_x:      f32,
+	mouse_ndc_y:      f32,
+	_pad0:            u32,
+	_pad1:            u32,
 }
 
 compute_push_constants := ComputePushConstants {
 	screen_width            = u32(window_width),
 	screen_height           = u32(window_height),
 	brightness              = 1.0,
-	substep_count           = PHYS_SUBSTEPS,
-	body_capacity           = PHYS_MAX_BODIES,
-	grid_x                  = GRID_X,
-	grid_y                  = GRID_Y,
-	solver_iterations_total = PHYS_SOLVER_ITERATIONS,
-	relaxation              = 1.0,
-	dt_clamp                = 1.0 / 30.0,
-	projectile_speed        = 42.0,
-	projectile_radius       = 0.20,
-	projectile_max_distance = 450.0,
-	player_radius           = 0.65,
-	player_damping          = 0.02,
-	projectile_pool         = PHYS_PROJECTILE_POOL,
 }
 
 
@@ -241,9 +193,14 @@ compute :: proc(frame: FrameInputs) {
 	compute_push_constants.screen_width = u32(window_width)
 	compute_push_constants.screen_height = u32(window_height)
 
-	for binding in key_bindings {
-		binding.field^ = b32(is_key_pressed(i32(binding.key)))
-	}
+	compute_push_constants.move_forward = b32(is_key_pressed(i32(glfw.KEY_W)))
+	compute_push_constants.move_backward = b32(is_key_pressed(i32(glfw.KEY_S)))
+	compute_push_constants.move_right = b32(is_key_pressed(i32(glfw.KEY_D)))
+	compute_push_constants.move_left = b32(is_key_pressed(i32(glfw.KEY_A)))
+	compute_push_constants.zoom_in = b32(is_key_pressed(i32(glfw.KEY_E)))
+	compute_push_constants.zoom_out = b32(is_key_pressed(i32(glfw.KEY_Q)))
+	compute_push_constants.speed = b32(is_key_pressed(i32(glfw.KEY_T)))
+	compute_push_constants.reset_camera = b32(is_key_pressed(i32(glfw.KEY_R)))
 
 	compute_push_constants.spawn_projectile = b32(is_mouse_button_pressed(glfw.MOUSE_BUTTON_LEFT))
 
@@ -256,7 +213,6 @@ compute :: proc(frame: FrameInputs) {
 
 
 	// ---- Camera update ----
-	compute_push_constants.options = CAMERA_UPDATE_FLAG
 	dispatch_compute(frame, {mode = .CAMERA_UPDATE})
 
 	total_pixels := u32(window_width) * u32(window_height)
@@ -284,7 +240,6 @@ physics :: proc(frame:FrameInputs,pixel_dispatch:u32) {
 	grid_dispatch := (GRID_CELL_COUNT + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
 	// ---- Substeps ----
 	for substep_index: u32 = 0; substep_index < PHYS_SUBSTEPS; substep_index += 1 {
-		compute_push_constants.substep_index = substep_index
 		compute_push_constants.delta_time = physics_dt
 
 		// Clear cell grid
@@ -318,7 +273,6 @@ physics :: proc(frame:FrameInputs,pixel_dispatch:u32) {
 		dispatch_compute(frame, {mode = .PREFIX_FINALIZE, group = {grid_dispatch, 1, 1}})
 		dispatch_compute(frame, {mode = .SCATTER, group = {body_dispatch, 1, 1}})
 		for iter: u32 = 0; iter < PHYS_SOLVER_ITERATIONS; iter += 1 {
-			compute_push_constants.solver_iteration = iter
 			dispatch_compute(frame, {mode = .ZERO_DELTAS, group = {body_dispatch, 1, 1}})
 			dispatch_compute(frame, {mode = .CONSTRAINTS, group = {body_dispatch, 1, 1}})
 			dispatch_compute(frame, {mode = .APPLY_DELTAS, group = {body_dispatch, 1, 1}})

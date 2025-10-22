@@ -1,6 +1,4 @@
 static const float COLOR_SCALE = 4096.0f;
-static const uint  OPTION_CAMERA_UPDATE = 1u << 0;
-static const uint  CAMERA_SIGNATURE = 0xC0FFEEAAu;
 static const float CAMERA_DEFAULT_ZOOM = 5.0f;
 static const float CAMERA_MOVE_SPEED   = 40.0f;
 static const float CAMERA_MIN_ZOOM     = 2.0f;
@@ -15,6 +13,19 @@ static const uint  MAX_EXPLOSIONS = 256u;
 static const uint  MAX_CHAIN_EVENTS = 128u;
 static const uint  MAX_ACTIVE_PROJECTILES = 25000u;
 static const float EXPLOSION_LIFETIME = 1.0f;
+
+static const uint  BODY_CAPACITY = 512000u;
+static const uint  GRID_X = 512u;
+static const uint  GRID_Y = 512u;
+static const uint  PROJECTILE_POOL = 60000u;
+static const float PROJECTILE_SPEED = 42.0f;
+static const float PROJECTILE_RADIUS = 0.20f;
+static const float PROJECTILE_MAX_DISTANCE = 450.0f;
+static const float PLAYER_RADIUS = 0.65f;
+static const float PLAYER_DAMPING = 0.02f;
+static const float RELAXATION = 1.0f;
+static const float DT_CLAMP = 1.0f / 30.0f;
+static const uint  PHYS_SUBSTEPS = 1u;
 
 // GPU physics compute pipeline
 struct ComputePushConstants {
@@ -31,40 +42,21 @@ struct ComputePushConstants {
     uint  zoom_out;
     uint  speed;
     uint  reset_camera;
-    uint  options;
     uint  dispatch_mode;
     uint  scan_offset;
     uint  scan_source;
-    uint  solver_iteration;
-    uint  substep_index;
-    uint  substep_count;
-    uint  body_capacity;
-    uint  grid_x;
-    uint  grid_y;
-    uint  solver_iterations_total;
-    float relaxation;
-    float dt_clamp;
-    float projectile_speed;
-    float projectile_radius;
-    float projectile_max_distance;
-    float player_radius;
-    float player_damping;
     uint  spawn_projectile;
     float mouse_ndc_x;
     float mouse_ndc_y;
-    uint  projectile_pool;
-    uint  _pad0;
+    uint  pad0;
+    uint  pad1;
 };
 [[vk::push_constant]] ComputePushConstants push_constants;
 
 struct CameraStateData {
     float2 position;
     float  zoom;
-    float  pad0;
-    uint   initialized;
-    uint   pad1;
-    uint   pad2;
-    uint   pad3;
+    float  padding;
 };
 
 [[vk::binding(0, 0)]] RWStructuredBuffer<uint> accumulation_buffer;
@@ -151,72 +143,40 @@ static const uint DISPATCH_APPLY_DELTAS         = 13u;
 static const uint DISPATCH_FINALIZE             = 14u;
 static const uint DISPATCH_RENDER               = 15u;
 
-struct KeyState {
-    bool forward;
-    bool backward;
-    bool right;
-    bool left;
-    bool zoom_in;
-    bool zoom_out;
-    bool speed;
-    bool reset;
-};
-
-KeyState read_key_state_inputs() {
-    KeyState keys;
-    keys.forward  = push_constants.move_forward != 0u;
-    keys.backward = push_constants.move_backward != 0u;
-    keys.right    = push_constants.move_right != 0u;
-    keys.left     = push_constants.move_left != 0u;
-    keys.zoom_in  = push_constants.zoom_in != 0u;
-    keys.zoom_out = push_constants.zoom_out != 0u;
-    keys.speed    = push_constants.speed != 0u;
-    keys.reset    = push_constants.reset_camera != 0u;
-    return keys;
-}
-
-CameraStateData read_camera_state() {
+CameraStateData load_camera_state() {
     CameraStateData state = camera_state[0];
-    if (state.initialized != CAMERA_SIGNATURE ||
-        !isfinite(state.zoom) ||
-        state.zoom < CAMERA_MIN_ZOOM * 0.5f ||
-        state.zoom > CAMERA_MAX_ZOOM * 2.0f) {
+    bool invalid = !all(isfinite(state.position)) || !isfinite(state.zoom) || state.zoom <= 0.0f;
+    if (invalid) {
         state.position = float2(0.0f, 0.0f);
         state.zoom = CAMERA_DEFAULT_ZOOM;
-        state.initialized = CAMERA_SIGNATURE;
-        state.pad0 = 0.0f;
-        state.pad1 = 0u;
-        state.pad2 = 0u;
-        state.pad3 = 0u;
+    }
+    state.padding = 0.0f;
+    if (invalid) {
         camera_state[0] = state;
     }
     return state;
 }
 
-void update_camera_state(KeyState keys, float delta_time) {
+void update_camera_state(float delta_time) {
     if (delta_time <= 0.0f) {
         delta_time = 0.0f;
     }
 
-    CameraStateData state = read_camera_state();
+    CameraStateData state = load_camera_state();
 
-    if (keys.reset) {
+    if (push_constants.reset_camera != 0u) {
         state.position = float2(0.0f, 0.0f);
         state.zoom = CAMERA_DEFAULT_ZOOM;
-        state.initialized = CAMERA_SIGNATURE;
-        state.pad0 = 0.0f;
-        state.pad1 = 0u;
-        state.pad2 = 0u;
-        state.pad3 = 0u;
+        state.padding = 0.0f;
         camera_state[0] = state;
         return;
     }
 
     float2 move = float2(0.0f, 0.0f);
-    if (keys.forward)  move.y += 1.0f;
-    if (keys.backward) move.y -= 1.0f;
-    if (keys.right)    move.x += 1.0f;
-    if (keys.left)     move.x -= 1.0f;
+    if (push_constants.move_forward != 0u)  move.y += 1.0f;
+    if (push_constants.move_backward != 0u) move.y -= 1.0f;
+    if (push_constants.move_right != 0u)    move.x += 1.0f;
+    if (push_constants.move_left != 0u)     move.x -= 1.0f;
 
     if (dot(move, move) > 0.0f) {
         move = normalize(move);
@@ -224,7 +184,7 @@ void update_camera_state(KeyState keys, float delta_time) {
 
     float zoom_ratio = clamp(state.zoom / CAMERA_DEFAULT_ZOOM, 0.25f, 12.0f);
     float move_speed = CAMERA_MOVE_SPEED * zoom_ratio;
-    bool fast = keys.speed;
+    bool fast = (push_constants.speed != 0u);
     if (fast) {
         move_speed *= CAMERA_FAST_SCALE;
     }
@@ -236,14 +196,15 @@ void update_camera_state(KeyState keys, float delta_time) {
         zoom_rate *= CAMERA_FAST_SCALE;
     }
 
-    if (keys.zoom_out) {
+    if (push_constants.zoom_out != 0u) {
         state.zoom -= state.zoom * zoom_rate * delta_time;
     }
-    if (keys.zoom_in) {
+    if (push_constants.zoom_in != 0u) {
         state.zoom += state.zoom * zoom_rate * delta_time;
     }
 
     state.zoom = clamp(state.zoom, CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM);
+    state.padding = 0.0f;
     camera_state[0] = state;
 }
 
@@ -284,8 +245,8 @@ uint2 world_to_cell(float2 p) {
     float inv_cell = 1.0f / CELL_SIZE;
     int gx = int(floor(p.x * inv_cell));
     int gy = int(floor(p.y * inv_cell));
-    uint grid_x = max(push_constants.grid_x, 1u);
-    uint grid_y = max(push_constants.grid_y, 1u);
+    uint grid_x = GRID_X;
+    uint grid_y = GRID_Y;
     return uint2(
         wrap_int(gx, grid_x),
         wrap_int(gy, grid_y)
@@ -293,7 +254,7 @@ uint2 world_to_cell(float2 p) {
 }
 
 uint cell_index(uint2 g) {
-    uint grid_x = max(push_constants.grid_x, 1u);
+    uint grid_x = GRID_X;
     return g.y * grid_x + g.x;
 }
 
@@ -380,7 +341,7 @@ float2 safe_normalize(float2 v, float fallback_x) {
 }
 
 uint grid_cell_count() {
-    return max(push_constants.grid_x, 1u) * max(push_constants.grid_y, 1u);
+    return GRID_X * GRID_Y;
 }
 
 void record_explosion_event(float2 center, float radius, float energy, float start_time, uint target_id) {
@@ -402,7 +363,7 @@ void record_explosion_event(float2 center, float radius, float energy, float sta
 }
 
 void deactivate_body(uint id) {
-    if (id >= push_constants.body_capacity) {
+    if (id >= BODY_CAPACITY) {
         return;
     }
     uint state = body_active[id];
@@ -429,20 +390,20 @@ void trigger_projectile_explosion(uint source_id, float2 circle_center, float ci
     if (source_id == 0u) {
         return;
     }
-    if (source_id < push_constants.body_capacity && body_active[source_id] >= 2u) {
+    if (source_id < BODY_CAPACITY && body_active[source_id] >= 2u) {
         return;
     }
-    float base_radius = max(circle_radius, push_constants.projectile_radius);
+    float base_radius = max(circle_radius, PROJECTILE_RADIUS);
     float energy = max(circle_energy, 0.2f);
     record_explosion_event(circle_center, base_radius, energy, push_constants.time, source_id);
-    if (source_id < push_constants.body_capacity && body_active[source_id] != 0u) {
+    if (source_id < BODY_CAPACITY && body_active[source_id] != 0u) {
         body_active[source_id] = 2u; // Mark as pending explosion
     }
 }
 
 
 void initialize_bodies(uint id) {
-    uint capacity = max(push_constants.body_capacity, 1u);
+    uint capacity = BODY_CAPACITY;
     if (id >= capacity) {
         if (id == 0) {
             spawn_state[0].next_projectile = 0u;
@@ -455,7 +416,7 @@ void initialize_bodies(uint id) {
 
     bool is_player = (id == 0u);
     body_active[id] = is_player ? 1u : 0u;
-    body_radius[id] = is_player ? push_constants.player_radius : push_constants.projectile_radius;
+    body_radius[id] = is_player ? PLAYER_RADIUS : PROJECTILE_RADIUS;
     body_inv_mass[id] = is_player ? 0.0f : 1.0f;
     body_pos[id] = float2(0.0f, 0.0f);
     body_pos_pred[id] = body_pos[id];
@@ -494,18 +455,18 @@ void spawn_projectile_kernel(uint id) {
         return;
     }
 
-    uint capacity = max(push_constants.body_capacity, 1u);
+    uint capacity = BODY_CAPACITY;
     if (capacity <= PHYS_PROJECTILE_START) {
         return;
     }
 
-    uint pool = push_constants.projectile_pool;
+    uint pool = PROJECTILE_POOL;
     pool = min(pool, capacity - PHYS_PROJECTILE_START);
     if (pool == 0u) {
         return;
     }
 
-    CameraStateData cam = read_camera_state();
+    CameraStateData cam = load_camera_state();
     float2 root = body_pos[0u];
 
     float aspect = (push_constants.screen_height > 0u)
@@ -551,12 +512,12 @@ void spawn_projectile_kernel(uint id) {
         );
 
         float spread = 0.6f + 0.15f * float(n % 4u);
-        float spawn_offset = push_constants.player_radius + push_constants.projectile_radius + 0.05f + jitter * 0.1f;
+        float spawn_offset = PLAYER_RADIUS + PROJECTILE_RADIUS + 0.05f + jitter * 0.1f;
         float2 spawn_pos = root + rotated * spawn_offset;
-        float2 velocity = rotated * (push_constants.projectile_speed * spread);
+        float2 velocity = rotated * (PROJECTILE_SPEED * spread);
 
         body_active[slot] = 1u;
-        body_radius[slot] = push_constants.projectile_radius;
+        body_radius[slot] = PROJECTILE_RADIUS;
         body_inv_mass[slot] = 1.0f;
         body_pos[slot] = spawn_pos;
         body_pos_pred[slot] = spawn_pos;
@@ -568,7 +529,7 @@ void spawn_projectile_kernel(uint id) {
 }
 
 void integrate_predict(uint id) {
-    uint capacity = max(push_constants.body_capacity, 1u);
+    uint capacity = BODY_CAPACITY;
     if (id >= capacity) {
         return;
     }
@@ -576,10 +537,10 @@ void integrate_predict(uint id) {
         return;
     }
 
-    float dt = min(push_constants.delta_time, push_constants.dt_clamp);
+    float dt = min(push_constants.delta_time, DT_CLAMP);
     dt = max(dt, 0.0f);
-    if (push_constants.substep_count > 1u) {
-        dt = dt / float(push_constants.substep_count);
+    if (PHYS_SUBSTEPS > 1u) {
+        dt = dt / float(PHYS_SUBSTEPS);
     }
 
     float inv_mass = body_inv_mass[id];
@@ -604,7 +565,7 @@ void integrate_predict(uint id) {
 }
 
 void histogram_kernel(uint id) {
-    uint capacity = max(push_constants.body_capacity, 1u);
+    uint capacity = BODY_CAPACITY;
     if (id >= capacity) {
         return;
     }
@@ -687,7 +648,7 @@ void prefix_finalize_kernel(uint id, uint source) {
 }
 
 void scatter_kernel(uint id) {
-    uint capacity = max(push_constants.body_capacity, 1u);
+    uint capacity = BODY_CAPACITY;
     if (id >= capacity) {
         return;
     }
@@ -713,7 +674,7 @@ void scatter_kernel(uint id) {
 }
 
 void zero_deltas(uint id) {
-    uint capacity = max(push_constants.body_capacity, 1u);
+    uint capacity = BODY_CAPACITY;
     if (id >= capacity) {
         return;
     }
@@ -724,7 +685,7 @@ void zero_deltas(uint id) {
 }
 
 void constraints_kernel(uint id) {
-    uint capacity = max(push_constants.body_capacity, 1u);
+    uint capacity = BODY_CAPACITY;
     if (id >= capacity) {
         return;
     }
@@ -759,8 +720,8 @@ void constraints_kernel(uint id) {
     }
 
     uint2 gi = world_to_cell(xi);
-    uint grid_x = max(push_constants.grid_x, 1u);
-    uint grid_y = max(push_constants.grid_y, 1u);
+    uint grid_x = GRID_X;
+    uint grid_y = GRID_Y;
     uint cells = grid_cell_count();
 
     for (int oy = -1; oy <= 1; ++oy) {
@@ -812,7 +773,7 @@ void constraints_kernel(uint id) {
 }
 
 void apply_deltas(uint id) {
-    uint capacity = max(push_constants.body_capacity, 1u);
+    uint capacity = BODY_CAPACITY;
     if (id >= capacity) {
         return;
     }
@@ -820,9 +781,9 @@ void apply_deltas(uint id) {
         return;
     }
 
-    float2 dp = load_body_delta(id) * push_constants.relaxation;
+    float2 dp = load_body_delta(id) * RELAXATION;
     float mag = length(dp);
-    float max_shift = push_constants.projectile_radius * 2.0f + push_constants.player_radius;
+    float max_shift = PROJECTILE_RADIUS * 2.0f + PLAYER_RADIUS;
     if (mag > max_shift) {
         dp *= (max_shift / max(mag, 1e-4f));
     }
@@ -833,7 +794,7 @@ void apply_deltas(uint id) {
 }
 
 void finalize_kernel(uint id) {
-    uint capacity = max(push_constants.body_capacity, 1u);
+    uint capacity = BODY_CAPACITY;
     if (id >= capacity) {
         return;
     }
@@ -841,10 +802,10 @@ void finalize_kernel(uint id) {
         return;
     }
 
-    float dt = min(push_constants.delta_time, push_constants.dt_clamp);
+    float dt = min(push_constants.delta_time, DT_CLAMP);
     dt = max(dt, 1e-4f);
-    if (push_constants.substep_count > 1u) {
-        dt = dt / float(push_constants.substep_count);
+    if (PHYS_SUBSTEPS > 1u) {
+        dt = dt / float(PHYS_SUBSTEPS);
     }
 
     float2 x0 = body_pos[id];
@@ -856,7 +817,7 @@ void finalize_kernel(uint id) {
     }
 
     float2 vel = (x1 - x0) / dt;
-    float damping = saturate(1.0f - push_constants.player_damping);
+    float damping = saturate(1.0f - PLAYER_DAMPING);
     vel *= damping;
 
     if (!all(isfinite(vel)) || !all(isfinite(x1))) {
@@ -881,7 +842,7 @@ void finalize_kernel(uint id) {
 
     if (id >= PHYS_PROJECTILE_START && inv_mass > 0.0f) {
         float dist_sq = dot(x1, x1);
-        float limit = push_constants.projectile_max_distance;
+        float limit = PROJECTILE_MAX_DISTANCE;
         if (dist_sq > limit * limit) {
             body_vel[id] = float2(0.0f, 0.0f);
             deactivate_body(id);
@@ -906,7 +867,7 @@ void render_kernel(uint id) {
         return;
     }
 
-    CameraStateData cam_state = read_camera_state();
+    CameraStateData cam_state = load_camera_state();
     float zoom = max(cam_state.zoom, CAMERA_MIN_ZOOM);
     float2 camera_pos = cam_state.position;
 
@@ -942,7 +903,7 @@ void render_kernel(uint id) {
     if (density <= 0.0001f) {
         WorldCircle circle;
         circle.center = float2(0.0f, 0.0f);
-        circle.radius = push_constants.player_radius;
+        circle.radius = PLAYER_RADIUS;
         circle.softness = circle.radius * 0.5f;
         circle.color = float3(0.85f, 0.90f, 0.98f);
         circle.energy = 0.65f;
@@ -994,8 +955,8 @@ void render_kernel(uint id) {
     }
 
     // Dynamic bodies
-    uint grid_x = max(push_constants.grid_x, 1u);
-    uint grid_y = max(push_constants.grid_y, 1u);
+    uint grid_x = GRID_X;
+    uint grid_y = GRID_Y;
     uint cells = grid_cell_count();
     uint2 gi = world_to_cell(world);
 
@@ -1011,7 +972,7 @@ void render_kernel(uint id) {
             uint end = cell_offsets[c + 1u];
             for (uint k = begin; k < end; ++k) {
                 uint j = sorted_indices[k];
-                if (j >= push_constants.body_capacity || body_active[j] == 0u) {
+                if (j >= BODY_CAPACITY || body_active[j] == 0u) {
                     continue;
                 }
                 float2 pos = body_pos[j];
@@ -1049,10 +1010,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
     switch (mode) {
         case DISPATCH_CAMERA_UPDATE: {
             if (tid.x == 0u) {
-                if ((push_constants.options & OPTION_CAMERA_UPDATE) != 0u) {
-                    KeyState keys = read_key_state_inputs();
-                    update_camera_state(keys, push_constants.delta_time);
-                }
+                update_camera_state(push_constants.delta_time);
             }
             break;
         }
