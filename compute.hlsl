@@ -27,6 +27,24 @@ static const float RELAXATION = 1.0f;
 static const float DT_CLAMP = 1.0f / 30.0f;
 static const uint  PHYS_SUBSTEPS = 1u;
 
+static const float DELTA_SCALE = 32768.0f;
+static const uint DISPATCH_CAMERA_UPDATE      = 0u;
+static const uint DISPATCH_INITIALIZE         = 1u;
+static const uint DISPATCH_CLEAR_GRID         = 2u;
+static const uint DISPATCH_SPAWN_PROJECTILE   = 3u;
+static const uint DISPATCH_INTEGRATE          = 4u;
+static const uint DISPATCH_HISTOGRAM          = 5u;
+static const uint DISPATCH_PREFIX_COPY        = 6u;
+static const uint DISPATCH_PREFIX_SCAN        = 7u;
+static const uint DISPATCH_PREFIX_COPY_SOURCE = 8u;
+static const uint DISPATCH_PREFIX_FINALIZE    = 9u;
+static const uint DISPATCH_SCATTER            = 10u;
+static const uint DISPATCH_ZERO_DELTAS        = 11u;
+static const uint DISPATCH_CONSTRAINTS        = 12u;
+static const uint DISPATCH_APPLY_DELTAS       = 13u;
+static const uint DISPATCH_FINALIZE           = 14u;
+static const uint DISPATCH_RENDER             = 15u;
+
 // GPU physics compute pipeline
 struct ComputePushConstants {
     float time;
@@ -59,17 +77,6 @@ struct CameraStateData {
     float  padding;
 };
 
-[[vk::binding(0, 0)]] RWStructuredBuffer<uint> accumulation_buffer;
-[[vk::binding(3, 0)]] RWStructuredBuffer<CameraStateData> camera_state;
-
-[[vk::binding(20, 0)]] RWStructuredBuffer<float2> body_pos;
-[[vk::binding(21, 0)]] RWStructuredBuffer<float2> body_pos_pred;
-[[vk::binding(22, 0)]] RWStructuredBuffer<float2> body_vel;
-[[vk::binding(23, 0)]] RWStructuredBuffer<float>  body_radius;
-[[vk::binding(24, 0)]] RWStructuredBuffer<float>  body_inv_mass;
-[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_active;
-[[vk::binding(26, 0)]] RWStructuredBuffer<int2> body_delta_accum;
-
 struct ExplosionEvent {
     float2 center;
     float  radius;
@@ -88,125 +95,34 @@ struct SpawnState {
     uint active_projectiles;
     ExplosionEvent events[MAX_EXPLOSIONS];
 };
-[[vk::binding(27, 0)]] RWStructuredBuffer<SpawnState> spawn_state;
 
+struct WorldCircle {
+    float2 center;
+    float  radius;
+    float  softness;
+    float3 color;
+    float  energy;
+};
+
+
+[[vk::binding(0, 0)]] RWStructuredBuffer<uint> accumulation_buffer;
+[[vk::binding(3, 0)]] RWStructuredBuffer<CameraStateData> camera_state;
+[[vk::binding(20, 0)]] RWStructuredBuffer<float2> body_pos;
+[[vk::binding(21, 0)]] RWStructuredBuffer<float2> body_pos_pred;
+[[vk::binding(22, 0)]] RWStructuredBuffer<float2> body_vel;
+[[vk::binding(23, 0)]] RWStructuredBuffer<float>  body_radius;
+[[vk::binding(24, 0)]] RWStructuredBuffer<float>  body_inv_mass;
+[[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_active;
+[[vk::binding(26, 0)]] RWStructuredBuffer<int2> body_delta_accum;
+[[vk::binding(27, 0)]] RWStructuredBuffer<SpawnState> spawn_state;
 [[vk::binding(30, 0)]] RWStructuredBuffer<uint> cell_counts;
 [[vk::binding(31, 0)]] RWStructuredBuffer<uint> cell_offsets;
 [[vk::binding(32, 0)]] RWStructuredBuffer<uint> cell_scratch;
 [[vk::binding(33, 0)]] RWStructuredBuffer<uint> sorted_indices;
 
-static const float DELTA_SCALE = 32768.0f;
 
-int float_to_delta(float value) {
-    float scaled = clamp(value * DELTA_SCALE, -214748000.0f, 214748000.0f);
-    return int(scaled);
-}
 
-float delta_to_float(int value) {
-    return float(value) / DELTA_SCALE;
-}
-
-void store_body_delta(uint id, float2 value) {
-    body_delta_accum[id] = int2(float_to_delta(value.x), float_to_delta(value.y));
-}
-
-float2 load_body_delta(uint id) {
-    int2 packed = body_delta_accum[id];
-    return float2(delta_to_float(packed.x), delta_to_float(packed.y));
-}
-
-void atomic_add_body_delta(uint id, float2 value) {
-    int inc_x = float_to_delta(value.x);
-    int inc_y = float_to_delta(value.y);
-    if (inc_x != 0) {
-        InterlockedAdd(body_delta_accum[id].x, inc_x);
-    }
-    if (inc_y != 0) {
-        InterlockedAdd(body_delta_accum[id].y, inc_y);
-    }
-}
-
-static const uint DISPATCH_CAMERA_UPDATE        = 0u;
-static const uint DISPATCH_INITIALIZE           = 1u;
-static const uint DISPATCH_CLEAR_GRID           = 2u;
-static const uint DISPATCH_SPAWN_PROJECTILE     = 3u;
-static const uint DISPATCH_INTEGRATE            = 4u;
-static const uint DISPATCH_HISTOGRAM            = 5u;
-static const uint DISPATCH_PREFIX_COPY          = 6u;
-static const uint DISPATCH_PREFIX_SCAN          = 7u;
-static const uint DISPATCH_PREFIX_COPY_SOURCE   = 8u;
-static const uint DISPATCH_PREFIX_FINALIZE      = 9u;
-static const uint DISPATCH_SCATTER              = 10u;
-static const uint DISPATCH_ZERO_DELTAS          = 11u;
-static const uint DISPATCH_CONSTRAINTS          = 12u;
-static const uint DISPATCH_APPLY_DELTAS         = 13u;
-static const uint DISPATCH_FINALIZE             = 14u;
-static const uint DISPATCH_RENDER               = 15u;
-
-CameraStateData load_camera_state() {
-    CameraStateData state = camera_state[0];
-    bool invalid = !all(isfinite(state.position)) || !isfinite(state.zoom) || state.zoom <= 0.0f;
-    if (invalid) {
-        state.position = float2(0.0f, 0.0f);
-        state.zoom = CAMERA_DEFAULT_ZOOM;
-    }
-    state.padding = 0.0f;
-    if (invalid) {
-        camera_state[0] = state;
-    }
-    return state;
-}
-
-void update_camera_state(float delta_time) {
-    if (delta_time <= 0.0f) {
-        delta_time = 0.0f;
-    }
-
-    CameraStateData state = load_camera_state();
-
-    if (push_constants.reset_camera != 0u) {
-        state.position = float2(0.0f, 0.0f);
-        state.zoom = CAMERA_DEFAULT_ZOOM;
-        state.padding = 0.0f;
-        camera_state[0] = state;
-        return;
-    }
-
-    float2 move = float2(0.0f, 0.0f);
-    if (push_constants.move_forward != 0u)  move.y += 1.0f;
-    if (push_constants.move_backward != 0u) move.y -= 1.0f;
-    if (push_constants.move_right != 0u)    move.x += 1.0f;
-    if (push_constants.move_left != 0u)     move.x -= 1.0f;
-
-    if (dot(move, move) > 0.0f) {
-        move = normalize(move);
-    }
-
-    float zoom_ratio = clamp(state.zoom / CAMERA_DEFAULT_ZOOM, 0.25f, 12.0f);
-    float move_speed = CAMERA_MOVE_SPEED * zoom_ratio;
-    bool fast = (push_constants.speed != 0u);
-    if (fast) {
-        move_speed *= CAMERA_FAST_SCALE;
-    }
-
-    state.position += move * move_speed * delta_time;
-
-    float zoom_rate = CAMERA_ZOOM_RATE;
-    if (fast) {
-        zoom_rate *= CAMERA_FAST_SCALE;
-    }
-
-    if (push_constants.zoom_out != 0u) {
-        state.zoom -= state.zoom * zoom_rate * delta_time;
-    }
-    if (push_constants.zoom_in != 0u) {
-        state.zoom += state.zoom * zoom_rate * delta_time;
-    }
-
-    state.zoom = clamp(state.zoom, CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM);
-    state.padding = 0.0f;
-    camera_state[0] = state;
-}
+///UTILS///
 
 float hash11(float n) {
     return frac(sin(n) * 1343758.5453123f);
@@ -257,15 +173,6 @@ uint cell_index(uint2 g) {
     uint grid_x = GRID_X;
     return g.y * grid_x + g.x;
 }
-
-struct WorldCircle {
-    float2 center;
-    float  radius;
-    float  softness;
-    float3 color;
-    float  energy;
-};
-
 bool world_circle_from_cell(float2 cell, out WorldCircle circle) {
     float seed = dot(cell, float2(53.34f, 19.13f));
     float presence = hash11(seed);
@@ -287,6 +194,94 @@ bool world_circle_from_cell(float2 cell, out WorldCircle circle) {
     );
     circle.energy = lerp(0.18f, 0.95f, hash11(seed + 63.5f));
     return true;
+}
+int float_to_delta(float value) {
+    float scaled = clamp(value * DELTA_SCALE, -214748000.0f, 214748000.0f);
+    return int(scaled);
+}
+
+float delta_to_float(int value) {
+    return float(value) / DELTA_SCALE;
+}
+
+void store_body_delta(uint id, float2 value) {
+    body_delta_accum[id] = int2(float_to_delta(value.x), float_to_delta(value.y));
+}
+
+float2 load_body_delta(uint id) {
+    int2 packed = body_delta_accum[id];
+    return float2(delta_to_float(packed.x), delta_to_float(packed.y));
+}
+
+void atomic_add_body_delta(uint id, float2 value) {
+    int inc_x = float_to_delta(value.x);
+    int inc_y = float_to_delta(value.y);
+    if (inc_x != 0) {
+        InterlockedAdd(body_delta_accum[id].x, inc_x);
+    }
+    if (inc_y != 0) {
+        InterlockedAdd(body_delta_accum[id].y, inc_y);
+    }
+}
+
+
+
+CameraStateData load_camera_state() {
+    return camera_state[0];
+}
+
+
+//MAIN STUFF
+
+void update_camera_state(float delta_time) {
+    if (delta_time <= 0.0f) {
+        delta_time = 0.0f;
+    }
+
+    CameraStateData state = load_camera_state();
+
+    if (push_constants.reset_camera != 0u) {
+        state.position = float2(0.0f, 0.0f);
+        state.zoom = CAMERA_DEFAULT_ZOOM;
+        state.padding = 0.0f;
+        camera_state[0] = state;
+        return;
+    }
+
+    float2 move = float2(0.0f, 0.0f);
+    if (push_constants.move_forward != 0u)  move.y += 1.0f;
+    if (push_constants.move_backward != 0u) move.y -= 1.0f;
+    if (push_constants.move_right != 0u)    move.x += 1.0f;
+    if (push_constants.move_left != 0u)     move.x -= 1.0f;
+
+    if (dot(move, move) > 0.0f) {
+        move = normalize(move);
+    }
+
+    float zoom_ratio = clamp(state.zoom / CAMERA_DEFAULT_ZOOM, 0.25f, 12.0f);
+    float move_speed = CAMERA_MOVE_SPEED * zoom_ratio;
+    bool fast = (push_constants.speed != 0u);
+    if (fast) {
+        move_speed *= CAMERA_FAST_SCALE;
+    }
+
+    state.position += move * move_speed * delta_time;
+
+    float zoom_rate = CAMERA_ZOOM_RATE;
+    if (fast) {
+        zoom_rate *= CAMERA_FAST_SCALE;
+    }
+
+    if (push_constants.zoom_out != 0u) {
+        state.zoom -= state.zoom * zoom_rate * delta_time;
+    }
+    if (push_constants.zoom_in != 0u) {
+        state.zoom += state.zoom * zoom_rate * delta_time;
+    }
+
+    state.zoom = clamp(state.zoom, CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM);
+    state.padding = 0.0f;
+    camera_state[0] = state;
 }
 
 bool collide_world(float2 p, float expand, out float2 n_out, out float depth_out, out float2 center_out, out float radius_out, out float energy_out) {

@@ -56,3 +56,86 @@ compiling shader: graphics.hlsl
 compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 Discovered 2 shaders: compute.hlsl graphics.hlsl 
 Window resized to 1856x1016
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compute.hlsl:149:46: error: unknown type name 'WorldCircle'
+bool world_circle_from_cell(float2 cell, out WorldCircle circle) {
+                                             ^
+compute.hlsl:153:19: error: use of undeclared identifier 'WorldCircle'
+        circle = (WorldCircle)0;
+                  ^
+compute.hlsl:293:18: error: no matching function for call to 'world_circle_from_cell'
+            if (!world_circle_from_cell(cell, circle)) {
+                 ^~~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:149:6: note: candidate function not viable: no known conversion from 'int' to 'WorldCircle' for 2nd argument
+bool world_circle_from_cell(float2 cell, out WorldCircle circle) {
+     ^                                                   ~~~~~~
+compute.hlsl:883:18: error: no matching function for call to 'world_circle_from_cell'
+            if (!world_circle_from_cell(cell, circle)) {
+                 ^~~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:149:6: note: candidate function not viable: no known conversion from 'int' to 'WorldCircle' for 2nd argument
+bool world_circle_from_cell(float2 cell, out WorldCircle circle) {
+     ^                                                   ~~~~~~
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compute.hlsl:167:46: error: unknown type name 'WorldCircle'
+bool world_circle_from_cell(float2 cell, out WorldCircle circle) {
+                                             ^
+compute.hlsl:171:19: error: use of undeclared identifier 'WorldCircle'
+        circle = (WorldCircle)0;
+                  ^
+compute.hlsl:296:18: error: no matching function for call to 'world_circle_from_cell'
+            if (!world_circle_from_cell(cell, circle)) {
+                 ^~~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:167:6: note: candidate function not viable: no known conversion from 'int' to 'WorldCircle' for 2nd argument
+bool world_circle_from_cell(float2 cell, out WorldCircle circle) {
+     ^                                                   ~~~~~~
+compute.hlsl:886:18: error: no matching function for call to 'world_circle_from_cell'
+            if (!world_circle_from_cell(cell, circle)) {
+                 ^~~~~~~~~~~~~~~~~~~~~~
+compute.hlsl:167:6: note: candidate function not viable: no known conversion from 'int' to 'WorldCircle' for 2nd argument
+bool world_circle_from_cell(float2 cell, out WorldCircle circle) {
+     ^                                                   ~~~~~~
+
+Failed: compute.hlsl
+Recompiling compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+Window resized to 1856x2056
+Window resized to 1856x1016
+Window resized to 1856x696
