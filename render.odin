@@ -1,14 +1,16 @@
 package main
 
+import vk "vendor:vulkan"
+
 COMPUTE_GROUP_SIZE :: u32(128)
 PIPELINE_COUNT :: 2
 // Physics configuration
 PHYS_MAX_BODIES :: u32(512000)
 PHYS_SOLVER_ITERATIONS :: u32(4)
-PHYS_SUBSTEPS :: u32(1)
+PHYS_SUBSTEPS :: u32(2)
 
-GRID_X :: u32(512)
-GRID_Y :: u32(512)
+GRID_X :: u32(1024)
+GRID_Y :: u32(1024)
 GRID_CELL_COUNT :: u32(GRID_X * GRID_Y)
 
 CameraStateGPU :: struct {
@@ -108,7 +110,7 @@ buffer_specs := []struct {
 	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 30, {.COMPUTE}}, //grid_count
 	{DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size, {.STORAGE_BUFFER}, 31, {.COMPUTE}}, //grid_offset
 	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 32, {.COMPUTE}}, //grid_scan
-	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 33, {.COMPUTE}},//body_grid_index
+	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 33, {.COMPUTE}}, //body_grid_index
 }
 
 DescriptorBindingSpec :: struct {
@@ -241,6 +243,7 @@ physics :: proc(frame: FrameInputs, pixel_dispatch: u32) {
 		dispatch_compute(frame, .INTEGRATE, body_dispatch)
 		dispatch_compute(frame, .HISTOGRAM, body_dispatch)
 		dispatch_compute(frame, .PREFIX_COPY, grid_dispatch)
+
 		prefix_scan(frame, grid_dispatch)
 		dispatch_compute(frame, .PREFIX_FINALIZE, grid_dispatch)
 		dispatch_compute(frame, .SCATTER, body_dispatch)
@@ -252,10 +255,12 @@ physics :: proc(frame: FrameInputs, pixel_dispatch: u32) {
 	}
 	dispatch_compute(frame, .FINALIZE, body_dispatch)
 
+
 }
 
 // accumulation_buffer -> post_process.hlsl -> swapchain image
 graphics :: proc(frame: FrameInputs, element: ^SwapchainElement) {
+
 	apply_compute_to_fragment_barrier(frame.cmd, &buffers.data[0])
 	begin_rendering(frame, element)
 	bind(

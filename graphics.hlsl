@@ -12,7 +12,6 @@ static const float2 POSITIONS[3] = {
 static const float2 UVS[3] = {
     float2(0.0f, 0.0f), float2(2.0f, 0.0f), float2(0.0f, 2.0f)
 };
-
 struct VertexOutput { float4 clip_position:SV_POSITION; float2 uv:TEXCOORD0; };
 
 VertexOutput vs_main(uint vid:SV_VertexID) {

@@ -295,7 +295,7 @@ render_frame :: proc(start_time: time.Time) -> bool {
 	// 4. Record rendering commands
 	encoder, frame := begin_frame_commands(element, start_time)
 	record_commands(element, frame)
-	transition_swapchain_image_layout(frame.cmd, element, .PRESENT_SRC_KHR)
+	transition_swapchain_image_layout(frame.cmd, element, vk.ImageLayout.PRESENT_SRC_KHR)
 	vk.EndCommandBuffer(encoder.command_buffer)
 
 	// 5. Submit draw work
@@ -872,19 +872,30 @@ init_vulkan :: proc() -> bool {
 		apiVersion         = vk.API_VERSION_1_3,
 	}
 
-	if vk.CreateInstance(
-		   &vk.InstanceCreateInfo {
-			   sType = vk.StructureType.INSTANCE_CREATE_INFO,
-			   pApplicationInfo = &app_info,
-			   enabledLayerCount = ENABLE_VALIDATION ? len(layer_names) : 0,
-			   ppEnabledLayerNames = ENABLE_VALIDATION ? raw_data(layer_names[:]) : nil,
-			   enabledExtensionCount = u32(len(instance_extensions)),
-			   ppEnabledExtensionNames = raw_data(instance_extensions),
-		   },
-		   nil,
-		   &instance,
-	   ) !=
-	   vk.Result.SUCCESS {
+	disabled_validation_features := [?]vk.ValidationFeatureDisableEXT{
+		vk.ValidationFeatureDisableEXT.UNIQUE_HANDLES,
+	}
+
+	validation_features := vk.ValidationFeaturesEXT {
+		sType                           = vk.StructureType.VALIDATION_FEATURES_EXT,
+		disabledValidationFeatureCount  = u32(len(disabled_validation_features)),
+		pDisabledValidationFeatures     = raw_data(disabled_validation_features[:]),
+	}
+
+	create_info := vk.InstanceCreateInfo {
+		sType                    = vk.StructureType.INSTANCE_CREATE_INFO,
+		pApplicationInfo         = &app_info,
+		enabledLayerCount        = ENABLE_VALIDATION ? len(layer_names) : 0,
+		ppEnabledLayerNames      = ENABLE_VALIDATION ? raw_data(layer_names[:]) : nil,
+		enabledExtensionCount    = u32(len(instance_extensions)),
+		ppEnabledExtensionNames  = raw_data(instance_extensions),
+	}
+
+	if ENABLE_VALIDATION {
+		create_info.pNext = &validation_features
+	}
+
+	if vk.CreateInstance(&create_info, nil, &instance) != vk.Result.SUCCESS {
 		fmt.println("Failed to create instance")
 		return false
 	}

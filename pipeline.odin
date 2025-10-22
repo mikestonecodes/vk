@@ -548,7 +548,7 @@ draw :: proc(
 }
 begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 
-	transition_swapchain_image_layout(frame.cmd, element, vk.ImageLayout.ATTACHMENT_OPTIMAL)
+	//transition_swapchain_image_layout(frame.cmd, element, vk.ImageLayout.ATTACHMENT_OPTIMAL)
 
 	vk.CmdBeginRendering(
 		frame.cmd,

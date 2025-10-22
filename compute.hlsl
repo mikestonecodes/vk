@@ -11,8 +11,7 @@ static const float CAMERA_MAX_ZOOM     = 5000.0f;
 static const float CAMERA_ZOOM_RATE    = 2.2f;
 static const float CAMERA_FAST_SCALE   = 2.4f;
 
-static const float CELL_SIZE = 2.0f;
-static const float WORLD_RANGE_LIMIT = 1e6f;
+static const float CELL_SIZE = 5.0f;
 
 static const uint  DYNAMIC_BODY_START = 1u;
 static const uint  MAX_ACTIVE_DYNAMIC = 25000u;
@@ -33,6 +32,7 @@ static const float DT_CLAMP = 1.0f / 30.0f;
 static const uint  PHYS_SUBSTEPS = 1u;
 
 static const float DELTA_SCALE = 32768.0f;
+static const float2 GAME_START_CENTER = float2(float(GRID_X*CELL_SIZE) * 0.5f, float(GRID_Y*CELL_SIZE) * 0.5f);
 
 
 // ============================================================================
@@ -116,10 +116,7 @@ float2 safe_normalize(float2 v, float fallback_x) {
 
 // --- Grid Helpers ---
 uint wrap_int(int value, uint size_value) {
-    int size = max(int(size_value), 1);
-    int r = value % size;
-    if (r < 0) r += size;
-    return uint(r);
+    return uint(clamp(value, 0, int(size_value - 1)));
 }
 uint2 world_to_cell(float2 p) {
     float inv_cell = 1.0f / CELL_SIZE;
@@ -180,8 +177,13 @@ void update_camera_state(float delta_time) {
 
     CameraStateData state = camera_state[0];
 
+    if (state.zoom <= 0.0f) {
+        state.position = GAME_START_CENTER;
+        state.zoom = CAMERA_DEFAULT_ZOOM;
+    }
+
     if (push_constants.reset_camera != 0u) {
-        state.position = float2(0.0f, 0.0f);
+        state.position = GAME_START_CENTER;
         state.zoom = CAMERA_DEFAULT_ZOOM;
         state.padding = 0.0f;
         camera_state[0] = state;
@@ -237,7 +239,7 @@ void maybe_spawn_bodies() {
     view.x *= aspect;
     float zoom = max(cam.zoom, 0.001f);
     float2 target_world = cam.position + view * zoom;
-    float2 center = float2(0.0f, 0.0f);
+    float2 center = GAME_START_CENTER;
     float2 dir = target_world - center;
     float len_sq = dot(dir, dir);
     dir = (len_sq <= 1e-8f) ? float2(1.0f, 0.0f) : dir * rsqrt(len_sq);
@@ -263,7 +265,7 @@ void maybe_spawn_bodies() {
             dir.x * sin(angle_step) + dir.y * cos(angle_step)
         );
 
-        float spread = 0.6f + 0.15f * float(n % 4u);
+        float spread = 0.1f;
         float spawn_offset = DYNAMIC_BODY_RADIUS + 0.05f + jitter * 0.1f;
         float2 spawn_pos = center + rotated * spawn_offset;
         float2 velocity = rotated * (DYNAMIC_BODY_SPEED * spread);
@@ -648,7 +650,8 @@ void finalize_kernel(uint id) {
     body_pos_pred[id] = x1;
 
     if (id >= DYNAMIC_BODY_START && inv_mass > 0.0f) {
-        float dist_sq = dot(x1, x1);
+        float2 to_center = x1 - GAME_START_CENTER;
+        float dist_sq = dot(to_center, to_center);
         float limit = DYNAMIC_BODY_MAX_DISTANCE;
         if (dist_sq > limit * limit) {
             body_vel[id] = float2(0.0f, 0.0f);
@@ -679,7 +682,7 @@ void render_kernel(uint id) {
 	float2 world = camera_pos + view * zoom;
 
 	float3 color = float3(0.016f, 0.018f, 0.020f);
-	float density = 0.0f;
+	float density = 0.001f;
 
 	float2 baseCell = floor(world);
 
@@ -701,14 +704,14 @@ void render_kernel(uint id) {
 		}
 	}
 
-	if (density <= 0.0001f) {
-		WorldBody body;
-		body.center = float2(0.0f, 0.0f);
-		body.radius = ROOT_BODY_RADIUS;
-		body.softness = body.radius * 0.5f;
-		body.color = float3(0.85f, 0.90f, 0.98f);
-		body.energy = 0.65f;
-		float dist = length(world - body.center);
+    if (density <= 0.1f) {
+        WorldBody body;
+        body.center = GAME_START_CENTER;
+        body.radius = ROOT_BODY_RADIUS;
+        body.softness = body.radius * 0.5f;
+        body.color = float3(0.85f, 0.90f, 0.98f);
+        body.energy = 0.65f;
+        float dist = length(world - body.center);
 		float coverage = soft_circle(dist, body.radius, body.softness);
 		color += body.color * body.energy * coverage;
 		density = max(density, coverage);
@@ -717,32 +720,35 @@ void render_kernel(uint id) {
 	uint grid_x = GRID_X, grid_y = GRID_Y;
 	uint cells = grid_cell_count();
 	uint2 gi = world_to_cell(world);
-
 	for (int oy = -1; oy <= 1; ++oy) {
 		for (int ox = -1; ox <= 1; ++ox) {
-			uint nx = wrap_int(int(gi.x) + ox, grid_x);
-			uint ny = wrap_int(int(gi.y) + oy, grid_y);
+
+			uint nx = wrap_int(int(gi.x) + ox, GRID_X);
+			uint ny = wrap_int(int(gi.y) + oy, GRID_Y);
+
 			uint c = ny * grid_x + nx;
 			if (c >= cells) continue;
 			uint begin = cell_offsets[c];
 			uint end = cell_offsets[c + 1u];
+			float3 cell_color = hash31(float2(nx, ny));
+
+			//color = cell_color;
+
 			for (uint k = begin; k < end; ++k) {
 				uint j = sorted_indices[k];
-				if (j >= BODY_CAPACITY || body_type[j] == 0u) continue;
 				float2 pos = body_pos[j];
 				float radius = body_radius[j];
 				int type = body_type[j];
 				float softness = max(radius * 0.6f, 0.05f);
 				float dist = length(world - pos);
 				float coverage = soft_circle(dist, radius, softness);
-				if (coverage <= 0.0f) continue;
 				float3 body_col = (type == 2) ? float3(0.85f, 0.15f, 0.15f) : float3(0.65f, 0.55f, 0.25f);
+
 				color += body_col * coverage * 0.4f;
 				density = max(density, coverage);
 			}
 		}
 	}
-
 	color = saturate(color);
 	density = saturate(density);
 
