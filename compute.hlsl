@@ -440,110 +440,6 @@ void trigger_projectile_explosion(uint source_id, float2 circle_center, float ci
     }
 }
 
-void process_pending_explosions() {
-    uint head = spawn_state[0].explosion_head;
-    uint tail = spawn_state[0].next_explosion;
-    if (head == tail) {
-        return;
-    }
-
-    uint grid_x = max(push_constants.grid_x, 1u);
-    uint grid_y = max(push_constants.grid_y, 1u);
-    uint cells = grid_cell_count();
-    uint capacity = max(push_constants.body_capacity, 1u);
-
-    while (head < tail) {
-        uint slot = head % MAX_EXPLOSIONS;
-        ExplosionEvent ev = spawn_state[0].events[slot];
-        if (ev.processed != 0u) {
-            head++;
-            continue;
-        }
-
-        if (push_constants.time < ev.start_time) {
-            break;
-        }
-
-        ev.processed = 1u;
-        spawn_state[0].events[slot] = ev;
-        head++;
-
-        uint target_id = ev.target_id;
-        if (target_id != 0u && target_id < capacity && body_active[target_id] != 0u) {
-            deactivate_body(target_id);
-        }
-
-        float explosion_radius = (ev.radius + push_constants.projectile_radius) * (2.8f + ev.energy * 1.8f);
-        explosion_radius = clamp(
-            explosion_radius,
-            push_constants.projectile_radius * 2.5f,
-            push_constants.projectile_radius * 16.0f
-        );
-        float radius_sq = explosion_radius * explosion_radius;
-
-        float cell_radius_f = explosion_radius / CELL_SIZE + 1.5f;
-        int cell_radius = (int)ceil(cell_radius_f);
-        cell_radius = clamp(cell_radius, 1, 32);
-
-        uint2 origin_cell = world_to_cell(ev.center);
-
-        for (int oy = -cell_radius; oy <= cell_radius; ++oy) {
-            for (int ox = -cell_radius; ox <= cell_radius; ++ox) {
-                uint nx = wrap_int(int(origin_cell.x) + ox, grid_x);
-                uint ny = wrap_int(int(origin_cell.y) + oy, grid_y);
-                uint c = ny * grid_x + nx;
-                if (c >= cells) {
-                    continue;
-                }
-                uint begin = cell_offsets[c];
-                uint end = cell_offsets[c + 1u];
-                for (uint k = begin; k < end; ++k) {
-                    uint j = sorted_indices[k];
-                    if (j == 0u || j >= capacity) {
-                        continue;
-                    }
-                    if (j == target_id) {
-                        continue;
-                    }
-                    uint active = body_active[j];
-                    if (active == 0u) {
-                        continue;
-                    }
-                    if (body_inv_mass[j] <= 0.0f) {
-                        continue;
-                    }
-
-                    float2 pos = body_pos_pred[j];
-                    float2 delta = pos - ev.center;
-                    float dist_sq = dot(delta, delta);
-                    if (dist_sq > radius_sq) {
-                        continue;
-                    }
-
-                    float dist = sqrt(max(dist_sq, 1e-8f));
-                    float proximity = 1.0f - saturate(dist / explosion_radius);
-                    float next_energy = clamp(ev.energy + proximity * 1.25f + 0.25f, 0.25f, 5.0f);
-                    float next_radius = max(push_constants.projectile_radius * (1.2f + proximity * 2.1f), ev.radius * 0.75f);
-                    float delay = lerp(0.05f, 0.16f, 1.0f - proximity);
-                    float scheduled_time = ev.start_time + delay;
-
-                    if (body_active[j] == 2u) {
-                        continue;
-                    }
-
-                    body_active[j] = 2u;
-                    record_explosion_event(pos, next_radius, next_energy, scheduled_time, j);
-
-                    float2 dir = (dist > 1e-6f) ? (delta / dist) : float2(1.0f, 0.0f);
-                    float push_strength = (ev.energy * 1.2f + 0.6f) * proximity * push_constants.projectile_radius;
-                    atomic_add_body_delta(j, dir * push_strength * 0.4f);
-                }
-            }
-        }
-    }
-
-    spawn_state[0].explosion_head = head;
-}
 
 void initialize_bodies(uint id) {
     uint capacity = max(push_constants.body_capacity, 1u);
@@ -1157,7 +1053,6 @@ void main(uint3 tid : SV_DispatchThreadID) {
                     KeyState keys = read_key_state_inputs();
                     update_camera_state(keys, push_constants.delta_time);
                 }
-                process_pending_explosions();
             }
             break;
         }

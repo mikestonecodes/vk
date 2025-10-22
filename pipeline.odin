@@ -40,6 +40,9 @@ ShaderProgramConfig :: struct {
 
 DeviceSize :: vk.DeviceSize
 
+BufferUsageFlags :: vk.BufferUsageFlags
+ShaderStageFlags :: vk.ShaderStageFlags
+
 buffers: Array(32, BufferResource)
 last_frame_time: f32
 shaders_ready: bool
@@ -128,7 +131,6 @@ dispatch_compute :: proc(frame: FrameInputs, task: ComputeTask) {
 		task.group.z if task.group.z != 0 else 1,
 	)
 	compute_barrier(frame.cmd)
-
 }
 
 bind_resource :: proc(slot: u32, resource: $T, dstBinding := u32(max(u32))) {
@@ -527,19 +529,25 @@ begin_encoding :: proc(element: ^SwapchainElement) -> CommandEncoder {
 	}
 
 	begin_info := vk.CommandBufferBeginInfo {
-		sType = vk.StructureType.COMMAND_BUFFER_BEGIN_INFO,
-		flags = {vk.CommandBufferUsageFlag.ONE_TIME_SUBMIT},
+		sType = .COMMAND_BUFFER_BEGIN_INFO,
+		flags = {.ONE_TIME_SUBMIT},
 	}
 
 	vk.BeginCommandBuffer(encoder.command_buffer, &begin_info)
 	return encoder
 }
 
-end_rendering :: proc(frame:FrameInputs) {
+end_rendering :: proc(frame: FrameInputs) {
 	vk.CmdEndRendering(frame.cmd)
 }
 
-draw :: proc(frame: FrameInputs, vertex_count: u32, instance_count: u32 = 1, first_vertex: u32 = 0, first_instance: u32 = 0) {
+draw :: proc(
+	frame: FrameInputs,
+	vertex_count: u32,
+	instance_count: u32 = 1,
+	first_vertex: u32 = 0,
+	first_instance: u32 = 0,
+) {
 	vk.CmdDraw(frame.cmd, vertex_count, instance_count, first_vertex, first_instance)
 }
 begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {

@@ -50,6 +50,7 @@ PostProcessPushConstants :: struct {
 	screen_width:  u32,
 	screen_height: u32,
 }
+post_process_push_constants := PostProcessPushConstants {}
 
 ComputePushConstants :: struct {
 	time:                    f32,
@@ -110,10 +111,6 @@ compute_push_constants := ComputePushConstants {
 }
 
 
-post_process_push_constants := PostProcessPushConstants {
-	screen_width  = u32(window_width),
-	screen_height = u32(window_height),
-}
 
 ExplosionEventGPU :: struct {
 	center:     [2]f32,
@@ -169,9 +166,9 @@ grid_cell_size := DeviceSize(GRID_CELL_COUNT)
 
 buffer_specs := []struct {
 	size:        DeviceSize,
-	flags:       vk.BufferUsageFlags,
+	flags:       BufferUsageFlags,
 	binding:     u32,
-	stage_flags: vk.ShaderStageFlags,
+	stage_flags: ShaderStageFlags,
 } {
 	{
 		DeviceSize(window_width * window_height * 4 * size_of(u32)),
@@ -340,8 +337,8 @@ graphics :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 		&render_shader_states[1],
 		.GRAPHICS,
 		&PostProcessPushConstants {
-			screen_width = u32(window_width),
-			screen_height = u32(window_height),
+			u32(window_width),
+			u32(window_height),
 		},
 	)
 	draw(frame, 3, 1, 0, 0)
