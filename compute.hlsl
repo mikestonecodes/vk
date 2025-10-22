@@ -23,7 +23,7 @@ static const uint  GRID_Y = 512u;
 
 static const float DYNAMIC_BODY_SPEED = 42.0f;
 static const float DYNAMIC_BODY_RADIUS = 0.20f;
-static const float DYNAMIC_BODY_MAX_DISTANCE = 450.0f;
+static const float DYNAMIC_BODY_MAX_DISTANCE = 99950.0f;
 static const float ROOT_BODY_RADIUS = 0.65f;
 
 static const float BODY_DAMPING = 0.02f;
@@ -31,7 +31,7 @@ static const float RELAXATION = 1.0f;
 static const float DT_CLAMP = 1.0f / 30.0f;
 static const uint  PHYS_SUBSTEPS = 1u;
 
-static const float DELTA_SCALE = 32768.0f;
+static const float DELTA_SCALE = 332768.0f;
 static const float2 GAME_START_CENTER = float2(float(GRID_X*CELL_SIZE) * 0.5f, float(GRID_Y*CELL_SIZE) * 0.5f);
 
 
@@ -517,7 +517,7 @@ void constraints_kernel(uint id) {
     float  wi = body_inv_mass[id];
 
     if (!all(isfinite(xi))) return;
-
+/*
     if (wi > 0.0f) {
         float2 normal, body_center;
         float depth, body_radius_out, body_energy;
@@ -527,6 +527,8 @@ void constraints_kernel(uint id) {
             atomic_add_body_delta(id, corr);
         }
     }
+
+	*/
 
     uint2 gi = world_to_cell(xi);
     uint cells = grid_cell_count();

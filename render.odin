@@ -7,10 +7,9 @@ PIPELINE_COUNT :: 2
 // Physics configuration
 PHYS_MAX_BODIES :: u32(512000)
 PHYS_SOLVER_ITERATIONS :: u32(4)
-PHYS_SUBSTEPS :: u32(2)
-
-GRID_X :: u32(1024)
-GRID_Y :: u32(1024)
+PHYS_SUBSTEPS :: u32(1)
+GRID_X :: u32(512)
+GRID_Y :: u32(512)
 GRID_CELL_COUNT :: u32(GRID_X * GRID_Y)
 
 CameraStateGPU :: struct {
@@ -199,6 +198,7 @@ compute :: proc(frame: FrameInputs) {
 	pixel_dispatch := (total_pixels + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
 	physics(frame, pixel_dispatch)
 
+	compute_barrier(frame.cmd)
 	zero_buffer(frame, &buffers.data[0])
 	transfer_to_compute_barrier(frame.cmd, &buffers.data[0])
 	dispatch_compute(frame, .RENDER, pixel_dispatch)

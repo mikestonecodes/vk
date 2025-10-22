@@ -3,6 +3,10 @@
 Build succeeded, launching vk...
 DEBUG: Initializing GLFW platform
 DEBUG: GLFW platform setup complete
+Validation Error: [ VUID-vkCreateInstance-ppEnabledExtensionNames-01388 ] | MessageID = 0xe5e52180
+vkCreateInstance(): pCreateInfo->ppEnabledExtensionNames[2] Missing extension required by the instance extension VK_EXT_surface_maintenance1: VK_KHR_get_surface_capabilities2.
+The Vulkan spec states: All required extensions for each extension in the VkInstanceCreateInfo::ppEnabledExtensionNames list must also be present in that list (https://docs.vulkan.org/spec/latest/chapters/initialization.html#VUID-vkCreateInstance-ppEnabledExtensionNames-01388)
+
 Validation layer: linux_read_sorted_physical_devices:
 Validation layer:      Original order:
 Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
@@ -50,3 +54,51 @@ compiled shader successfully! ignore previous compile errors for this file: grap
 compiling shader: graphics.hlsl
 compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
 compiling shader: compute.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+compiling shader: graphics.hlsl
+compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
+Discovered 2 shaders: compute.hlsl graphics.hlsl 
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
+The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
+Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
+The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
+Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
+The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
+Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
+The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
+Window resized to 1856x2056
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
+The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
+Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
+The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
+Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
+The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
+Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
+The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
+Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
+Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
+The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
+Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
+Validation layer: (Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
+vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
+The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
+Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
+Validation layer: (Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
+vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
+The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)

@@ -33,6 +33,7 @@ image_count: c.uint32_t = 0
 timeline_semaphore: vk.Semaphore
 timeline_value: c.uint64_t = 0
 image_available_semaphore: vk.Semaphore
+render_finished_semaphore: vk.Semaphore
 
 MAX_FRAMES_IN_FLIGHT :: c.uint32_t(3)
 MAX_SWAPCHAIN_IMAGES :: c.uint32_t(4) // 4 keeps headroom for triple-buffer drivers
@@ -257,14 +258,13 @@ submit_commands :: proc(element: ^SwapchainElement, frame_index: u32) {
 
 present_frame :: proc(image_index: c.uint32_t) -> bool {
 	element := &elements[image_index]
-	wait_for_timeline(element.last_value)
 
 	index_copy := image_index
 
 	present_info := vk.PresentInfoKHR {
 		sType              = vk.StructureType.PRESENT_INFO_KHR,
-		waitSemaphoreCount = 0,
-		pWaitSemaphores    = nil,
+		waitSemaphoreCount = 1,
+		pWaitSemaphores    = &timeline_semaphore,
 		swapchainCount     = 1,
 		pSwapchains        = &swapchain,
 		pImageIndices      = &index_copy,
@@ -280,6 +280,7 @@ present_frame :: proc(image_index: c.uint32_t) -> bool {
 }
 
 render_frame :: proc(start_time: time.Time) -> bool {
+
 	if frames_in_flight == 0 {
 		return false
 	}
@@ -290,10 +291,10 @@ render_frame :: proc(start_time: time.Time) -> bool {
 	acquire_next_image(frame_index) or_return
 
 	element := &elements[image_index]
-	wait_for_timeline(element.last_value)
 
 	// 4. Record rendering commands
 	encoder, frame := begin_frame_commands(element, start_time)
+	transition_swapchain_image_layout(frame.cmd, element, vk.ImageLayout.ATTACHMENT_OPTIMAL)
 	record_commands(element, frame)
 	transition_swapchain_image_layout(frame.cmd, element, vk.ImageLayout.PRESENT_SRC_KHR)
 	vk.EndCommandBuffer(encoder.command_buffer)
@@ -328,6 +329,8 @@ handle_resize :: proc() {
 		//		destroy_render_shader_state(render_shader_states[:])
 
 		//	shaders_ready = false
+
+		resize()
 		destroy_swapchain()
 		if !create_swapchain() {
 			return
@@ -338,8 +341,7 @@ handle_resize :: proc() {
 			return
 		}
 		// Recreate offscreen resources with new dimensions (handled by render init)
-		//		init_render_resources()
-		resize()
+	//	init_render_resources()
 
 
 	}
@@ -359,17 +361,22 @@ get_instance_extensions :: proc() -> []cstring {
 	// Get required extensions from GLFW
 	glfw_extensions := glfw.GetRequiredInstanceExtensions()
 	instance_extensions.len = 0
+	extra_extensions := 0
+	if ENABLE_VALIDATION do extra_extensions = 3
 	runtime.assert(
-		len(glfw_extensions) + 2 <= len(instance_extensions.data),
+		len(glfw_extensions) + extra_extensions <= len(instance_extensions.data),
 		"instance extension buffer too small",
 	)
 
 	for ext in glfw_extensions {
 		array_push(&instance_extensions, ext)
 	}
+	array_push(&instance_extensions, "VK_EXT_surface_maintenance1") // optional but useful
+	if ENABLE_VALIDATION {
+		array_push(&instance_extensions, "VK_EXT_debug_utils")
+		array_push(&instance_extensions, "VK_EXT_validation_features") // optional but useful
+	}
 
-	array_push(&instance_extensions, "VK_EXT_debug_utils")
-	array_push(&instance_extensions, "VK_EXT_validation_features") // optional but useful
 	return array_slice(&instance_extensions)
 }
 layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
@@ -377,9 +384,6 @@ layer_names := [?]cstring{"VK_LAYER_KHRONOS_validation"}
 // ──────────────────────────────────────────────────────────────
 // Device extensions to reduce boilerplate & enable advanced features
 // ──────────────────────────────────────────────────────────────
-
-
-device_extension_names := [?]cstring{"VK_KHR_swapchain"}
 
 
 create_logical_device :: proc() -> bool {
@@ -872,30 +876,19 @@ init_vulkan :: proc() -> bool {
 		apiVersion         = vk.API_VERSION_1_3,
 	}
 
-	disabled_validation_features := [?]vk.ValidationFeatureDisableEXT{
-		vk.ValidationFeatureDisableEXT.UNIQUE_HANDLES,
-	}
-
-	validation_features := vk.ValidationFeaturesEXT {
-		sType                           = vk.StructureType.VALIDATION_FEATURES_EXT,
-		disabledValidationFeatureCount  = u32(len(disabled_validation_features)),
-		pDisabledValidationFeatures     = raw_data(disabled_validation_features[:]),
-	}
-
-	create_info := vk.InstanceCreateInfo {
-		sType                    = vk.StructureType.INSTANCE_CREATE_INFO,
-		pApplicationInfo         = &app_info,
-		enabledLayerCount        = ENABLE_VALIDATION ? len(layer_names) : 0,
-		ppEnabledLayerNames      = ENABLE_VALIDATION ? raw_data(layer_names[:]) : nil,
-		enabledExtensionCount    = u32(len(instance_extensions)),
-		ppEnabledExtensionNames  = raw_data(instance_extensions),
-	}
-
-	if ENABLE_VALIDATION {
-		create_info.pNext = &validation_features
-	}
-
-	if vk.CreateInstance(&create_info, nil, &instance) != vk.Result.SUCCESS {
+	if vk.CreateInstance(
+		   &vk.InstanceCreateInfo {
+			   sType = vk.StructureType.INSTANCE_CREATE_INFO,
+			   pApplicationInfo = &app_info,
+			   enabledLayerCount = ENABLE_VALIDATION ? len(layer_names) : 0,
+			   ppEnabledLayerNames = ENABLE_VALIDATION ? raw_data(layer_names[:]) : nil,
+			   enabledExtensionCount = u32(len(instance_extensions)),
+			   ppEnabledExtensionNames = raw_data(instance_extensions),
+		   },
+		   nil,
+		   &instance,
+	   ) !=
+	   vk.Result.SUCCESS {
 		fmt.println("Failed to create instance")
 		return false
 	}
