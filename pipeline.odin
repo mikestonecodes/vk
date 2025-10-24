@@ -428,13 +428,14 @@ create_shader_object :: proc(
 }
 
 init_shaders :: proc() -> bool {
+
 	if global_desc_set == {} && !init_global_descriptors() do return false
 	if !render_resources_initialized {
 		if !init_render_resources() do return false
 		render_resources_initialized = true
 	}
 
-	layouts := [1]vk.DescriptorSetLayout{global_desc_layout}
+	descriptor_layouts := []vk.DescriptorSetLayout{global_desc_layout}
 
 	for &cfg, i in render_shader_configs {
 		state := &render_shader_states[i]
@@ -453,7 +454,7 @@ init_shaders :: proc() -> bool {
 				"compute",
 				.COMPUTE,
 				{},
-				layouts[:],
+				descriptor_layouts,
 				range_ptr,
 				range_count,
 			) or_return
@@ -466,7 +467,7 @@ init_shaders :: proc() -> bool {
 				"vertex",
 				.VERTEX,
 				next,
-				layouts[:],
+				descriptor_layouts,
 				range_ptr,
 				range_count,
 			) or_return
@@ -479,7 +480,7 @@ init_shaders :: proc() -> bool {
 					"fragment",
 					.FRAGMENT,
 					{},
-					layouts[:],
+					descriptor_layouts,
 					range_ptr,
 					range_count,
 				) or_return
@@ -552,6 +553,7 @@ check_shader_reload :: proc() {
 
 	if reload {
 		fmt.println("↻ Shader changed, reloading...")
+		vk.DeviceWaitIdle(device)
 		cleanup_shaders()
 		init_shaders()
 	}

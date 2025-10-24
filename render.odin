@@ -52,10 +52,7 @@ ComputePushConstants :: struct {
 	_pad1:         u32,
 }
 
-compute_push_constants := ComputePushConstants {
-	screen_width  = u32(window_width),
-	screen_height = u32(window_height),
-}
+compute_push_constants := ComputePushConstants {}
 
 
 DispatchMode :: enum u32 {
@@ -157,6 +154,11 @@ resize :: proc() -> bool  {
 		{.STORAGE_BUFFER, .TRANSFER_DST},
 	)
 	bind_resource(0, &buffers.data[0])
+
+	compute_push_constants.screen_width = u32(window_width)
+	compute_push_constants.screen_height = u32(window_height)
+	post_process_push_constants.screen_width = u32(window_width)
+	post_process_push_constants.screen_height = u32(window_height)
 	return true
 }
 
@@ -172,8 +174,6 @@ compute :: proc(frame: FrameInputs) {
 	mouse_x, mouse_y := get_mouse_position()
 	compute_push_constants.time = frame.time
 	compute_push_constants.delta_time = frame.delta_time
-	compute_push_constants.screen_width = u32(window_width)
-	compute_push_constants.screen_height = u32(window_height)
 
 
 	for binding in key_bindings {
@@ -256,7 +256,7 @@ physics :: proc(frame: FrameInputs, pixel_dispatch: u32) {
 // accumulation_buffer -> post_process.hlsl -> swapchain image
 graphics :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 
-	apply_compute_to_fragment_barrier(frame.cmd, &buffers.data[0])
+//	apply_compute_to_fragment_barrier(frame.cmd, &buffers.data[0])
 	begin_rendering(frame, element)
 	bind(
 		frame,

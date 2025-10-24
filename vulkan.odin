@@ -283,34 +283,48 @@ create_swapchain :: proc() -> bool {
 	caps: vk.SurfaceCapabilitiesKHR
 	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(phys_device, vulkan_surface, &caps)
 
+	// Extent
+	if caps.currentExtent.width != max(u32) {
+		width = caps.currentExtent.width
+		height = caps.currentExtent.height
+	} else {
+		width = u32(get_window_width())
+		height = u32(get_window_height())
+	}
 
-	// Fallback if surface doesn't provide extent
-	width = u32(get_window_width())
-	height = u32(get_window_height())
-
-
-	// Choose surface format (compact + valid)
+	// Surface formats (dynamic, no fixed [8])
 	fmt_count: u32
 	vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &fmt_count, nil)
-	fmts: [8]vk.SurfaceFormatKHR
+	fmts := make([]vk.SurfaceFormatKHR, fmt_count)
 	vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &fmt_count, &fmts[0])
 
-	format := fmts[0].format
-	for i in 0 ..< fmt_count {
-		f := fmts[i]
+	format = fmts[0].format
+	for f in fmts {
 		if f.format == .B8G8R8A8_SRGB && f.colorSpace == .SRGB_NONLINEAR {
 			format = f.format
 			break
 		}
 	}
 
+	// Present modes (the warning you saw)
+	pm_count: u32
+	vk.GetPhysicalDeviceSurfacePresentModesKHR(phys_device, vulkan_surface, &pm_count, nil)
+	pms := make([]vk.PresentModeKHR, pm_count)
+	vk.GetPhysicalDeviceSurfacePresentModesKHR(phys_device, vulkan_surface, &pm_count, &pms[0])
+
+	present_mode := vk.PresentModeKHR.FIFO // spec-safe default
+	for m in pms {
+		if m == .IMMEDIATE {present_mode = .IMMEDIATE;break}
+	}
+
 	img_count := clamp(caps.minImageCount + 1, caps.minImageCount, caps.maxImageCount)
-	present_mode := vk.PresentModeKHR.IMMEDIATE
+
 	present_modes_info := vk.SwapchainPresentModesCreateInfoEXT {
 		sType            = .SWAPCHAIN_PRESENT_MODES_CREATE_INFO_EXT,
 		presentModeCount = 1,
 		pPresentModes    = &present_mode,
 	}
+
 	sc_info := vk.SwapchainCreateInfoKHR {
 		sType            = .SWAPCHAIN_CREATE_INFO_KHR,
 		pNext            = &present_modes_info,
@@ -323,7 +337,7 @@ create_swapchain :: proc() -> bool {
 		imageUsage       = {.COLOR_ATTACHMENT},
 		preTransform     = caps.currentTransform,
 		compositeAlpha   = {.OPAQUE},
-		presentMode      = .IMMEDIATE,
+		presentMode      = present_mode,
 		clipped          = true,
 	}
 
@@ -412,7 +426,8 @@ find_memory_type :: proc(type_filter: u32, properties: vk.MemoryPropertyFlags) -
 	vk.GetPhysicalDeviceMemoryProperties(phys_device, &mem_properties)
 
 	for i in 0 ..< mem_properties.memoryTypeCount {
-		if (type_filter & (1 << i)) != 0 && (mem_properties.memoryTypes[i].propertyFlags & properties) == properties {
+		if (type_filter & (1 << i)) != 0 &&
+		   (mem_properties.memoryTypes[i].propertyFlags & properties) == properties {
 			return i
 		}
 	}

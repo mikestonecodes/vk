@@ -152,7 +152,7 @@ float4 fs_main(VertexOutput input) : SV_Target {
     smoke = adjust_saturation(smoke, 1.55f);
     smoke = ACESFilm(smoke);
 
-    float alpha = saturate(accumDensity * 1.2f);
+    float alpha = saturate(accumDensity * 4.2f);
 
     return float4(smoke, alpha);
 }
