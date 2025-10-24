@@ -635,6 +635,7 @@ destroy_all_sync_objects :: proc() {
 vulkan_cleanup :: proc() {
 	vk.DeviceWaitIdle(device)
 	cleanup_shaders()
+	cleanup_render_resources()
 	destroy_swapchain()
 	destroy_all_sync_objects()
 	if command_pool != {} do vk.DestroyCommandPool(device, command_pool, nil)

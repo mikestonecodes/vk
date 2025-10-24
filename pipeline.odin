@@ -730,6 +730,11 @@ cleanup_render_resources :: proc() {
 	for &buffer in buffers.data {
 		destroy_buffer(&buffer)
 	}
+	if global_desc_pool != {} do vk.DestroyDescriptorPool(device, global_desc_pool, nil)
+	if global_desc_layout != {} do vk.DestroyDescriptorSetLayout(device, global_desc_layout, nil)
+	global_desc_set = {}
+	global_desc_pool = {}
+	global_desc_layout = {}
 }
 
 

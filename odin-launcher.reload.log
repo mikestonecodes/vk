@@ -113,34 +113,11 @@ DEBUG: GLFW platform setup complete
 Validation Warning: [ BestPractices-deprecated-extension ] | MessageID = 0xda8260ba
 vkCreateDevice(): Attempting to enable deprecated extension VK_EXT_swapchain_maintenance1, but this extension has been promoted to VK_KHR_swapchain_maintenance1.
 Objects: 1
-    [0] VkInstance 0x261c5aa0
+    [0] VkInstance 0x38093930
 
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x190000000019 to a memory block which is fully consumed by the buffer. The required size of the allocation is 32, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
 ↻ Shader changed, reloading...
 Window resized to 1856x1016
-Window resized to 3736x2056
-Window resized to 1856x1016
-[ERROR] vkDestroyDevice(): Object Tracking - For VkDevice 0x269e3580, VkBuffer 0x2b000000002b has not been destroyed.
-The Vulkan spec states: All child objects created on device that can be destroyed or freed must have been destroyed or freed prior to destroying device (https://docs.vulkan.org/spec/latest/chapters/devsandqueues.html#VUID-vkDestroyDevice-device-05137)
-[ERROR] vkDestroyDevice(): Object Tracking - For VkDevice 0x269e3580, VkBuffer 0x290000000029 has not been destroyed.
-The Vulkan spec states: All child objects created on device that can be destroyed or freed must have been destroyed or freed prior to destroying device (https://docs.vulkan.org/spec/latest/chapters/devsandqueues.html#VUID-vkDestroyDevice-device-05137)
-[ERROR] vkDestroyDevice(): Object Tracking - For VkDevice 0x269e3580, VkBuffer 0x2f000000002f has not been destroyed.
-The Vulkan spec states: All child objects created on device that can be destroyed or freed must have been destroyed or freed prior to destroying device (https://docs.vulkan.org/spec/latest/chapters/devsandqueues.html#VUID-vkDestroyDevice-device-05137)
-[ERROR] vkDestroyDevice(): Object Tracking - For VkDevice 0x269e3580, VkBuffer 0x2d000000002d has not been destroyed.
-The Vulkan spec states: All child objects created on device that can be destroyed or freed must have been destroyed or freed prior to destroying device (https://docs.vulkan.org/spec/latest/chapters/devsandqueues.html#VUID-vkDestroyDevice-device-05137)
-[ERROR] vkDestroyDevice(): Object Tracking - For VkDevice 0x269e3580, VkBuffer 0x1f000000001f has not been destroyed.
-The Vulkan spec states: All child objects created on device that can be destroyed or freed must have been destroyed or freed prior to destroying device (https://docs.vulkan.org/spec/latest/chapters/devsandqueues.html#VUID-vkDestroyDevice-device-05137)
-[ERROR] vkDestroyDevice(): Object Tracking - For VkDevice 0x269e3580, VkBuffer 0x210000000021 has not been destroyed.
-The Vulkan spec states: All child objects created on device that can be destroyed or freed must have been destroyed or freed prior to destroying device (https://docs.vulkan.org/spec/latest/chapters/devsandqueues.html#VUID-vkDestroyDevice-device-05137)
-[ERROR] vkDestroyDevice(): Object Tracking - For VkDevice 0x269e3580, VkBuffer 0x1d000000001d has not been destroyed.
-The Vulkan spec states: All child objects created on device that can be destroyed or freed must have been destroyed or freed prior to destroying device (https://docs.vulkan.org/spec/latest/chapters/devsandqueues.html#VUID-vkDestroyDevice-device-05137)
-[ERROR] vkDestroyDevice(): Object Tracking - For VkDevice 0x269e3580, VkBuffer 0x230000000023 has not been destroyed.
-The Vulkan spec states: All child objects created on device that can be destroyed or freed must have been destroyed or freed prior to destroying device (https://docs.vulkan.org/spec/latest/chapters/devsandqueues.html#VUID-vkDestroyDevice-device-05137)
-[ERROR] vkDestroyDevice(): Object Tracking - For VkDevice 0x269e3580, VkBuffer 0x250000000025 has not been destroyed.
-The Vulkan spec states: All child objects created on device that can be destroyed or freed must have been destroyed or freed prior to destroying device (https://docs.vulkan.org/spec/latest/chapters/devsandqueues.html#VUID-vkDestroyDevice-device-05137)
-[ERROR] (Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
-vkDestroyDevice(): Object Tracking - For VkDevice 0x269e3580, VkBuffer 0x1b000000001b has not been destroyed.
-The Vulkan spec states: All child objects created on device that can be destroyed or freed must have been destroyed or freed prior to destroying device (https://docs.vulkan.org/spec/latest/chapters/devsandqueues.html#VUID-vkDestroyDevice-device-05137)
 [VERBOSE] Unloading layer library /usr/lib/libVkLayer_MESA_device_select.so
 [VERBOSE] Unloading layer library /usr/lib/libVkLayer_khronos_validation.so
 Cleaning up GLFW...
