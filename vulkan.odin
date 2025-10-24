@@ -304,7 +304,7 @@ create_swapchain :: proc() -> bool {
 	}
 
 	img_count := clamp(caps.minImageCount + 1, caps.minImageCount, caps.maxImageCount)
-	present_mode := vk.PresentModeKHR.FIFO
+	present_mode := vk.PresentModeKHR.IMMEDIATE
 	present_modes_info := vk.SwapchainPresentModesCreateInfoEXT {
 		sType            = .SWAPCHAIN_PRESENT_MODES_CREATE_INFO_EXT,
 		presentModeCount = 1,
@@ -322,7 +322,7 @@ create_swapchain :: proc() -> bool {
 		imageUsage       = {.COLOR_ATTACHMENT},
 		preTransform     = caps.currentTransform,
 		compositeAlpha   = {.OPAQUE},
-		presentMode      = .FIFO,
+		presentMode      = .IMMEDIATE,
 		clipped          = true,
 	}
 
@@ -471,117 +471,57 @@ destroy_buffer :: proc(resource: ^BufferResource) {
 
 vulkan_init :: proc() -> bool {
 	vk.load_proc_addresses_global(rawptr(glfw.GetInstanceProcAddress))
-	app := vk.ApplicationInfo {
-		sType            = .APPLICATION_INFO,
-		pApplicationName = "Async Game",
-		pEngineName      = "Odin",
-		apiVersion       = vk.API_VERSION_1_3,
-	}
 
 	exts := get_instance_extensions()
 	layers := [1]cstring{"VK_LAYER_KHRONOS_validation"}
-
-	// Configure validation layer settings
-	validation_layer := cstring("VK_LAYER_KHRONOS_validation")
-	best_practices_key := cstring("validate_best_practices")
-	sync_key := cstring("validate_sync")
 	enable_value := b32(true)
 
 	layer_settings := [?]vk.LayerSettingEXT {
-		{
-			pLayerName   = validation_layer,
-			pSettingName = best_practices_key,
-			type         = .BOOL32,
-			valueCount   = 1,
-			pValues      = &enable_value,
-		},
-		{
-			pLayerName   = validation_layer,
-			pSettingName = sync_key,
-			type         = .BOOL32,
-			valueCount   = 1,
-			pValues      = &enable_value,
-		},
+		{cstring("VK_LAYER_KHRONOS_validation"), cstring("validate_best_practices"), .BOOL32, 1, &enable_value},
+		{cstring("VK_LAYER_KHRONOS_validation"), cstring("validate_sync"), .BOOL32, 1, &enable_value},
 	}
 
-	layer_settings_info := vk.LayerSettingsCreateInfoEXT {
-		sType        = .LAYER_SETTINGS_CREATE_INFO_EXT,
-		settingCount = u32(len(layer_settings)),
-		pSettings    = &layer_settings[0],
-	}
-
-	// Debug messenger in pNext chain captures messages during vkCreateInstance
 	debug_create_info := vk.DebugUtilsMessengerCreateInfoEXT {
-		sType           = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+		sType = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
 		messageSeverity = {.WARNING, .ERROR, .INFO, .VERBOSE},
-		messageType     = {.GENERAL, .VALIDATION, .PERFORMANCE},
+		messageType = {.GENERAL, .VALIDATION, .PERFORMANCE},
 		pfnUserCallback = debug_callback,
 	}
 
-	// Chain: InstanceCreateInfo -> LayerSettings -> DebugMessenger
-	layer_settings_info.pNext = &debug_create_info
+	layer_settings_info := vk.LayerSettingsCreateInfoEXT {
+		sType = .LAYER_SETTINGS_CREATE_INFO_EXT,
+		settingCount = u32(len(layer_settings)),
+		pSettings = &layer_settings[0],
+		pNext = &debug_create_info,
+	}
 
-	inst_info := vk.InstanceCreateInfo {
-		sType                   = .INSTANCE_CREATE_INFO,
-		pApplicationInfo        = &app,
-		enabledExtensionCount   = u32(len(exts)),
+	vk.CreateInstance(& {
+		sType = .INSTANCE_CREATE_INFO,
+		pApplicationInfo = &vk.ApplicationInfo{.APPLICATION_INFO, nil, "CHAIN OVER", 0, "Odin", 0, vk.API_VERSION_1_3},
+		enabledExtensionCount = u32(len(exts)),
 		ppEnabledExtensionNames = raw_data(exts),
-		enabledLayerCount       = ENABLE_VALIDATION ? 1 : 0,
-		ppEnabledLayerNames     = ENABLE_VALIDATION ? &layers[0] : nil,
-		pNext                   = ENABLE_VALIDATION ? &layer_settings_info : nil,
-	}
+		enabledLayerCount = ENABLE_VALIDATION ? 1 : 0,
+		ppEnabledLayerNames = ENABLE_VALIDATION ? &layers[0] : nil,
+		pNext = ENABLE_VALIDATION ? &layer_settings_info : nil,
+	}, nil, &instance)
 
-	if vk.CreateInstance(&inst_info, nil, &instance) != .SUCCESS {
-		fmt.println("Instance failed");return false
-	}
 	vk.load_proc_addresses_instance(instance)
-
-	if cast(vk.Result)glfw.CreateWindowSurface(
-		   instance,
-		   get_glfw_window(),
-		   nil,
-		   &vulkan_surface,
-	   ) !=
-	   .SUCCESS {
-		fmt.println("Surface failed");return false
-	}
-
+	glfw.CreateWindowSurface(instance, get_glfw_window(), nil, &vulkan_surface)
 	setup_physical_device() or_return
 	create_logical_device() or_return
 	vk.load_proc_addresses_device(device)
 
-	// Create persistent debug messenger (pNext one only covers instance creation)
 	if ENABLE_VALIDATION {
-		vk.CreateDebugUtilsMessengerEXT(
-			instance,
-			&vk.DebugUtilsMessengerCreateInfoEXT {
-				sType           = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-				messageSeverity = {.WARNING, .ERROR, .INFO, .VERBOSE},
-				messageType     = {.GENERAL, .VALIDATION, .PERFORMANCE},
-				pfnUserCallback = debug_callback,
-			},
-			nil,
-			&debug_messenger,
-		)
+		vk.CreateDebugUtilsMessengerEXT(instance, &vk.DebugUtilsMessengerCreateInfoEXT{.DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT, nil, {}, {.WARNING, .ERROR, .INFO, .VERBOSE}, {.GENERAL, .VALIDATION, .PERFORMANCE}, debug_callback, nil}, nil, &debug_messenger)
 	}
 
-	command_pool = vkw(
-		vk.CreateCommandPool,
-		device,
-		&vk.CommandPoolCreateInfo {
-			sType = .COMMAND_POOL_CREATE_INFO,
-			queueFamilyIndex = queue_family_index,
-			flags = {vk.CommandPoolCreateFlag.RESET_COMMAND_BUFFER},
-		},
-		"cmd pool",
-		vk.CommandPool,
-	) or_return
-
+	command_pool = vkw(vk.CreateCommandPool, device, &vk.CommandPoolCreateInfo{.COMMAND_POOL_CREATE_INFO, nil, {.RESET_COMMAND_BUFFER}, queue_family_index}, "cmd pool", vk.CommandPool) or_return
 	create_swapchain() or_return
 	init_sync_objects() or_return
 	init_shaders() or_return
 	return true
 }
+
 handle_resize :: proc() {
 	if glfw_resize_needed() != 0 {
 		// Wait for GPU to finish all work before destroying resources
