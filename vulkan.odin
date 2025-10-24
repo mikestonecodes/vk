@@ -22,10 +22,13 @@ width, height: u32
 image_index, image_count: u32
 debug_messenger: vk.DebugUtilsMessengerEXT
 
-image_available_semaphore: vk.Semaphore
-render_finished_semaphore: vk.Semaphore
-in_flight_fence: vk.Fence
-present_fence: vk.Fence
+MAX_FRAMES_IN_FLIGHT :: 3
+
+image_available_semaphores: [MAX_FRAMES_IN_FLIGHT]vk.Semaphore
+render_finished_semaphores: [MAX_FRAMES_IN_FLIGHT]vk.Semaphore
+in_flight_fences: [MAX_FRAMES_IN_FLIGHT]vk.Fence
+
+current_frame: u32 = 0
 
 MAX_SWAPCHAIN_IMAGES :: 4
 elements: [MAX_SWAPCHAIN_IMAGES]SwapchainElement
@@ -72,72 +75,79 @@ vkw :: proc {
 // SYNC + FRAME
 //───────────────────────────
 init_sync_objects :: proc() -> bool {
-	semaphore_info := vk.SemaphoreCreateInfo {
+	sem_info := vk.SemaphoreCreateInfo {
 		sType = .SEMAPHORE_CREATE_INFO,
 	}
-	vk.CreateSemaphore(device, &semaphore_info, nil, &image_available_semaphore)
-	vk.CreateSemaphore(device, &semaphore_info, nil, &render_finished_semaphore)
 	fence_info := vk.FenceCreateInfo {
 		sType = .FENCE_CREATE_INFO,
-		flags = {vk.FenceCreateFlag.SIGNALED},
+		flags = {vk.FenceCreateFlag.SIGNALED}, // don’t stall on first frame
 	}
-	vk.CreateFence(device, &fence_info, nil, &in_flight_fence)
-	// Present fence starts signaled so first frame doesn't wait
-	vk.CreateFence(device, &fence_info, nil, &present_fence)
+
+	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		vk.CreateSemaphore(device, &sem_info, nil, &image_available_semaphores[i])
+		vk.CreateSemaphore(device, &sem_info, nil, &render_finished_semaphores[i])
+		vk.CreateFence(device, &fence_info, nil, &in_flight_fences[i])
+	}
 	return true
 }
 
 
 render_frame :: proc(start_time: time.Time) -> bool {
-	// Wait for previous present to complete before reusing render_finished_semaphore
-	vk.WaitForFences(device, 1, &present_fence, true, max(u64))
-	vk.ResetFences(device, 1, &present_fence)
+	// Wait until this frame's fence signals (GPU done with this slot)
+	vk.WaitForFences(device, 1, &in_flight_fences[current_frame], true, max(u64))
+	vk.ResetFences(device, 1, &in_flight_fences[current_frame])
 
-	vk.WaitForFences(device, 1, &in_flight_fence, true, max(u64))
-	vk.ResetFences(device, 1, &in_flight_fence)
-	if vk.AcquireNextImageKHR(device, swapchain, max(u64), image_available_semaphore, {}, &image_index) != .SUCCESS do return false
+	// Acquire next image for this frame
+	result := vk.AcquireNextImageKHR(
+		device,
+		swapchain,
+		max(u64),
+		image_available_semaphores[current_frame],
+		{},
+		&image_index,
+	)
+	if result == .ERROR_OUT_OF_DATE_KHR do return false
+
 	e := &elements[image_index]
+
+	// Record work
 	enc, f := begin_frame_commands(e, start_time)
 	record_commands(e, f)
 	transition_swapchain_image_layout(f.cmd, e, vk.ImageLayout.PRESENT_SRC_KHR)
 	vk.EndCommandBuffer(enc.command_buffer)
+
 	stage := vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT}
-	vk.QueueSubmit(
-		queue,
-		1,
-		&vk.SubmitInfo {
-			sType = .SUBMIT_INFO,
-			waitSemaphoreCount = 1,
-			pWaitSemaphores = &image_available_semaphore,
-			pWaitDstStageMask = &stage,
-			commandBufferCount = 1,
-			pCommandBuffers = &e.commandBuffer,
-			signalSemaphoreCount = 1,
-			pSignalSemaphores = &render_finished_semaphore,
-		},
-		in_flight_fence,
-	)
-	// Use swapchain_maintenance1 extension to provide a fence for present
-	present_fence_info := vk.SwapchainPresentFenceInfoEXT {
-		sType = .SWAPCHAIN_PRESENT_FENCE_INFO_EXT,
-		swapchainCount = 1,
-		pFences = &present_fence,
+
+	// Submit this frame
+	wait_sem := image_available_semaphores[current_frame]
+	signal_sem := render_finished_semaphores[current_frame]
+	submit_info := vk.SubmitInfo {
+		sType                = .SUBMIT_INFO,
+		waitSemaphoreCount   = 1,
+		pWaitSemaphores      = &wait_sem,
+		pWaitDstStageMask    = &stage,
+		commandBufferCount   = 1,
+		pCommandBuffers      = &e.commandBuffer,
+		signalSemaphoreCount = 1,
+		pSignalSemaphores    = &signal_sem,
 	}
-	return(
-		vk.QueuePresentKHR(
-			queue,
-			&vk.PresentInfoKHR {
-				sType = .PRESENT_INFO_KHR,
-				pNext = &present_fence_info,
-				waitSemaphoreCount = 1,
-				pWaitSemaphores = &render_finished_semaphore,
-				swapchainCount = 1,
-				pSwapchains = &swapchain,
-				pImageIndices = &image_index,
-			},
-		) ==
-		.SUCCESS \
-	)
+	vk.QueueSubmit(queue, 1, &submit_info, in_flight_fences[current_frame])
+
+	// Present
+	present_info := vk.PresentInfoKHR {
+		sType              = .PRESENT_INFO_KHR,
+		waitSemaphoreCount = 1,
+		pWaitSemaphores    = &signal_sem,
+		swapchainCount     = 1,
+		pSwapchains        = &swapchain,
+		pImageIndices      = &image_index,
+	}
+	result = vk.QueuePresentKHR(queue, &present_info)
+
+	// Cycle to next frame slot
+	current_frame = (current_frame + 1) % MAX_FRAMES_IN_FLIGHT
+
+	return result == .SUCCESS || result == .SUBOPTIMAL_KHR
 }
 
 //───────────────────────────
@@ -152,8 +162,7 @@ get_instance_extensions :: proc() -> []cstring {
 		array_push(&instance_extensions, ext)
 	}
 	array_push(&instance_extensions, "VK_KHR_get_surface_capabilities2")
-	// Required by VK_EXT_swapchain_maintenance1 (deprecated but needed until KHR version is in bindings)
-	array_push(&instance_extensions, "VK_EXT_surface_maintenance1")
+	// Required by VK_EXT_swapchain_maintenance1
 	if ENABLE_VALIDATION {
 		array_push(&instance_extensions, "VK_EXT_debug_utils")
 		array_push(&instance_extensions, "VK_EXT_layer_settings")
@@ -205,7 +214,7 @@ create_logical_device :: proc() -> bool {
 		pQueuePriorities = &qp,
 	}
 	feat_swapchain_maintenance := vk.PhysicalDeviceSwapchainMaintenance1FeaturesEXT {
-		sType                = .PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT,
+		sType                 = .PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT,
 		swapchainMaintenance1 = true,
 	}
 	feat_shader_obj := vk.PhysicalDeviceShaderObjectFeaturesEXT {
@@ -274,32 +283,24 @@ create_swapchain :: proc() -> bool {
 	caps: vk.SurfaceCapabilitiesKHR
 	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(phys_device, vulkan_surface, &caps)
 
-	// Get window dimensions from surface capabilities
-	if caps.currentExtent.width != max(u32) {
-		width = caps.currentExtent.width
-		height = caps.currentExtent.height
-	} else {
-		// Fallback if surface doesn't provide extent
-		width = u32(get_window_width())
-		height = u32(get_window_height())
-	}
 
-	count: u32
-	vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &count, nil)
-	formats := Array(16, vk.SurfaceFormatKHR){}
-	for i in 0 ..< count {
-		array_push(&formats, vk.SurfaceFormatKHR{})
-	}
-	vk.GetPhysicalDeviceSurfaceFormatsKHR(
-		phys_device,
-		vulkan_surface,
-		&count,
-		raw_data(array_slice(&formats)),
-	)
-	format = formats.data[0].format
-	for i in 0 ..< count {
-		if formats.data[i].format == vk.Format.B8G8R8A8_SRGB {
-			format = formats.data[i].format
+	// Fallback if surface doesn't provide extent
+	width = u32(get_window_width())
+	height = u32(get_window_height())
+
+
+	// Choose surface format (compact + valid)
+	fmt_count: u32
+	vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &fmt_count, nil)
+	fmts: [8]vk.SurfaceFormatKHR
+	vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &fmt_count, &fmts[0])
+
+	format := fmts[0].format
+	for i in 0 ..< fmt_count {
+		f := fmts[i]
+		if f.format == .B8G8R8A8_SRGB && f.colorSpace == .SRGB_NONLINEAR {
+			format = f.format
+			break
 		}
 	}
 
@@ -326,7 +327,13 @@ create_swapchain :: proc() -> bool {
 		clipped          = true,
 	}
 
-	swapchain = vkw(vk.CreateSwapchainKHR, device, &sc_info, "swapchain", vk.SwapchainKHR) or_return
+	swapchain = vkw(
+		vk.CreateSwapchainKHR,
+		device,
+		&sc_info,
+		"swapchain",
+		vk.SwapchainKHR,
+	) or_return
 
 	vk.GetSwapchainImagesKHR(device, swapchain, &image_count, nil)
 	imgs := Array(MAX_SWAPCHAIN_IMAGES, vk.Image){}
@@ -405,8 +412,7 @@ find_memory_type :: proc(type_filter: u32, properties: vk.MemoryPropertyFlags) -
 	vk.GetPhysicalDeviceMemoryProperties(phys_device, &mem_properties)
 
 	for i in 0 ..< mem_properties.memoryTypeCount {
-		if (type_filter & (1 << i)) != 0 &&
-		   (mem_properties.memoryTypes[i].propertyFlags & properties) == properties {
+		if (type_filter & (1 << i)) != 0 && (mem_properties.memoryTypes[i].propertyFlags & properties) == properties {
 			return i
 		}
 	}
@@ -477,33 +483,57 @@ vulkan_init :: proc() -> bool {
 	enable_value := b32(true)
 
 	layer_settings := [?]vk.LayerSettingEXT {
-		{cstring("VK_LAYER_KHRONOS_validation"), cstring("validate_best_practices"), .BOOL32, 1, &enable_value},
-		{cstring("VK_LAYER_KHRONOS_validation"), cstring("validate_sync"), .BOOL32, 1, &enable_value},
+		{
+			cstring("VK_LAYER_KHRONOS_validation"),
+			cstring("validate_best_practices"),
+			.BOOL32,
+			1,
+			&enable_value,
+		},
+		{
+			cstring("VK_LAYER_KHRONOS_validation"),
+			cstring("validate_sync"),
+			.BOOL32,
+			1,
+			&enable_value,
+		},
 	}
 
 	debug_create_info := vk.DebugUtilsMessengerCreateInfoEXT {
-		sType = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+		sType           = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
 		messageSeverity = {.WARNING, .ERROR, .INFO, .VERBOSE},
-		messageType = {.GENERAL, .VALIDATION, .PERFORMANCE},
+		messageType     = {.GENERAL, .VALIDATION, .PERFORMANCE},
 		pfnUserCallback = debug_callback,
 	}
 
 	layer_settings_info := vk.LayerSettingsCreateInfoEXT {
-		sType = .LAYER_SETTINGS_CREATE_INFO_EXT,
+		sType        = .LAYER_SETTINGS_CREATE_INFO_EXT,
 		settingCount = u32(len(layer_settings)),
-		pSettings = &layer_settings[0],
-		pNext = &debug_create_info,
+		pSettings    = &layer_settings[0],
+		pNext        = &debug_create_info,
 	}
 
-	vk.CreateInstance(& {
-		sType = .INSTANCE_CREATE_INFO,
-		pApplicationInfo = &vk.ApplicationInfo{.APPLICATION_INFO, nil, "CHAIN OVER", 0, "Odin", 0, vk.API_VERSION_1_3},
-		enabledExtensionCount = u32(len(exts)),
-		ppEnabledExtensionNames = raw_data(exts),
-		enabledLayerCount = ENABLE_VALIDATION ? 1 : 0,
-		ppEnabledLayerNames = ENABLE_VALIDATION ? &layers[0] : nil,
-		pNext = ENABLE_VALIDATION ? &layer_settings_info : nil,
-	}, nil, &instance)
+	vk.CreateInstance(
+		&{
+			sType = .INSTANCE_CREATE_INFO,
+			pApplicationInfo = &vk.ApplicationInfo {
+				.APPLICATION_INFO,
+				nil,
+				"CHAIN OVER",
+				0,
+				"Odin",
+				0,
+				vk.API_VERSION_1_3,
+			},
+			enabledExtensionCount = u32(len(exts)),
+			ppEnabledExtensionNames = raw_data(exts),
+			enabledLayerCount = ENABLE_VALIDATION ? 1 : 0,
+			ppEnabledLayerNames = ENABLE_VALIDATION ? &layers[0] : nil,
+			pNext = ENABLE_VALIDATION ? &layer_settings_info : nil,
+		},
+		nil,
+		&instance,
+	)
 
 	vk.load_proc_addresses_instance(instance)
 	glfw.CreateWindowSurface(instance, get_glfw_window(), nil, &vulkan_surface)
@@ -512,10 +542,34 @@ vulkan_init :: proc() -> bool {
 	vk.load_proc_addresses_device(device)
 
 	if ENABLE_VALIDATION {
-		vk.CreateDebugUtilsMessengerEXT(instance, &vk.DebugUtilsMessengerCreateInfoEXT{.DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT, nil, {}, {.WARNING, .ERROR, .INFO, .VERBOSE}, {.GENERAL, .VALIDATION, .PERFORMANCE}, debug_callback, nil}, nil, &debug_messenger)
+		vk.CreateDebugUtilsMessengerEXT(
+			instance,
+			&vk.DebugUtilsMessengerCreateInfoEXT {
+				.DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+				nil,
+				{},
+				{.WARNING, .ERROR, .INFO, .VERBOSE},
+				{.GENERAL, .VALIDATION, .PERFORMANCE},
+				debug_callback,
+				nil,
+			},
+			nil,
+			&debug_messenger,
+		)
 	}
 
-	command_pool = vkw(vk.CreateCommandPool, device, &vk.CommandPoolCreateInfo{.COMMAND_POOL_CREATE_INFO, nil, {.RESET_COMMAND_BUFFER}, queue_family_index}, "cmd pool", vk.CommandPool) or_return
+	command_pool = vkw(
+		vk.CreateCommandPool,
+		device,
+		&vk.CommandPoolCreateInfo {
+			.COMMAND_POOL_CREATE_INFO,
+			nil,
+			{.RESET_COMMAND_BUFFER},
+			queue_family_index,
+		},
+		"cmd pool",
+		vk.CommandPool,
+	) or_return
 	create_swapchain() or_return
 	init_sync_objects() or_return
 	init_shaders() or_return
@@ -553,10 +607,11 @@ destroy_swapchain :: proc() {
 }
 
 destroy_all_sync_objects :: proc() {
-	if image_available_semaphore != {} do vk.DestroySemaphore(device, image_available_semaphore, nil)
-	if render_finished_semaphore != {} do vk.DestroySemaphore(device, render_finished_semaphore, nil)
-	if in_flight_fence != {} do vk.DestroyFence(device, in_flight_fence, nil)
-	if present_fence != {} do vk.DestroyFence(device, present_fence, nil)
+	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
+		if image_available_semaphores[i] != {} do vk.DestroySemaphore(device, image_available_semaphores[i], nil)
+		if render_finished_semaphores[i] != {} do vk.DestroySemaphore(device, render_finished_semaphores[i], nil)
+		if in_flight_fences[i] != {} do vk.DestroyFence(device, in_flight_fences[i], nil)
+	}
 }
 
 vulkan_cleanup :: proc() {

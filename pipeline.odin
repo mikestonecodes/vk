@@ -328,9 +328,12 @@ ShaderStageInfo :: struct {
 
 get_stage_info :: proc(stage: string) -> ShaderStageInfo {
 	switch stage {
-	case "compute":  return {"cs_6_0", "main", ".spv"}
-	case "vertex":   return {"vs_6_0", "vs_main", "_vs.spv"}
-	case "fragment": return {"ps_6_0", "fs_main", "_fs.spv"}
+	case "compute":
+		return {"cs_6_0", "main", ".spv"}
+	case "vertex":
+		return {"vs_6_0", "vs_main", "_vs.spv"}
+	case "fragment":
+		return {"ps_6_0", "fs_main", "_fs.spv"}
 	}
 	return {}
 }
@@ -339,7 +342,10 @@ make_shader_layout :: proc(push: ^PushConstantInfo) -> (layout: vk.PipelineLayou
 	ranges: [1]vk.PushConstantRange
 	count: u32 = 0
 	if push != nil && push.size > 0 {
-		ranges[0] = {stageFlags = push.stage, size = push.size}
+		ranges[0] = {
+			stageFlags = push.stage,
+			size       = push.size,
+		}
 		count = 1
 	}
 	layouts := [1]vk.DescriptorSetLayout{global_desc_layout}
@@ -363,8 +369,13 @@ load_shader :: proc(spv_path, stage_name: string) -> ([]u32, bool) {
 	hlsl := fmt.aprintf("%s.hlsl", strings.trim_suffix(spv_path, info.suffix))
 
 	if os.exists(hlsl) {
-		cmd := fmt.aprintf("dxc -spirv -fvk-use-gl-layout -fspv-target-env=vulkan1.3 -T %s -E %s -Fo %s %s",
-			info.profile, info.entry, spv_path, hlsl)
+		cmd := fmt.aprintf(
+			"dxc -spirv -fvk-use-gl-layout -fspv-target-env=vulkan1.3 -T %s -E %s -Fo %s %s",
+			info.profile,
+			info.entry,
+			spv_path,
+			hlsl,
+		)
 		system(strings.clone_to_cstring(cmd, context.temp_allocator))
 	}
 
@@ -373,10 +384,14 @@ load_shader :: proc(spv_path, stage_name: string) -> ([]u32, bool) {
 	defer delete(data)
 
 	spirv_words.len = 0
-	for i in 0 ..< len(data)/4 {
-		spirv_words.data[i] = u32(data[i*4]) | (u32(data[i*4+1])<<8) | (u32(data[i*4+2])<<16) | (u32(data[i*4+3])<<24)
+	for i in 0 ..< len(data) / 4 {
+		spirv_words.data[i] =
+			u32(data[i * 4]) |
+			(u32(data[i * 4 + 1]) << 8) |
+			(u32(data[i * 4 + 2]) << 16) |
+			(u32(data[i * 4 + 3]) << 24)
 	}
-	spirv_words.len = i32(len(data)/4)
+	spirv_words.len = i32(len(data) / 4)
 	return array_slice(&spirv_words), true
 }
 
@@ -387,22 +402,25 @@ create_shader_object :: proc(
 	layouts: []vk.DescriptorSetLayout,
 	push_range: ^vk.PushConstantRange,
 	push_range_count: u32,
-) -> (shader: vk.ShaderEXT, ok: bool) {
+) -> (
+	shader: vk.ShaderEXT,
+	ok: bool,
+) {
 	code := load_shader(path, stage_name) or_return
 	info := get_stage_info(stage_name)
 
 	shader_info := vk.ShaderCreateInfoEXT {
-		sType = .SHADER_CREATE_INFO_EXT,
-		stage = {stage},
-		nextStage = next_stage,
-		codeType = .SPIRV,
-		codeSize = len(code) * size_of(u32),
-		pCode = raw_data(code),
-		pName = info.entry,
-		setLayoutCount = u32(len(layouts)),
-		pSetLayouts = len(layouts) > 0 ? &layouts[0] : nil,
+		sType                  = .SHADER_CREATE_INFO_EXT,
+		stage                  = {stage},
+		nextStage              = next_stage,
+		codeType               = .SPIRV,
+		codeSize               = len(code) * size_of(u32),
+		pCode                  = raw_data(code),
+		pName                  = info.entry,
+		setLayoutCount         = u32(len(layouts)),
+		pSetLayouts            = len(layouts) > 0 ? &layouts[0] : nil,
 		pushConstantRangeCount = push_range_count,
-		pPushConstantRanges = push_range_count > 0 ? push_range : nil,
+		pPushConstantRanges    = push_range_count > 0 ? push_range : nil,
 	}
 
 	if vk.CreateShadersEXT(device, 1, &shader_info, nil, &shader) != .SUCCESS do return {}, false
@@ -422,25 +440,49 @@ init_shaders :: proc() -> bool {
 		state := &render_shader_states[i]
 		state.layout = make_shader_layout(&cfg.push) or_return
 
-		range := vk.PushConstantRange{stageFlags = cfg.push.stage, size = cfg.push.size}
+		range := vk.PushConstantRange {
+			stageFlags = cfg.push.stage,
+			size       = cfg.push.size,
+		}
 		range_ptr := range.size > 0 ? &range : nil
 		range_count := range.size > 0 ? u32(1) : u32(0)
 
 		if cfg.compute_module != "" {
-			state.shaders[0] = create_shader_object(cfg.compute_module, "compute", .COMPUTE, {},
-				layouts[:], range_ptr, range_count) or_return
+			state.shaders[0] = create_shader_object(
+				cfg.compute_module,
+				"compute",
+				.COMPUTE,
+				{},
+				layouts[:],
+				range_ptr,
+				range_count,
+			) or_return
 			state.stages[0] = {.COMPUTE}
 			state.stage_count = 1
 		} else {
 			next := cfg.fragment_module != "" ? vk.ShaderStageFlags{.FRAGMENT} : {}
-			state.shaders[0] = create_shader_object(cfg.vertex_module, "vertex", .VERTEX, next,
-				layouts[:], range_ptr, range_count) or_return
+			state.shaders[0] = create_shader_object(
+				cfg.vertex_module,
+				"vertex",
+				.VERTEX,
+				next,
+				layouts[:],
+				range_ptr,
+				range_count,
+			) or_return
 			state.stages[0] = {.VERTEX}
 			state.stage_count = 1
 
 			if cfg.fragment_module != "" {
-				state.shaders[1] = create_shader_object(cfg.fragment_module, "fragment", .FRAGMENT, {},
-					layouts[:], range_ptr, range_count) or_return
+				state.shaders[1] = create_shader_object(
+					cfg.fragment_module,
+					"fragment",
+					.FRAGMENT,
+					{},
+					layouts[:],
+					range_ptr,
+					range_count,
+				) or_return
 				state.stages[1] = {.FRAGMENT}
 				state.stage_count = 2
 			}
@@ -461,6 +503,58 @@ cleanup_shaders :: proc() {
 		state = {}
 	}
 	shaders_ready = false
+}
+
+// ============================================================================
+// Shader Hot Reload (Compact)
+// ============================================================================
+shader_sizes := map[string]i64{}
+
+check_shader_reload :: proc() {
+	reload := false
+	stages := []string{"compute", "vertex", "fragment"}
+
+	for cfg in render_shader_configs {
+		for stage_name in stages {
+			spv: string
+			if stage_name == "compute" {
+				spv = cfg.compute_module
+			} else if stage_name == "vertex" {
+				spv = cfg.vertex_module
+			} else if stage_name == "fragment" {
+				spv = cfg.fragment_module
+			}
+			if spv == "" || !os.exists(spv) {
+				continue
+			}
+
+			info := get_stage_info(stage_name)
+			hlsl := fmt.aprintf("%s.hlsl", strings.trim_suffix(spv, info.suffix))
+			paths := []string{hlsl, spv}
+
+			for path in paths {
+				if !os.exists(path) {
+					continue
+				}
+				file_info, err := os.stat(path)
+				if err != os.ERROR_NONE {
+					continue
+				}
+				s := file_info.size
+				prev_size, exists := shader_sizes[path]
+				if !exists || prev_size != s {
+					shader_sizes[path] = s
+					reload = true
+				}
+			}
+		}
+	}
+
+	if reload {
+		fmt.println("↻ Shader changed, reloading...")
+		cleanup_shaders()
+		init_shaders()
+	}
 }
 
 

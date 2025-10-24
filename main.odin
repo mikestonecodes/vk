@@ -21,6 +21,7 @@ main :: proc() {
 	for glfw_should_quit() == 0 {
 		glfw_poll_events()
 		handle_resize()
+		check_shader_reload()
 		render_frame(start_time)
 	}
 }
