@@ -256,7 +256,7 @@ physics :: proc(frame: FrameInputs, pixel_dispatch: u32) {
 // accumulation_buffer -> post_process.hlsl -> swapchain image
 graphics :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 
-//	apply_compute_to_fragment_barrier(frame.cmd, &buffers.data[0])
+	apply_compute_to_fragment_barrier(frame.cmd, &buffers.data[0])
 	begin_rendering(frame, element)
 	bind(
 		frame,

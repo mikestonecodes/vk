@@ -162,6 +162,7 @@ get_instance_extensions :: proc() -> []cstring {
 		array_push(&instance_extensions, ext)
 	}
 	array_push(&instance_extensions, "VK_KHR_get_surface_capabilities2")
+	array_push(&instance_extensions, "VK_EXT_surface_maintenance1")
 	// Required by VK_EXT_swapchain_maintenance1
 	if ENABLE_VALIDATION {
 		array_push(&instance_extensions, "VK_EXT_debug_utils")
@@ -477,11 +478,13 @@ create_buffer :: proc(
 destroy_buffer :: proc(resource: ^BufferResource) {
 	if resource.buffer != {} {
 		vk.DestroyBuffer(device, resource.buffer, nil)
+		resource.buffer = {}
 	}
 	if resource.memory != {} {
 		vk.FreeMemory(device, resource.memory, nil)
+		resource.memory = {}
 	}
-	resource^ = BufferResource{}
+	resource.size = 0
 }
 
 
@@ -631,6 +634,7 @@ destroy_all_sync_objects :: proc() {
 
 vulkan_cleanup :: proc() {
 	vk.DeviceWaitIdle(device)
+	cleanup_shaders()
 	destroy_swapchain()
 	destroy_all_sync_objects()
 	if command_pool != {} do vk.DestroyCommandPool(device, command_pool, nil)
