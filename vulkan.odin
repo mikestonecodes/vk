@@ -25,6 +25,7 @@ debug_messenger: vk.DebugUtilsMessengerEXT
 image_available_semaphore: vk.Semaphore
 render_finished_semaphore: vk.Semaphore
 in_flight_fence: vk.Fence
+present_fence: vk.Fence
 
 MAX_SWAPCHAIN_IMAGES :: 4
 elements: [MAX_SWAPCHAIN_IMAGES]SwapchainElement
@@ -81,11 +82,17 @@ init_sync_objects :: proc() -> bool {
 		flags = {vk.FenceCreateFlag.SIGNALED},
 	}
 	vk.CreateFence(device, &fence_info, nil, &in_flight_fence)
+	// Present fence starts signaled so first frame doesn't wait
+	vk.CreateFence(device, &fence_info, nil, &present_fence)
 	return true
 }
 
 
 render_frame :: proc(start_time: time.Time) -> bool {
+	// Wait for previous present to complete before reusing render_finished_semaphore
+	vk.WaitForFences(device, 1, &present_fence, true, max(u64))
+	vk.ResetFences(device, 1, &present_fence)
+
 	vk.WaitForFences(device, 1, &in_flight_fence, true, max(u64))
 	vk.ResetFences(device, 1, &in_flight_fence)
 	if vk.AcquireNextImageKHR(device, swapchain, max(u64), image_available_semaphore, {}, &image_index) != .SUCCESS do return false
@@ -110,11 +117,18 @@ render_frame :: proc(start_time: time.Time) -> bool {
 		},
 		in_flight_fence,
 	)
+	// Use swapchain_maintenance1 extension to provide a fence for present
+	present_fence_info := vk.SwapchainPresentFenceInfoEXT {
+		sType = .SWAPCHAIN_PRESENT_FENCE_INFO_EXT,
+		swapchainCount = 1,
+		pFences = &present_fence,
+	}
 	return(
 		vk.QueuePresentKHR(
 			queue,
 			&vk.PresentInfoKHR {
 				sType = .PRESENT_INFO_KHR,
+				pNext = &present_fence_info,
 				waitSemaphoreCount = 1,
 				pWaitSemaphores = &render_finished_semaphore,
 				swapchainCount = 1,
@@ -138,6 +152,7 @@ get_instance_extensions :: proc() -> []cstring {
 		array_push(&instance_extensions, ext)
 	}
 	array_push(&instance_extensions, "VK_KHR_get_surface_capabilities2")
+	// Required by VK_EXT_swapchain_maintenance1 (deprecated but needed until KHR version is in bindings)
 	array_push(&instance_extensions, "VK_EXT_surface_maintenance1")
 	if ENABLE_VALIDATION {
 		array_push(&instance_extensions, "VK_EXT_debug_utils")
@@ -189,8 +204,13 @@ create_logical_device :: proc() -> bool {
 		queueCount       = 1,
 		pQueuePriorities = &qp,
 	}
+	feat_swapchain_maintenance := vk.PhysicalDeviceSwapchainMaintenance1FeaturesEXT {
+		sType                = .PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT,
+		swapchainMaintenance1 = true,
+	}
 	feat_shader_obj := vk.PhysicalDeviceShaderObjectFeaturesEXT {
 		sType        = .PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT,
+		pNext        = &feat_swapchain_maintenance,
 		shaderObject = true,
 	}
 	feat_dyn := vk.PhysicalDeviceDynamicRenderingFeatures {
@@ -216,7 +236,7 @@ create_logical_device :: proc() -> bool {
 	}
 
 	//Device extensions
-	exts := [?]cstring{"VK_KHR_swapchain", "VK_EXT_shader_object"}
+	exts := [?]cstring{"VK_KHR_swapchain", "VK_EXT_swapchain_maintenance1", "VK_EXT_shader_object"}
 	layers := [1]cstring{"VK_LAYER_KHRONOS_validation"}
 	info := vk.DeviceCreateInfo {
 		sType                   = .DEVICE_CREATE_INFO,
@@ -284,8 +304,15 @@ create_swapchain :: proc() -> bool {
 	}
 
 	img_count := clamp(caps.minImageCount + 1, caps.minImageCount, caps.maxImageCount)
+	present_mode := vk.PresentModeKHR.FIFO
+	present_modes_info := vk.SwapchainPresentModesCreateInfoEXT {
+		sType            = .SWAPCHAIN_PRESENT_MODES_CREATE_INFO_EXT,
+		presentModeCount = 1,
+		pPresentModes    = &present_mode,
+	}
 	sc_info := vk.SwapchainCreateInfoKHR {
 		sType            = .SWAPCHAIN_CREATE_INFO_KHR,
+		pNext            = &present_modes_info,
 		surface          = vulkan_surface,
 		minImageCount    = img_count,
 		imageFormat      = format,
@@ -557,7 +584,8 @@ vulkan_init :: proc() -> bool {
 }
 handle_resize :: proc() {
 	if glfw_resize_needed() != 0 {
-
+		// Wait for GPU to finish all work before destroying resources
+		vk.DeviceWaitIdle(device)
 
 		resize()
 		destroy_swapchain()
@@ -588,6 +616,7 @@ destroy_all_sync_objects :: proc() {
 	if image_available_semaphore != {} do vk.DestroySemaphore(device, image_available_semaphore, nil)
 	if render_finished_semaphore != {} do vk.DestroySemaphore(device, render_finished_semaphore, nil)
 	if in_flight_fence != {} do vk.DestroyFence(device, in_flight_fence, nil)
+	if present_fence != {} do vk.DestroyFence(device, present_fence, nil)
 }
 
 vulkan_cleanup :: proc() {
