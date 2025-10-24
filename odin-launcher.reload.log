@@ -3,102 +3,157 @@
 Build succeeded, launching vk...
 DEBUG: Initializing GLFW platform
 DEBUG: GLFW platform setup complete
-Validation Error: [ VUID-vkCreateInstance-ppEnabledExtensionNames-01388 ] | MessageID = 0xe5e52180
-vkCreateInstance(): pCreateInfo->ppEnabledExtensionNames[2] Missing extension required by the instance extension VK_EXT_surface_maintenance1: VK_KHR_get_surface_capabilities2.
-The Vulkan spec states: All required extensions for each extension in the VkInstanceCreateInfo::ppEnabledExtensionNames list must also be present in that list (https://docs.vulkan.org/spec/latest/chapters/initialization.html#VUID-vkCreateInstance-ppEnabledExtensionNames-01388)
+[INFO] No valid vk_loader_settings.json file found, no loader settings will be active
+[INFO] Searching for implicit layer manifest files
+[INFO]    In following locations:
+[INFO]       /home/mike/.config/vulkan/implicit_layer.d
+[INFO]       /etc/xdg/vulkan/implicit_layer.d
+[INFO]       /etc/vulkan/implicit_layer.d
+[INFO]       /home/mike/.local/share/vulkan/implicit_layer.d
+[INFO]       /usr/local/share/vulkan/implicit_layer.d
+[INFO]       /usr/share/vulkan/implicit_layer.d
+[INFO]    Found the following files:
+[INFO]       /home/mike/.local/share/vulkan/implicit_layer.d/steamoverlay_i386.json
+[INFO]       /home/mike/.local/share/vulkan/implicit_layer.d/steamoverlay_x86_64.json
+[INFO]       /home/mike/.local/share/vulkan/implicit_layer.d/steamfossilize_i386.json
+[INFO]       /home/mike/.local/share/vulkan/implicit_layer.d/steamfossilize_x86_64.json
+[INFO]       /usr/share/vulkan/implicit_layer.d/nvidia_layers.json
+[INFO]       /usr/share/vulkan/implicit_layer.d/VkLayer_MESA_device_select.json
+[INFO] Found manifest file /home/mike/.local/share/vulkan/implicit_layer.d/steamoverlay_i386.json (file version 1.0.0)
+[INFO] Found manifest file /home/mike/.local/share/vulkan/implicit_layer.d/steamoverlay_x86_64.json (file version 1.0.0)
+[INFO] Found manifest file /home/mike/.local/share/vulkan/implicit_layer.d/steamfossilize_i386.json (file version 1.0.0)
+[INFO] Found manifest file /home/mike/.local/share/vulkan/implicit_layer.d/steamfossilize_x86_64.json (file version 1.0.0)
+[INFO] Found manifest file /usr/share/vulkan/implicit_layer.d/nvidia_layers.json (file version 1.0.1)
+[INFO] Found manifest file /usr/share/vulkan/implicit_layer.d/VkLayer_MESA_device_select.json (file version 1.0.0)
+[INFO] Searching for explicit layer manifest files
+[INFO]    In following locations:
+[INFO]       /home/mike/.config/vulkan/explicit_layer.d
+[INFO]       /etc/xdg/vulkan/explicit_layer.d
+[INFO]       /etc/vulkan/explicit_layer.d
+[INFO]       /home/mike/.local/share/vulkan/explicit_layer.d
+[INFO]       /usr/local/share/vulkan/explicit_layer.d
+[INFO]       /usr/share/vulkan/explicit_layer.d
+[INFO]    Found the following files:
+[INFO]       /usr/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json
+[INFO]       /usr/share/vulkan/explicit_layer.d/VkLayer_INTEL_nullhw.json
+[INFO]       /usr/share/vulkan/explicit_layer.d/VkLayer_MESA_overlay.json
+[INFO]       /usr/share/vulkan/explicit_layer.d/VkLayer_MESA_screenshot.json
+[INFO]       /usr/share/vulkan/explicit_layer.d/VkLayer_MESA_vram_report_limit.json
+[INFO] Found manifest file /usr/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json (file version 1.2.0)
+[INFO] Found manifest file /usr/share/vulkan/explicit_layer.d/VkLayer_INTEL_nullhw.json (file version 1.0.0)
+[INFO] Found manifest file /usr/share/vulkan/explicit_layer.d/VkLayer_MESA_overlay.json (file version 1.0.0)
+[INFO] Found manifest file /usr/share/vulkan/explicit_layer.d/VkLayer_MESA_screenshot.json (file version 1.0.0)
+[INFO] Found manifest file /usr/share/vulkan/explicit_layer.d/VkLayer_MESA_vram_report_limit.json (file version 1.0.0)
+[INFO] Searching for driver manifest files
+[INFO]    In following locations:
+[INFO]       /home/mike/.config/vulkan/icd.d
+[INFO]       /etc/xdg/vulkan/icd.d
+[INFO]       /etc/vulkan/icd.d
+[INFO]       /home/mike/.local/share/vulkan/icd.d
+[INFO]       /usr/local/share/vulkan/icd.d
+[INFO]       /usr/share/vulkan/icd.d
+[INFO]    Found the following files:
+[INFO]       /usr/share/vulkan/icd.d/nvidia_icd.json
+[INFO]       /usr/share/vulkan/icd.d/intel_hasvk_icd.x86_64.json
+[INFO]       /usr/share/vulkan/icd.d/intel_icd.x86_64.json
+[INFO]       /usr/share/vulkan/icd.d/intel_hasvk_icd.i686.json
+[INFO]       /usr/share/vulkan/icd.d/intel_icd.i686.json
+[INFO] Found ICD manifest file /usr/share/vulkan/icd.d/nvidia_icd.json, version 1.0.1
+[VERBOSE] Searching for ICD drivers named libGLX_nvidia.so.0
+[INFO] Found ICD manifest file /usr/share/vulkan/icd.d/intel_hasvk_icd.x86_64.json, version 1.0.1
+[VERBOSE] Searching for ICD drivers named /usr/lib/libvulkan_intel_hasvk.so
+[INFO] Found ICD manifest file /usr/share/vulkan/icd.d/intel_icd.x86_64.json, version 1.0.1
+[VERBOSE] Searching for ICD drivers named /usr/lib/libvulkan_intel.so
+[INFO] Found ICD manifest file /usr/share/vulkan/icd.d/intel_hasvk_icd.i686.json, version 1.0.1
+[VERBOSE] Searching for ICD drivers named /usr/lib32/libvulkan_intel_hasvk.so
+[INFO] loader_parse_icd_manifest: Driver library architecture doesn't match the current running architecture, skipping this driver
+[INFO] Found ICD manifest file /usr/share/vulkan/icd.d/intel_icd.i686.json, version 1.0.1
+[VERBOSE] Searching for ICD drivers named /usr/lib32/libvulkan_intel.so
+[INFO] loader_parse_icd_manifest: Driver library architecture doesn't match the current running architecture, skipping this driver
+[VERBOSE] Loading layer library libVkLayer_khronos_validation.so
+[INFO] Insert instance layer "VK_LAYER_KHRONOS_validation" (/usr/lib/libVkLayer_khronos_validation.so)
+[VERBOSE] Loading layer library libVkLayer_MESA_device_select.so
+[INFO] Insert instance layer "VK_LAYER_MESA_device_select" (/usr/lib/libVkLayer_MESA_device_select.so)
+[INFO] vkCreateInstance layer callstack setup to:
+[INFO]    <Application>
+[INFO]      ||
+[INFO]    <Loader>
+[INFO]      ||
+[INFO]    VK_LAYER_MESA_device_select
+[INFO]            Type: Implicit
+[INFO]            Enabled By: Implicit Layer
+[INFO]                Disable Env Var:  NODEVICE_SELECT
+[INFO]            Manifest: /usr/share/vulkan/implicit_layer.d/VkLayer_MESA_device_select.json
+[INFO]            Library:  /usr/lib/libVkLayer_MESA_device_select.so
+[INFO]      ||
+[INFO]    VK_LAYER_KHRONOS_validation
+[INFO]            Type: Explicit
+[INFO]            Enabled By: By the Application
+[INFO]            Manifest: /usr/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json
+[INFO]            Library:  /usr/lib/libVkLayer_khronos_validation.so
+[INFO]      ||
+[INFO]    <Drivers>
+[WARNING] vkCreateInstance(): Attempting to enable deprecated extension VK_EXT_surface_maintenance1, but this extension has been promoted to VK_KHR_surface_maintenance1.
+[WARNING] vkCreateInstance(): Attempting to enable extension VK_EXT_debug_utils, but this extension is intended to support use by applications when debugging and it is strongly recommended that it be otherwise avoided.
+[INFO] vkCreateInstance(): Khronos Validation Layer Active:
+    Current Enables: VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT, VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT.
+    Current Disables: None.
 
-Validation layer: linux_read_sorted_physical_devices:
-Validation layer:      Original order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
-Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
-Validation layer: Copying old device 0 into new device 0
-Validation layer: linux_read_sorted_physical_devices:
-Validation layer:      Original order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
-Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
-Validation layer: Copying old device 0 into new device 0
-Validation layer: linux_read_sorted_physical_devices:
-Validation layer:      Original order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
-Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
-Validation layer: Copying old device 0 into new device 0
-Validation layer: linux_read_sorted_physical_devices:
-Validation layer:      Original order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU
-Validation layer:      Sorted order:
-Validation layer:            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
-Validation layer: Copying old device 0 into new device 0
-Validation layer: Removing driver /usr/lib/libvulkan_intel.so due to not having any physical devices
-Validation layer: Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
-Validation layer: Inserted device layer "VK_LAYER_KHRONOS_validation" (/usr/lib/libVkLayer_khronos_validation.so)
-Validation layer: Failed to find vkGetDeviceProcAddr in layer "/usr/lib/libVkLayer_MESA_device_select.so"
-Validation layer: vkCreateDevice layer callstack setup to:
-Validation layer:    <Application>
-Validation layer:      ||
-Validation layer:    <Loader>
-Validation layer:      ||
-Validation layer:    VK_LAYER_KHRONOS_validation
-Validation layer:            Type: Explicit
-Validation layer:            Enabled By: By the Application
-Validation layer:            Manifest: /usr/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json
-Validation layer:            Library:  /usr/lib/libVkLayer_khronos_validation.so
-Validation layer:      ||
-Validation layer:    <Device>
-Validation layer:        Using "NVIDIA GeForce RTX 4070 Laptop GPU" with driver: "/usr/lib/libGLX_nvidia.so.0"
-compiling shader: compute.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: compute.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-compiling shader: graphics.hlsl
-compiled shader successfully! ignore previous compile errors for this file: graphics.hlsl
-Discovered 2 shaders: compute.hlsl graphics.hlsl 
-Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
-The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
-Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
-The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
-Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
-The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
-Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
-The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
-Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
-The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
-Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
-The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
-Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
-The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
-Window resized to 1856x2056
-Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
-The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
-Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
-The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
-Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
-The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
-Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
-The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
-Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
-The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
-Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
-The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
-Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
-The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
-Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
-The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
-Validation layer: vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
-The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
-Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
-The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
-Validation layer: (Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
-vkQueuePresentKHR(): pPresentInfo->pWaitSemaphores[0] (VkSemaphore 0x40000000004) is not a VK_SEMAPHORE_TYPE_BINARY.
-The Vulkan spec states: All elements of the pWaitSemaphores member of pPresentInfo must be created with a VkSemaphoreType of VK_SEMAPHORE_TYPE_BINARY (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkQueuePresentKHR-pWaitSemaphores-03267)
-Validation layer: vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
-The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
-Validation layer: (Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
-vkAcquireNextImage2KHR(): Semaphore must not have any pending operations.
-The Vulkan spec states: If semaphore is not VK_NULL_HANDLE, it must not have any uncompleted signal or wait operations pending (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-VkAcquireNextImageInfoKHR-semaphore-01781)
+[INFO] linux_read_sorted_physical_devices:
+[INFO]      Original order:
+[INFO]            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+[INFO]      Sorted order:
+[INFO]            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+[INFO] linux_read_sorted_physical_devices:
+[INFO]      Original order:
+[INFO]            [0] NVIDIA GeForce RTX 4070 Laptop GPU
+[INFO]      Sorted order:
+[INFO]            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
+[VERBOSE] Copying old device 0 into new device 0
+[WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x130000000013 to a memory block which is fully consumed by the buffer. The required size of the allocation is 32, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xc000000000c) is being signaled by VkQueue 0x17e344a0, but it may still be in use by VkSwapchainKHR 0x40000000004.
+Most recently acquired image indices: [0], 1.
+(Brackets mark the last use of VkSemaphore 0xc000000000c in a presentation operation.)
+Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0xc000000000c may still be in use and cannot be safely reused with image index 1.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+Window resized to 1856x1016
+[ERROR] vkDestroyBuffer(): can't be called on VkBuffer 0x110000000011 that is currently in use by VkCommandBuffer 0x17ce57e0.
+The Vulkan spec states: All submitted commands that refer to buffer, either directly or via a VkBufferView, must have completed execution (https://docs.vulkan.org/spec/latest/chapters/resources.html#VUID-vkDestroyBuffer-buffer-00922)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xc000000000c) is being signaled by VkQueue 0x17e344a0, but it may still be in use by VkSwapchainKHR 0x320000000032.
+Most recently acquired image indices: [0], 1.
+(Brackets mark the last use of VkSemaphore 0xc000000000c in a presentation operation.)
+Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0xc000000000c may still be in use and cannot be safely reused with image index 1.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xc000000000c) is being signaled by VkQueue 0x17e344a0, but it may still be in use by VkSwapchainKHR 0x320000000032.
+Most recently acquired image indices: 0, [1], 2.
+(Brackets mark the last use of VkSemaphore 0xc000000000c in a presentation operation.)
+Swapchain image 1 was presented but was not re-acquired, so VkSemaphore 0xc000000000c may still be in use and cannot be safely reused with image index 2.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+Window resized to 1856x696
+[ERROR] vkDestroyBuffer(): can't be called on VkBuffer 0x300000000030 that is currently in use by VkCommandBuffer 0x18129a20.
+The Vulkan spec states: All submitted commands that refer to buffer, either directly or via a VkBufferView, must have completed execution (https://docs.vulkan.org/spec/latest/chapters/resources.html#VUID-vkDestroyBuffer-buffer-00922)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xc000000000c) is being signaled by VkQueue 0x17e344a0, but it may still be in use by VkSwapchainKHR 0x3b000000003b.
+Most recently acquired image indices: [0], 1.
+(Brackets mark the last use of VkSemaphore 0xc000000000c in a presentation operation.)
+Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0xc000000000c may still be in use and cannot be safely reused with image index 1.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xc000000000c) is being signaled by VkQueue 0x17e344a0, but it may still be in use by VkSwapchainKHR 0x3b000000003b.
+Most recently acquired image indices: 0, [1], 2.
+(Brackets mark the last use of VkSemaphore 0xc000000000c in a presentation operation.)
+Swapchain image 1 was presented but was not re-acquired, so VkSemaphore 0xc000000000c may still be in use and cannot be safely reused with image index 2.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)

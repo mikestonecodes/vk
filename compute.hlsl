@@ -63,12 +63,19 @@ struct ComputePushConstants {
 };
 [[vk::push_constant]] ComputePushConstants push_constants;
 
-struct CameraStateData { float2 position; float zoom; float padding; };
-struct SpawnState       { uint next_dynamic; uint active_dynamic; uint pad0; uint pad1; };
-struct WorldBody        { float2 center; float radius; float softness; float3 color; float energy; };
+struct GlobalState {
+    float2 camera_position;
+    float  camera_zoom;
+    float  _pad0;
+    uint   spawn_next;
+    uint   spawn_active;
+    uint   _pad1;
+    uint   _pad2;
+};
+struct WorldBody { float2 center; float radius; float softness; float3 color; float energy; };
 
 [[vk::binding(0, 0)]]  RWStructuredBuffer<uint> accumulation_buffer;
-[[vk::binding(3, 0)]]  RWStructuredBuffer<CameraStateData> camera_state;
+[[vk::binding(3, 0)]]  RWStructuredBuffer<GlobalState> global_state;
 [[vk::binding(20, 0)]] RWStructuredBuffer<float2> body_pos;
 [[vk::binding(21, 0)]] RWStructuredBuffer<float2> body_pos_pred;
 [[vk::binding(22, 0)]] RWStructuredBuffer<float2> body_vel;
@@ -76,7 +83,6 @@ struct WorldBody        { float2 center; float radius; float softness; float3 co
 [[vk::binding(24, 0)]] RWStructuredBuffer<float>  body_inv_mass;
 [[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
 [[vk::binding(26, 0)]] RWStructuredBuffer<int2>   body_delta_accum;
-[[vk::binding(27, 0)]] RWStructuredBuffer<SpawnState> spawn_state;
 [[vk::binding(30, 0)]] RWStructuredBuffer<uint> cell_counts;
 [[vk::binding(31, 0)]] RWStructuredBuffer<uint> cell_offsets;
 [[vk::binding(32, 0)]] RWStructuredBuffer<uint> cell_scratch;
@@ -161,7 +167,8 @@ void atomic_add_body_delta(uint id, float2 v) {
 }
 
 // --- Common ---
-CameraStateData load_camera_state() { return camera_state[0]; }
+float2 camera_pos()  { return global_state[0].camera_position; }
+float  camera_zoom() { return global_state[0].camera_zoom; }
 
 
 
@@ -175,18 +182,17 @@ CameraStateData load_camera_state() { return camera_state[0]; }
 void update_camera_state(float delta_time) {
     if (delta_time <= 0.0f) delta_time = 0.0f;
 
-    CameraStateData state = camera_state[0];
+    GlobalState state = global_state[0];
 
-    if (state.zoom <= 0.0f) {
-        state.position = GAME_START_CENTER;
-        state.zoom = CAMERA_DEFAULT_ZOOM;
+    if (state.camera_zoom <= 0.0f) {
+        state.camera_position = GAME_START_CENTER;
+        state.camera_zoom = CAMERA_DEFAULT_ZOOM;
     }
 
     if (push_constants.reset_camera != 0u) {
-        state.position = GAME_START_CENTER;
-        state.zoom = CAMERA_DEFAULT_ZOOM;
-        state.padding = 0.0f;
-        camera_state[0] = state;
+        state.camera_position = GAME_START_CENTER;
+        state.camera_zoom = CAMERA_DEFAULT_ZOOM;
+        global_state[0] = state;
         return;
     }
 
@@ -198,24 +204,23 @@ void update_camera_state(float delta_time) {
 
     if (dot(move, move) > 0.0f) move = normalize(move);
 
-    float zoom_ratio = clamp(state.zoom / CAMERA_DEFAULT_ZOOM, 0.25f, 12.0f);
+    float zoom_ratio = clamp(state.camera_zoom / CAMERA_DEFAULT_ZOOM, 0.25f, 12.0f);
     float move_speed = CAMERA_MOVE_SPEED * zoom_ratio;
     bool fast = (push_constants.speed != 0u);
     if (fast) move_speed *= CAMERA_FAST_SCALE;
 
-    state.position += move * move_speed * delta_time;
+    state.camera_position += move * move_speed * delta_time;
 
     float zoom_rate = CAMERA_ZOOM_RATE;
     if (fast) zoom_rate *= CAMERA_FAST_SCALE;
 
     if (push_constants.zoom_out != 0u)
-        state.zoom -= state.zoom * zoom_rate * delta_time;
+        state.camera_zoom -= state.camera_zoom * zoom_rate * delta_time;
     if (push_constants.zoom_in != 0u)
-        state.zoom += state.zoom * zoom_rate * delta_time;
+        state.camera_zoom += state.camera_zoom * zoom_rate * delta_time;
 
-    state.zoom = clamp(state.zoom, CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM);
-    state.padding = 0.0f;
-    camera_state[0] = state;
+    state.camera_zoom = clamp(state.camera_zoom, CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM);
+    global_state[0] = state;
 }
 
 
@@ -228,7 +233,7 @@ void maybe_spawn_bodies() {
     uint pool = min(DYNAMIC_BODY_POOL, capacity - DYNAMIC_BODY_START);
     if (pool == 0u) return;
 
-    CameraStateData cam = camera_state[0];
+    GlobalState state = global_state[0];
 
     float aspect = (push_constants.screen_height > 0u)
         ? (float(push_constants.screen_width) / float(push_constants.screen_height))
@@ -237,21 +242,21 @@ void maybe_spawn_bodies() {
     float2 uv = float2(push_constants.mouse_ndc_x, push_constants.mouse_ndc_y);
     float2 view = uv * 2.0f - 1.0f;
     view.x *= aspect;
-    float zoom = max(cam.zoom, 0.001f);
-    float2 target_world = cam.position + view * zoom;
+    float zoom = max(state.camera_zoom, 0.001f);
+    float2 target_world = state.camera_position + view * zoom;
     float2 center = GAME_START_CENTER;
     float2 dir = target_world - center;
     float len_sq = dot(dir, dir);
     dir = (len_sq <= 1e-8f) ? float2(1.0f, 0.0f) : dir * rsqrt(len_sq);
 
     const uint SPAWN_BATCH = 16u;
-    uint active_current = spawn_state[0].active_dynamic;
+    uint active_current = state.spawn_active;
     if (active_current >= MAX_ACTIVE_DYNAMIC) return;
 
     uint spawn_budget = min(SPAWN_BATCH, MAX_ACTIVE_DYNAMIC - active_current);
     if (spawn_budget == 0u) return;
 
-    uint next_index_base = spawn_state[0].next_dynamic;
+    uint next_index_base = state.spawn_next;
 
     for (uint n = 0u; n < spawn_budget; ++n) {
         uint next_index = next_index_base + n;
@@ -279,8 +284,9 @@ void maybe_spawn_bodies() {
         store_body_delta(slot, float2(0.0f, 0.0f));
     }
 
-    spawn_state[0].next_dynamic = next_index_base + spawn_budget;
-    spawn_state[0].active_dynamic = active_current + spawn_budget;
+    state.spawn_next = next_index_base + spawn_budget;
+    state.spawn_active = active_current + spawn_budget;
+    global_state[0] = state;
 }
 
 void begin_frame(uint id) {
@@ -294,10 +300,10 @@ void begin_frame(uint id) {
 // (1) INITIALIZE BODIES
 void initialize_bodies(uint id) {
     if (id == 0u) {
-        spawn_state[0].next_dynamic = 0u;
-        spawn_state[0].active_dynamic = 0u;
-        spawn_state[0].pad0 = 0u;
-        spawn_state[0].pad1 = 0u;
+        GlobalState state = global_state[0];
+        state.spawn_next = 0u;
+        state.spawn_active = 0u;
+        global_state[0] = state;
     }
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) return;
@@ -597,9 +603,9 @@ void deactivate_body(uint id) {
     if (state == 0u) return;
 
     if (id >= DYNAMIC_BODY_START) {
-        uint active = spawn_state[0].active_dynamic;
+        uint active = global_state[0].spawn_active;
         if (active > 0u)
-            spawn_state[0].active_dynamic = active - 1u;
+            InterlockedAdd(global_state[0].spawn_active, -1);
     }
 
     float2 current = body_pos_pred[id];
@@ -670,9 +676,9 @@ void render_kernel(uint id) {
 	uint total_pixels = width * height;
 	if (id >= total_pixels || width == 0u || height == 0u) return;
 
-	CameraStateData cam_state = load_camera_state();
-	float zoom = max(cam_state.zoom, CAMERA_MIN_ZOOM);
-	float2 camera_pos = cam_state.position;
+	GlobalState state = global_state[0];
+	float zoom = max(state.camera_zoom, CAMERA_MIN_ZOOM);
+	float2 cam_position = state.camera_position;
 
 	float2 resolution = float2(float(width), float(height));
 	float2 invResolution = 1.0f / resolution;
@@ -681,7 +687,7 @@ void render_kernel(uint id) {
 	float aspect = resolution.x / resolution.y;
 	float2 view = uv * 2.0f - 1.0f;
 	view.x *= aspect;
-	float2 world = camera_pos + view * zoom;
+	float2 world = cam_position + view * zoom;
 
 	float3 color = float3(0.016f, 0.018f, 0.020f);
 	float density = 0.001f;

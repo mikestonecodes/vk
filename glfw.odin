@@ -23,7 +23,7 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
     if key >= 0 && key < len(key_states) {
         key_states[key] = (action == glfw.PRESS || action == glfw.REPEAT)
     }
-    
+
     // Handle escape to quit
     if key == glfw.KEY_ESCAPE && action == glfw.PRESS {
         should_quit = true
@@ -57,29 +57,30 @@ window_size_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32)
 // Platform interface implementation
 init_platform :: proc() -> bool {
     fmt.println("DEBUG: Initializing GLFW platform")
-    
+
     if !glfw.Init() {
         fmt.println("Failed to initialize GLFW")
         return false
     }
-    
+
     // Don't create an OpenGL context
     glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
-    
+	glfw.SwapInterval(0)
+
     window = glfw.CreateWindow(i32(window_width), i32(window_height), "Vulkan with GLFW", nil, nil)
     if window == nil {
         fmt.println("Failed to create GLFW window")
         glfw.Terminate()
         return false
     }
-    
+
     // Set up callbacks
     glfw.SetWindowSizeCallback(window, window_size_callback)
     glfw.SetKeyCallback(window, key_callback)
     glfw.SetMouseButtonCallback(window, mouse_button_callback)
     glfw.SetCursorPosCallback(window, cursor_pos_callback)
     glfw.SetScrollCallback(window, scroll_callback)
-    
+
     fmt.println("DEBUG: GLFW platform setup complete")
     return true
 }

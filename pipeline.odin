@@ -1,15 +1,34 @@
+// ============================================================================
+// Package & Imports
+// ============================================================================
 package main
 
 import "base:runtime"
+import "core:c"
 import "core:fmt"
 import "core:os"
 import "core:strings"
 import "core:time"
 import vk "vendor:vulkan"
 
+
+// ============================================================================
+// Type Aliases
+// ============================================================================
+DeviceSize :: vk.DeviceSize
+
+BufferUsageFlags :: vk.BufferUsageFlags
+ShaderStageFlags :: vk.ShaderStageFlags
+DescriptorType :: vk.DescriptorType
+
+
+// ============================================================================
+// Structs
+// ============================================================================
 CommandEncoder :: struct {
 	command_buffer: vk.CommandBuffer,
 }
+
 FrameInputs :: struct {
 	cmd:        vk.CommandBuffer,
 	time:       f32,
@@ -24,7 +43,6 @@ ShaderProgram :: struct {
 	shaders:     [3]vk.ShaderEXT,
 }
 
-
 PushConstantInfo :: struct {
 	label: string,
 	stage: vk.ShaderStageFlags,
@@ -38,18 +56,33 @@ ShaderProgramConfig :: struct {
 	push:            PushConstantInfo,
 }
 
-DeviceSize :: vk.DeviceSize
 
-BufferUsageFlags :: vk.BufferUsageFlags
-ShaderStageFlags :: vk.ShaderStageFlags
-DescriptorType :: vk.DescriptorType
-
+// ============================================================================
+// Global State
+// ============================================================================
 buffers: Array(32, BufferResource)
 last_frame_time: f32
 shaders_ready: bool
 
 render_shader_states: [PIPELINE_COUNT]ShaderProgram
 
+// Global bindless set
+global_desc_layout: vk.DescriptorSetLayout
+global_desc_set: vk.DescriptorSet
+global_desc_pool: vk.DescriptorPool
+
+global_descriptor_specs: Array(32, DescriptorBindingSpec)
+
+render_resources_initialized: bool
+
+
+MAX_SPIRV_BYTES :: 1 << 20
+spirv_words := Array(MAX_SPIRV_BYTES / 4, u32){}
+
+
+// ============================================================================
+// Command Encoding & Frame Setup
+// ============================================================================
 begin_frame_commands :: proc(
 	element: ^SwapchainElement,
 	start_time: time.Time,
@@ -74,11 +107,24 @@ begin_frame_commands :: proc(
 	return
 }
 
+begin_encoding :: proc(element: ^SwapchainElement) -> CommandEncoder {
+	encoder := CommandEncoder {
+		command_buffer = element.commandBuffer,
+	}
 
-zero_buffer :: proc(frame: FrameInputs, buffer: ^BufferResource) {
-	vk.CmdFillBuffer(frame.cmd, buffer.buffer, 0, buffer.size, 0)
+	begin_info := vk.CommandBufferBeginInfo {
+		sType = .COMMAND_BUFFER_BEGIN_INFO,
+		flags = {.ONE_TIME_SUBMIT},
+	}
+
+	vk.BeginCommandBuffer(encoder.command_buffer, &begin_info)
+	return encoder
 }
 
+
+// ============================================================================
+// Binding Helpers (Shader Objects, Descriptor Sets, Push Constants)
+// ============================================================================
 bind :: proc(
 	frame: FrameInputs,
 	state: ^ShaderProgram,
@@ -117,18 +163,6 @@ bind :: proc(
 	}
 }
 
-// Global bindless set
-global_desc_layout: vk.DescriptorSetLayout
-global_desc_set: vk.DescriptorSet
-
-// Generic helper that respects solver_iteration etc.
-dispatch_compute :: proc(frame: FrameInputs, task: DispatchMode, count: u32) {
-	compute_push_constants.dispatch_mode = u32(task)
-	bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-	vk.CmdDispatch(frame.cmd, count, 1, 1)
-	compute_barrier(frame.cmd)
-}
-
 bind_resource :: proc(slot: u32, resource: $T, dstBinding := u32(max(u32))) {
 	w := vk.WriteDescriptorSet {
 		sType           = .WRITE_DESCRIPTOR_SET,
@@ -156,10 +190,11 @@ bind_resource :: proc(slot: u32, resource: $T, dstBinding := u32(max(u32))) {
 
 	vk.UpdateDescriptorSets(device, 1, &w, 0, nil)
 }
-global_desc_pool: vk.DescriptorPool
 
-global_descriptor_specs: Array(32, DescriptorBindingSpec)
 
+// ============================================================================
+// Descriptor Layout/Pool Init
+// ============================================================================
 get_global_descriptor_specs :: proc() -> []DescriptorBindingSpec {
 	specs := &global_descriptor_specs
 	specs.len = 0
@@ -281,19 +316,33 @@ init_global_descriptors :: proc() -> bool {
 	return true
 }
 
+
+// ============================================================================
+// Shader System
+// ============================================================================
+ShaderStageInfo :: struct {
+	profile: cstring,
+	entry:   cstring,
+	suffix:  string,
+}
+
+get_stage_info :: proc(stage: string) -> ShaderStageInfo {
+	switch stage {
+	case "compute":  return {"cs_6_0", "main", ".spv"}
+	case "vertex":   return {"vs_6_0", "vs_main", "_vs.spv"}
+	case "fragment": return {"ps_6_0", "fs_main", "_fs.spv"}
+	}
+	return {}
+}
+
 make_shader_layout :: proc(push: ^PushConstantInfo) -> (layout: vk.PipelineLayout, ok: bool) {
 	ranges: [1]vk.PushConstantRange
 	count: u32 = 0
 	if push != nil && push.size > 0 {
-		ranges[0] = {
-			stageFlags = push.stage,
-			size       = push.size,
-		}
+		ranges[0] = {stageFlags = push.stage, size = push.size}
 		count = 1
 	}
-
 	layouts := [1]vk.DescriptorSetLayout{global_desc_layout}
-
 	return vkw(
 		vk.CreatePipelineLayout,
 		device,
@@ -309,243 +358,164 @@ make_shader_layout :: proc(push: ^PushConstantInfo) -> (layout: vk.PipelineLayou
 	)
 }
 
+load_shader :: proc(spv_path, stage_name: string) -> ([]u32, bool) {
+	info := get_stage_info(stage_name)
+	hlsl := fmt.aprintf("%s.hlsl", strings.trim_suffix(spv_path, info.suffix))
+
+	if os.exists(hlsl) {
+		cmd := fmt.aprintf("dxc -spirv -fvk-use-gl-layout -fspv-target-env=vulkan1.3 -T %s -E %s -Fo %s %s",
+			info.profile, info.entry, spv_path, hlsl)
+		system(strings.clone_to_cstring(cmd, context.temp_allocator))
+	}
+
+	data, ok := os.read_entire_file(spv_path)
+	if !ok || len(data) % 4 != 0 || len(data) > MAX_SPIRV_BYTES do return nil, false
+	defer delete(data)
+
+	spirv_words.len = 0
+	for i in 0 ..< len(data)/4 {
+		spirv_words.data[i] = u32(data[i*4]) | (u32(data[i*4+1])<<8) | (u32(data[i*4+2])<<16) | (u32(data[i*4+3])<<24)
+	}
+	spirv_words.len = i32(len(data)/4)
+	return array_slice(&spirv_words), true
+}
+
 create_shader_object :: proc(
-	path: string,
+	path, stage_name: string,
 	stage: vk.ShaderStageFlag,
 	next_stage: vk.ShaderStageFlags,
-	entry: cstring,
 	layouts: []vk.DescriptorSetLayout,
 	push_range: ^vk.PushConstantRange,
 	push_range_count: u32,
-) -> (
-	shader: vk.ShaderEXT,
-	ok: bool,
-) {
-	code := load_shader_code_words(path) or_return
+) -> (shader: vk.ShaderEXT, ok: bool) {
+	code := load_shader(path, stage_name) or_return
+	info := get_stage_info(stage_name)
 
-	info := vk.ShaderCreateInfoEXT {
-		sType                  = vk.StructureType.SHADER_CREATE_INFO_EXT,
-		flags                  = {},
-		stage                  = {stage},
-		nextStage              = next_stage,
-		codeType               = vk.ShaderCodeTypeEXT.SPIRV,
-		codeSize               = len(code) * size_of(u32),
-		pCode                  = raw_data(code),
-		pName                  = entry,
-		setLayoutCount         = u32(len(layouts)),
-		pSetLayouts            = len(layouts) > 0 ? &layouts[0] : nil,
+	shader_info := vk.ShaderCreateInfoEXT {
+		sType = .SHADER_CREATE_INFO_EXT,
+		stage = {stage},
+		nextStage = next_stage,
+		codeType = .SPIRV,
+		codeSize = len(code) * size_of(u32),
+		pCode = raw_data(code),
+		pName = info.entry,
+		setLayoutCount = u32(len(layouts)),
+		pSetLayouts = len(layouts) > 0 ? &layouts[0] : nil,
 		pushConstantRangeCount = push_range_count,
-		pPushConstantRanges    = push_range_count > 0 ? push_range : nil,
-		pSpecializationInfo    = nil,
+		pPushConstantRanges = push_range_count > 0 ? push_range : nil,
 	}
 
-	result := vk.CreateShadersEXT(device, 1, &info, nil, &shader)
-	if result != .SUCCESS {
-		fmt.printf("Failed to create shader object for %s (err=%d)\n", path, result)
-		return {}, false
-	}
+	if vk.CreateShadersEXT(device, 1, &shader_info, nil, &shader) != .SUCCESS do return {}, false
 	return shader, true
 }
 
-create_shader_program :: proc(config: ^ShaderProgramConfig, state: ^ShaderProgram) -> bool {
-	layout := make_shader_layout(&config.push) or_return
+init_shaders :: proc() -> bool {
+	if global_desc_set == {} && !init_global_descriptors() do return false
+	if !render_resources_initialized {
+		if !init_render_resources() do return false
+		render_resources_initialized = true
+	}
 
 	layouts := [1]vk.DescriptorSetLayout{global_desc_layout}
 
-	stage_count: u32 = 0
-	shaders: [3]vk.ShaderEXT
-	stages: [3]vk.ShaderStageFlags
-	push_stage: vk.ShaderStageFlags
+	for &cfg, i in render_shader_configs {
+		state := &render_shader_states[i]
+		state.layout = make_shader_layout(&cfg.push) or_return
 
-	range := vk.PushConstantRange {
-		offset     = 0,
-		size       = 0,
-		stageFlags = {},
-	}
+		range := vk.PushConstantRange{stageFlags = cfg.push.stage, size = cfg.push.size}
+		range_ptr := range.size > 0 ? &range : nil
+		range_count := range.size > 0 ? u32(1) : u32(0)
 
-	if config.push.size > 0 {
-		range.stageFlags = config.push.stage
-		range.size = config.push.size
-		push_stage = config.push.stage
-	}
+		if cfg.compute_module != "" {
+			state.shaders[0] = create_shader_object(cfg.compute_module, "compute", .COMPUTE, {},
+				layouts[:], range_ptr, range_count) or_return
+			state.stages[0] = {.COMPUTE}
+			state.stage_count = 1
+		} else {
+			next := cfg.fragment_module != "" ? vk.ShaderStageFlags{.FRAGMENT} : {}
+			state.shaders[0] = create_shader_object(cfg.vertex_module, "vertex", .VERTEX, next,
+				layouts[:], range_ptr, range_count) or_return
+			state.stages[0] = {.VERTEX}
+			state.stage_count = 1
 
-	shader_handles := [3]vk.ShaderEXT{}
-	created: int = 0
-	success := false
-	defer if !success {
-		for i in 0 ..< created {
-			if shader_handles[i] != {} {
-				vk.DestroyShaderEXT(device, shader_handles[i], nil)
+			if cfg.fragment_module != "" {
+				state.shaders[1] = create_shader_object(cfg.fragment_module, "fragment", .FRAGMENT, {},
+					layouts[:], range_ptr, range_count) or_return
+				state.stages[1] = {.FRAGMENT}
+				state.stage_count = 2
 			}
 		}
-		if layout != {} {
-			vk.DestroyPipelineLayout(device, layout, nil)
-		}
-	}
-
-	if config.compute_module != "" {
-		range_ptr: ^vk.PushConstantRange = nil
-		range_count: u32 = 0
-		if range.size > 0 && (range.stageFlags & {vk.ShaderStageFlag.COMPUTE}) != {} {
-			range_ptr = &range
-			range_count = 1
-		}
-
-		shader := create_shader_object(
-			config.compute_module,
-			vk.ShaderStageFlag.COMPUTE,
-			vk.ShaderStageFlags{},
-			cstring("main"),
-			layouts[:],
-			range_ptr,
-			range_count,
-		) or_return
-
-		shader_handles[created] = shader
-		created += 1
-
-		stage_count = 1
-		stages[0] = {vk.ShaderStageFlag.COMPUTE}
-		shaders[0] = shader
-	} else {
-		gfx_range_ptr: ^vk.PushConstantRange = nil
-		gfx_range_count: u32 = 0
-		if range.size > 0 {
-			gfx_range_ptr = &range
-			gfx_range_count = 1
-		}
-
-		next_stage := vk.ShaderStageFlags{}
-		if config.fragment_module != "" {
-			next_stage = vk.ShaderStageFlags{vk.ShaderStageFlag.FRAGMENT}
-		}
-
-		vertex_shader := create_shader_object(
-			config.vertex_module,
-			vk.ShaderStageFlag.VERTEX,
-			next_stage,
-			cstring("vs_main"),
-			layouts[:],
-			gfx_range_ptr,
-			gfx_range_count,
-		) or_return
-
-		shader_handles[created] = vertex_shader
-		created += 1
-
-		stages[0] = {vk.ShaderStageFlag.VERTEX}
-		shaders[0] = vertex_shader
-		stage_count = 1
-
-		fragment_shader := create_shader_object(
-			config.fragment_module,
-			vk.ShaderStageFlag.FRAGMENT,
-			vk.ShaderStageFlags{},
-			cstring("fs_main"),
-			layouts[:],
-			gfx_range_ptr,
-			gfx_range_count,
-		) or_return
-
-		shader_handles[created] = fragment_shader
-		created += 1
-
-		stages[1] = {vk.ShaderStageFlag.FRAGMENT}
-		shaders[1] = fragment_shader
-		stage_count = 2
-	}
-
-	success = true
-	state^ = ShaderProgram {
-		layout      = layout,
-		push_stage  = push_stage,
-		stage_count = stage_count,
-		stages      = stages,
-		shaders     = shaders,
-	}
-	return true
-}
-init_render_resources :: proc() -> bool {
-	for spec, i in buffer_specs {
-		create_buffer(&buffers.data[i], spec.size, spec.flags)
-		bind_resource(0, &buffers.data[i], spec.binding)
-	}
-	return true
-}
-build_shader_programs :: proc(configs: []ShaderProgramConfig, states: []ShaderProgram) -> bool {
-	assert(len(configs) == len(states), "shader config/state length mismatch")
-	if len(configs) == 0 {
-		shaders_ready = true
-		return true
-	}
-
-	for idx in 0 ..< len(states) {
-		reset_shader_program(&states[idx])
-	}
-
-	for idx in 0 ..< len(configs) {
-		if !create_shader_program(&configs[idx], &states[idx]) {
-			for j in 0 ..< len(states) {
-				reset_shader_program(&states[j])
-			}
-			shaders_ready = false
-			return false
-		}
+		state.push_stage = range.stageFlags
 	}
 
 	shaders_ready = true
 	return true
 }
 
-reset_shader_program :: proc(state: ^ShaderProgram) {
-	for idx in 0 ..< int(state.stage_count) {
-		if state.shaders[idx] != {} {
-			vk.DestroyShaderEXT(device, state.shaders[idx], nil)
+cleanup_shaders :: proc() {
+	for &state in render_shader_states {
+		for i in 0 ..< int(state.stage_count) {
+			if state.shaders[i] != {} do vk.DestroyShaderEXT(device, state.shaders[i], nil)
 		}
-		state.shaders[idx] = {}
-		state.stages[idx] = {}
-	}
-	state.stage_count = 0
-	if state.layout != {} {
-		vk.DestroyPipelineLayout(device, state.layout, nil)
-		state.layout = {}
-	}
-	state.push_stage = {}
-}
-
-destroy_render_shader_state :: proc(states: []ShaderProgram) {
-	for idx in 0 ..< len(states) {
-		reset_shader_program(&states[idx])
+		if state.layout != {} do vk.DestroyPipelineLayout(device, state.layout, nil)
+		state = {}
 	}
 	shaders_ready = false
 }
-begin_encoding :: proc(element: ^SwapchainElement) -> CommandEncoder {
-	encoder := CommandEncoder {
-		command_buffer = element.commandBuffer,
+
+
+// ============================================================================
+// Compute Dispatch & Barriers
+// ============================================================================
+compute_barrier :: proc(cmd: vk.CommandBuffer) {
+	barrier := vk.MemoryBarrier2 {
+		sType         = .MEMORY_BARRIER_2,
+		srcStageMask  = {vk.PipelineStageFlag2.COMPUTE_SHADER},
+		srcAccessMask = {vk.AccessFlag2.SHADER_READ, vk.AccessFlag2.SHADER_WRITE},
+		dstStageMask  = {vk.PipelineStageFlag2.COMPUTE_SHADER},
+		dstAccessMask = {vk.AccessFlag2.SHADER_READ, vk.AccessFlag2.SHADER_WRITE},
 	}
-
-	begin_info := vk.CommandBufferBeginInfo {
-		sType = .COMMAND_BUFFER_BEGIN_INFO,
-		flags = {.ONE_TIME_SUBMIT},
+	dependency := vk.DependencyInfo {
+		sType              = .DEPENDENCY_INFO,
+		memoryBarrierCount = 1,
+		pMemoryBarriers    = &barrier,
 	}
-
-	vk.BeginCommandBuffer(encoder.command_buffer, &begin_info)
-	return encoder
+	vk.CmdPipelineBarrier2(cmd, &dependency)
 }
 
-end_rendering :: proc(frame: FrameInputs) {
-	vk.CmdEndRendering(frame.cmd)
+apply_compute_to_fragment_barrier :: proc(cmd: vk.CommandBuffer, buf: ^BufferResource) {
+	runtime.assert(buf.buffer != {}, "compute barrier requested before initialization")
+
+	barrier := vk.BufferMemoryBarrier2 {
+		sType         = .BUFFER_MEMORY_BARRIER_2,
+		srcStageMask  = {.COMPUTE_SHADER},
+		srcAccessMask = {.SHADER_WRITE},
+		dstStageMask  = {.FRAGMENT_SHADER},
+		dstAccessMask = {.SHADER_READ},
+		buffer        = buf.buffer,
+		offset        = 0,
+		size          = buf.size,
+	}
+	dep := vk.DependencyInfo {
+		sType                    = .DEPENDENCY_INFO,
+		bufferMemoryBarrierCount = 1,
+		pBufferMemoryBarriers    = &barrier,
+	}
+	vk.CmdPipelineBarrier2(cmd, &dep)
 }
 
-draw :: proc(
-	frame: FrameInputs,
-	vertex_count: u32,
-	instance_count: u32 = 1,
-	first_vertex: u32 = 0,
-	first_instance: u32 = 0,
-) {
-	vk.CmdDraw(frame.cmd, vertex_count, instance_count, first_vertex, first_instance)
+// Generic helper that respects solver_iteration etc.
+dispatch_compute :: proc(frame: FrameInputs, task: DispatchMode, count: u32) {
+	compute_push_constants.dispatch_mode = u32(task)
+	bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
+	vk.CmdDispatch(frame.cmd, count, 1, 1)
+	compute_barrier(frame.cmd)
 }
+
+
+// ============================================================================
+// Rendering (Dynamic Rendering + Dynamic States)
+// ============================================================================
 begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 
 
@@ -634,8 +604,43 @@ begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 	vk.CmdSetVertexInputEXT(frame.cmd, 0, nil, 0, nil)
 }
 
+draw :: proc(
+	frame: FrameInputs,
+	vertex_count: u32,
+	instance_count: u32 = 1,
+	first_vertex: u32 = 0,
+	first_instance: u32 = 0,
+) {
+	vk.CmdDraw(frame.cmd, vertex_count, instance_count, first_vertex, first_instance)
+}
+
+end_rendering :: proc(frame: FrameInputs) {
+	vk.CmdEndRendering(frame.cmd)
+}
+
+
+// ============================================================================
+// Render Resources (Init/Cleanup)
+// ============================================================================
+init_render_resources :: proc() -> bool {
+	for spec, i in buffer_specs {
+		create_buffer(&buffers.data[i], spec.size, spec.flags)
+		bind_resource(0, &buffers.data[i], spec.binding)
+	}
+	return true
+}
+
 cleanup_render_resources :: proc() {
 	for &buffer in buffers.data {
 		destroy_buffer(&buffer)
 	}
+}
+
+
+// ============================================================================
+// Foreign Declarations
+// ============================================================================
+foreign import libc "system:c"
+foreign libc {
+	system :: proc(command: cstring) -> c.int ---
 }

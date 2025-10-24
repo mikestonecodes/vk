@@ -12,12 +12,16 @@ GRID_X :: u32(512)
 GRID_Y :: u32(512)
 GRID_CELL_COUNT :: u32(GRID_X * GRID_Y)
 
-CameraStateGPU :: struct {
-	position: [2]f32,
-	zoom:     f32,
-	pad:      f32,
+// Global state buffer to avoid small allocation warnings
+GlobalStateGPU :: struct {
+	camera_position: [2]f32,
+	camera_zoom:     f32,
+	_pad0:           f32,
+	spawn_next:      u32,
+	spawn_active:    u32,
+	_pad1:           u32,
+	_pad2:           u32,
 }
-
 
 PostProcessPushConstants :: struct {
 	screen_width:  u32,
@@ -51,12 +55,6 @@ ComputePushConstants :: struct {
 compute_push_constants := ComputePushConstants {
 	screen_width  = u32(window_width),
 	screen_height = u32(window_height),
-}
-SpawnStateGPU :: struct {
-	next_dynamic:   u32,
-	active_dynamic: u32,
-	pad0:           u32,
-	pad1:           u32,
 }
 
 
@@ -97,7 +95,7 @@ buffer_specs := []struct {
 		0,
 		{.COMPUTE, .FRAGMENT},
 	},
-	{DeviceSize(size_of(CameraStateGPU)), {.STORAGE_BUFFER, .TRANSFER_DST}, 3, {.COMPUTE}},
+	{DeviceSize(size_of(GlobalStateGPU)), {.STORAGE_BUFFER, .TRANSFER_DST}, 3, {.COMPUTE}},
 	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 20, {.COMPUTE}}, //body_pos
 	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 21, {.COMPUTE}}, //body_pos_pred
 	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 22, {.COMPUTE}}, //body_vel
@@ -105,7 +103,6 @@ buffer_specs := []struct {
 	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 24, {.COMPUTE}}, //body_inv_mass
 	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 25, {.COMPUTE}}, //body_flags
 	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 26, {.COMPUTE}}, //body_delta
-	{DeviceSize(size_of(SpawnStateGPU)), {.STORAGE_BUFFER}, 27, {.COMPUTE}}, //spawn_state
 	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 30, {.COMPUTE}}, //grid_count
 	{DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size, {.STORAGE_BUFFER}, 31, {.COMPUTE}}, //grid_offset
 	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 32, {.COMPUTE}}, //grid_scan
@@ -152,7 +149,7 @@ key_bindings := []struct {
 }
 
 
-resize :: proc() {
+resize :: proc() -> bool  {
 	destroy_buffer(&buffers.data[0])
 	create_buffer(
 		&buffers.data[0],
@@ -160,6 +157,7 @@ resize :: proc() {
 		{.STORAGE_BUFFER, .TRANSFER_DST},
 	)
 	bind_resource(0, &buffers.data[0])
+	return true
 }
 
 record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
@@ -198,9 +196,6 @@ compute :: proc(frame: FrameInputs) {
 	pixel_dispatch := (total_pixels + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
 	physics(frame, pixel_dispatch)
 
-	compute_barrier(frame.cmd)
-	zero_buffer(frame, &buffers.data[0])
-	transfer_to_compute_barrier(frame.cmd, &buffers.data[0])
 	dispatch_compute(frame, .RENDER, pixel_dispatch)
 }
 

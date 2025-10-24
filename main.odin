@@ -17,24 +17,10 @@ main :: proc() {
 	if !vulkan_init() do return
 	defer vulkan_cleanup()
 
-	init_shader_times()
 
 	for glfw_should_quit() == 0 {
 		glfw_poll_events()
 		handle_resize()
-		check_shader_reload()
-
-		visible   := glfw.GetWindowAttrib(window, glfw.VISIBLE) != 0
-		iconified := glfw.GetWindowAttrib(window, glfw.ICONIFIED) != 0
-
-		if !visible || iconified {
-			time.sleep(16 * time.Millisecond) // ~60 FPS idle
-			continue
-		}
-
-		if !render_frame(start_time) {
-			time.sleep(4 * time.Millisecond)
-		}
+		render_frame(start_time)
 	}
 }
-
