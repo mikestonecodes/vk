@@ -135,24 +135,15 @@ float4 fs_main(VertexOutput input) : SV_Target {
     if (accumDensity < 1e-6f) {
         return float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
-
     float3 blended = lerp(center_sample.rgb, filtered.rgb, 0.7f);
     float blend_density = smoothstep(0.0f, 0.7f, accumDensity);
-
     float3 smoke = saturate(blended);
-
     float2 grain_uv = frac(input.uv * 0.35f);
+    float3 color = saturate(blended);
+    color = adjust_saturation(color, 1.2f);
+    color = ACESFilm(color);
 
-    float backlight = pow(accumDensity, 1.4f);
-    float3 tint_low = float3(0.16f, 0.18f, 0.22f);
-    float3 tint_high = float3(0.85f, 0.90f, 0.98f);
-    float3 tint = lerp(tint_low, tint_high, backlight);
-    smoke = saturate(smoke * (0.6f + 0.4f * blend_density) + tint * 0.25f * blend_density);
+    float alpha = saturate(accumDensity * 2.0f);
 
-    smoke = adjust_saturation(smoke, 1.55f);
-    smoke = ACESFilm(smoke);
-
-    float alpha = saturate(accumDensity * 4.2f);
-
-    return float4(smoke, alpha);
+    return float4(color, alpha);
 }

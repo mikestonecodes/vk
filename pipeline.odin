@@ -476,7 +476,7 @@ cleanup_shaders :: proc() {
 // ============================================================================
 // Shader Hot Reload (Compact)
 // ============================================================================
-shader_sizes := map[string]i64{}
+shader_mod_times := map[string]time.Time{}
 
 check_shader_reload :: proc() {
 	reload := false
@@ -498,23 +498,23 @@ check_shader_reload :: proc() {
 
 			info := get_stage_info(stage_name)
 			hlsl := fmt.aprintf("%s.hlsl", strings.trim_suffix(spv, info.suffix))
-			paths := []string{hlsl, spv}
 
-			for path in paths {
-				if !os.exists(path) {
-					continue
-				}
-				file_info, err := os.stat(path)
-				if err != os.ERROR_NONE {
-					continue
-				}
-				s := file_info.size
-				prev_size, exists := shader_sizes[path]
-				if !exists || prev_size != s {
-					shader_sizes[path] = s
-					reload = true
-				}
+			// Only check HLSL source files, not compiled SPV files
+			// This prevents infinite reload loops when SPV is recompiled
+			if !os.exists(hlsl) {
+				continue
 			}
+
+			file_info, err := os.stat(hlsl)
+			if err != os.ERROR_NONE {
+				continue
+			}
+			mod_time := file_info.modification_time
+			prev_time, exists := shader_mod_times[hlsl]
+			if exists && prev_time != mod_time {
+				reload = true
+			}
+			shader_mod_times[hlsl] = mod_time
 		}
 	}
 

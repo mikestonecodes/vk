@@ -83,12 +83,12 @@ debug_messenger: vk.DebugUtilsMessengerEXT
 MAX_FRAMES_IN_FLIGHT :: 3
 
 image_available_semaphores: [MAX_FRAMES_IN_FLIGHT]vk.Semaphore
-render_finished_semaphores: [MAX_FRAMES_IN_FLIGHT]vk.Semaphore
 in_flight_fences: [MAX_FRAMES_IN_FLIGHT]vk.Fence
 
 current_frame: u32 = 0
 
 MAX_SWAPCHAIN_IMAGES :: 4
+render_finished_semaphores: [MAX_SWAPCHAIN_IMAGES]vk.Semaphore
 elements: [MAX_SWAPCHAIN_IMAGES]SwapchainElement
 
 //───────────────────────────
@@ -118,13 +118,15 @@ init_sync_objects :: proc() -> bool {
 	}
 	fence_info := vk.FenceCreateInfo {
 		sType = .FENCE_CREATE_INFO,
-		flags = {vk.FenceCreateFlag.SIGNALED}, // don’t stall on first frame
+		flags = {vk.FenceCreateFlag.SIGNALED}, // don't stall on first frame
 	}
 
 	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
 		vk.CreateSemaphore(device, &sem_info, nil, &image_available_semaphores[i])
-		vk.CreateSemaphore(device, &sem_info, nil, &render_finished_semaphores[i])
 		vk.CreateFence(device, &fence_info, nil, &in_flight_fences[i])
+	}
+	for i in 0 ..< MAX_SWAPCHAIN_IMAGES {
+		vk.CreateSemaphore(device, &sem_info, nil, &render_finished_semaphores[i])
 	}
 	return true
 }
@@ -158,7 +160,7 @@ render_frame :: proc(start_time: time.Time) -> bool {
 
 	// Submit this frame
 	wait_sem := image_available_semaphores[current_frame]
-	signal_sem := render_finished_semaphores[current_frame]
+	signal_sem := render_finished_semaphores[image_index]
 	submit_info := vk.SubmitInfo {
 		sType                = .SUBMIT_INFO,
 		waitSemaphoreCount   = 1,
@@ -666,8 +668,10 @@ destroy_swapchain :: proc() {
 destroy_all_sync_objects :: proc() {
 	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
 		if image_available_semaphores[i] != {} do vk.DestroySemaphore(device, image_available_semaphores[i], nil)
-		if render_finished_semaphores[i] != {} do vk.DestroySemaphore(device, render_finished_semaphores[i], nil)
 		if in_flight_fences[i] != {} do vk.DestroyFence(device, in_flight_fences[i], nil)
+	}
+	for i in 0 ..< MAX_SWAPCHAIN_IMAGES {
+		if render_finished_semaphores[i] != {} do vk.DestroySemaphore(device, render_finished_semaphores[i], nil)
 	}
 }
 
