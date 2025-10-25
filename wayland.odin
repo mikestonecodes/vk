@@ -50,13 +50,13 @@ foreign wl {
 //──────────────────────────────────────────────
 // XDG shell import
 //──────────────────────────────────────────────
-when ODIN_OS == .Linux {
-	foreign import xdg "libxdgshell.a"
-}
-
 xdg_wm_base :: struct {}
 xdg_surface :: struct {}
 xdg_toplevel :: struct {}
+
+when ODIN_OS == .Linux {
+	foreign import xdg "libxdgshell.a"
+}
 
 @(default_calling_convention = "c")
 foreign xdg {
