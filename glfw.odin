@@ -7,8 +7,8 @@ import "vendor:glfw"
 
 // Global window state
 window: glfw.WindowHandle
-window_width: c.int = 800
-window_height: c.int = 600
+window_width: u32 = 800
+window_height: u32 = 600
 resize_needed: bool = false
 should_quit: bool = false
 
@@ -48,8 +48,8 @@ scroll_callback :: proc "c" (window: glfw.WindowHandle, xoffset, yoffset: f64) {
 
 window_size_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
     context = runtime.default_context()
-    window_width = c.int(width)
-    window_height = c.int(height)
+    window_width = u32(width)
+    window_height = u32(height)
     resize_needed = true
     fmt.printf("Window resized to %dx%d\n", width, height)
 }

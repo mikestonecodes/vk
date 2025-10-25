@@ -123,7 +123,9 @@ float4 fs_main(VertexOutput input) : SV_Target {
     uint w = push_constants.screen_width;
     uint h = push_constants.screen_height;
 
+    // UVs are already correct — don't rescale them
     float2 uv = saturate(input.uv);
+
     uint2 p = uint2(uv * float2(w, h));
     p = min(p, uint2(w - 1, h - 1));
 
@@ -136,13 +138,7 @@ float4 fs_main(VertexOutput input) : SV_Target {
         return float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
     float3 blended = lerp(center_sample.rgb, filtered.rgb, 0.7f);
-    float blend_density = smoothstep(0.0f, 0.7f, accumDensity);
-    float3 smoke = saturate(blended);
-    float2 grain_uv = frac(input.uv * 0.35f);
-    float3 color = saturate(blended);
-    color = adjust_saturation(color, 1.2f);
-    color = ACESFilm(color);
-
+    float3 color = ACESFilm(adjust_saturation(saturate(blended), 1.2f));
     float alpha = saturate(accumDensity * 2.0f);
 
     return float4(color, alpha);

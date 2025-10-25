@@ -76,7 +76,6 @@ queue: vk.Queue
 command_pool: vk.CommandPool
 swapchain: vk.SwapchainKHR
 format: vk.Format
-width, height: u32
 image_index, image_count: u32
 debug_messenger: vk.DebugUtilsMessengerEXT
 
@@ -153,7 +152,8 @@ render_frame :: proc(start_time: time.Time) -> bool {
 	// Record work
 	enc, f := begin_frame_commands(e, start_time)
 	record_commands(e, f)
-	transition_swapchain_image_layout(f.cmd, e, vk.ImageLayout.PRESENT_SRC_KHR)
+	transition_to_present(f.cmd, e)
+
 	vk.EndCommandBuffer(enc.command_buffer)
 
 	stage := vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT}
@@ -324,15 +324,6 @@ create_swapchain :: proc() -> bool {
 	caps: vk.SurfaceCapabilitiesKHR
 	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(phys_device, vulkan_surface, &caps)
 
-	// Extent
-	if caps.currentExtent.width != max(u32) {
-		width = caps.currentExtent.width
-		height = caps.currentExtent.height
-	} else {
-		width = u32(get_window_width())
-		height = u32(get_window_height())
-	}
-
 	// Surface formats (dynamic, no fixed [8])
 	fmt_count: u32
 	vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &fmt_count, nil)
@@ -370,7 +361,7 @@ create_swapchain :: proc() -> bool {
 		minImageCount    = img_count,
 		imageFormat      = format,
 		imageColorSpace  = vk.ColorSpaceKHR.SRGB_NONLINEAR,
-		imageExtent      = {width, height},
+		imageExtent      = {window_width, window_height},
 		imageArrayLayers = 1,
 		imageUsage       = {.COLOR_ATTACHMENT},
 		preTransform     = caps.currentTransform,
@@ -428,31 +419,42 @@ create_swapchain :: proc() -> bool {
 }
 
 // simple image transition helper
-transition_swapchain_image_layout :: proc(
-	cmd: vk.CommandBuffer,
-	e: ^SwapchainElement,
-	new_layout: vk.ImageLayout,
-) {
-	if e.layout == new_layout do return
-	bar := vk.ImageMemoryBarrier2 {
-		sType = .IMAGE_MEMORY_BARRIER_2,
-		oldLayout = e.layout,
-		newLayout = new_layout,
-		image = e.image,
-		subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
-		srcStageMask = {.COLOR_ATTACHMENT_OUTPUT},
-		dstStageMask = {.BOTTOM_OF_PIPE},
-		srcAccessMask = {.COLOR_ATTACHMENT_WRITE},
-		dstAccessMask = {},
-	}
-	dep := vk.DependencyInfo {
-		sType                   = .DEPENDENCY_INFO,
-		imageMemoryBarrierCount = 1,
-		pImageMemoryBarriers    = &bar,
-	}
-	vk.CmdPipelineBarrier2(cmd, &dep)
-	e.layout = new_layout
+transition_to_render :: proc(cmd: vk.CommandBuffer, e: ^SwapchainElement) {
+    vk.CmdPipelineBarrier2(cmd, &vk.DependencyInfo{
+        sType = .DEPENDENCY_INFO,
+        imageMemoryBarrierCount = 1,
+        pImageMemoryBarriers = &vk.ImageMemoryBarrier2{
+            sType         = .IMAGE_MEMORY_BARRIER_2,
+            oldLayout     = e.layout,
+            newLayout     = .ATTACHMENT_OPTIMAL,
+            srcStageMask  = {.BOTTOM_OF_PIPE},
+            dstStageMask  = {.COLOR_ATTACHMENT_OUTPUT},
+            dstAccessMask = {.COLOR_ATTACHMENT_WRITE},
+            image         = e.image,
+            subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+        },
+    })
+    e.layout = .ATTACHMENT_OPTIMAL
 }
+
+transition_to_present :: proc(cmd: vk.CommandBuffer, e: ^SwapchainElement) {
+    vk.CmdPipelineBarrier2(cmd, &vk.DependencyInfo{
+        sType = .DEPENDENCY_INFO,
+        imageMemoryBarrierCount = 1,
+        pImageMemoryBarriers = &vk.ImageMemoryBarrier2{
+            sType         = .IMAGE_MEMORY_BARRIER_2,
+            oldLayout     = e.layout,
+            newLayout     = .PRESENT_SRC_KHR,
+            srcStageMask  = {.COLOR_ATTACHMENT_OUTPUT},
+            dstStageMask  = {.BOTTOM_OF_PIPE},
+            srcAccessMask = {.COLOR_ATTACHMENT_WRITE},
+            image         = e.image,
+            subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+        },
+    })
+    e.layout = .PRESENT_SRC_KHR
+}
+
 
 
 //───────────────────────────
@@ -633,7 +635,6 @@ vulkan_init :: proc() -> bool {
 
 handle_resize :: proc() {
 	if glfw_resize_needed() != 0 {
-		// Wait for GPU to finish all work before destroying resources
 		vk.DeviceWaitIdle(device)
 
 		destroy_swapchain()
@@ -641,17 +642,7 @@ handle_resize :: proc() {
 			return
 		}
 
-		if width == 0 || height == 0 {
-			runtime.assert(false, "width and height must be greater than 0")
-			return
-		}
-
-		// Resize buffers AFTER swapchain is created so width/height are updated
 		resize()
-		// Recreate offscreen resources with new dimensions (handled by render init)
-		//	init_render_resources()
-
-
 	}
 }
 destroy_swapchain :: proc() {

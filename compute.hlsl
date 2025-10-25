@@ -294,6 +294,18 @@ void begin_frame(uint id) {
         update_camera_state(push_constants.delta_time);
         maybe_spawn_bodies();
     }
+
+    uint width = push_constants.screen_width;
+    uint height = push_constants.screen_height;
+    uint total_pixels = width * height;
+    uint accum_idx = id * 4u;
+
+    if (id < total_pixels) {
+        accumulation_buffer[accum_idx + 0u] = 0u;
+        accumulation_buffer[accum_idx + 1u] = 0u;
+        accumulation_buffer[accum_idx + 2u] = 0u;
+        accumulation_buffer[accum_idx + 3u] = 0u;
+    }
 }
 
 

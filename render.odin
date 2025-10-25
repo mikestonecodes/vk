@@ -141,15 +141,15 @@ resize :: proc() -> bool  {
 	destroy_buffer(&buffers.data[0])
 	create_buffer(
 		&buffers.data[0],
-		DeviceSize(width) * DeviceSize(height) * 4 * DeviceSize(size_of(u32)),
+		DeviceSize(window_width) * DeviceSize(window_height) * 4 * DeviceSize(size_of(u32)),
 		{.STORAGE_BUFFER, .TRANSFER_DST},
 	)
 	bind_resource(0, &buffers.data[0])
 
-	compute_push_constants.screen_width = width
-	compute_push_constants.screen_height = height
-	post_process_push_constants.screen_width = width
-	post_process_push_constants.screen_height = height
+	compute_push_constants.screen_width = window_width
+	compute_push_constants.screen_height = window_height
+	post_process_push_constants.screen_width = window_width
+	post_process_push_constants.screen_height = window_height
 	return true
 }
 
@@ -171,22 +171,21 @@ compute :: proc(frame: FrameInputs) {
 	}
 
 	compute_push_constants.spawn_body = b32(is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
+
 	compute_push_constants.mouse_ndc_x = f32(
-		clamp(mouse_x / max(f64(width), 1.0), 0.0, 1.0),
+		clamp(mouse_x / max(f64(window_width), 1.0), 0.0, 1.0),
 	)
 	compute_push_constants.mouse_ndc_y = f32(
-		clamp(mouse_y / max(f64(height), 1.0), 0.0, 1.0),
+		clamp(mouse_y / max(f64(window_height), 1.0), 0.0, 1.0),
 	)
 
 
 	// ---- Camera update ----
 	dispatch_compute(frame, .BEGIN_FRAME, 1)
-
-	total_pixels := width * height
+	total_pixels := window_width * window_height
 	pixel_dispatch := (total_pixels + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
 	physics(frame, pixel_dispatch)
-
-	dispatch_compute(frame, .RENDER, pixel_dispatch*5)
+	dispatch_compute(frame, .RENDER, pixel_dispatch)
 }
 
 prefix_scan :: proc(frame: FrameInputs, grid_dispatch: u32) {
@@ -247,13 +246,15 @@ physics :: proc(frame: FrameInputs, pixel_dispatch: u32) {
 graphics :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 
 	apply_compute_to_fragment_barrier(frame.cmd, &buffers.data[0])
+
 	begin_rendering(frame, element)
 	bind(
 		frame,
 		&render_shader_states[1],
 		.GRAPHICS,
-		&PostProcessPushConstants{width, height},
+		&PostProcessPushConstants{window_width, window_height},
 	)
 	draw(frame, 3, 1, 0, 0)
 	end_rendering(frame)
+
 }

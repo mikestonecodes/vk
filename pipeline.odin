@@ -583,12 +583,12 @@ dispatch_compute :: proc(frame: FrameInputs, task: DispatchMode, count: u32) {
 // Rendering (Dynamic Rendering + Dynamic States)
 // ============================================================================
 begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
-
+transition_to_render(frame.cmd, element)
 	vk.CmdBeginRendering(
 		frame.cmd,
 		&vk.RenderingInfo {
 			sType = .RENDERING_INFO,
-			renderArea = {{0, 0}, {width, height}},
+			renderArea = {{0, 0}, {window_width, window_height}},
 			layerCount = 1,
 			colorAttachmentCount = 1,
 			pColorAttachments = &vk.RenderingAttachmentInfo {
@@ -608,8 +608,8 @@ begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 		&vk.Viewport {
 			x = 0,
 			y = 0,
-			width = f32(width),
-			height = f32(height),
+			width = f32(window_width),
+			height = f32(window_height),
 			minDepth = 0,
 			maxDepth = 1,
 		},
@@ -617,7 +617,7 @@ begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 	vk.CmdSetScissorWithCount(
 		frame.cmd,
 		1,
-		&vk.Rect2D{offset = {0, 0}, extent = {width, height}},
+		&vk.Rect2D{offset = {0, 0}, extent = {window_width, window_height}},
 	)
 	vk.CmdSetPrimitiveTopology(frame.cmd, vk.PrimitiveTopology.TRIANGLE_LIST)
 	vk.CmdSetFrontFace(frame.cmd, vk.FrontFace.CLOCKWISE)
