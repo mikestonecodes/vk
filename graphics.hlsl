@@ -21,25 +21,6 @@ VertexOutput vs_main(uint vid:SV_VertexID) {
     return o;
 }
 
-float4 fs_main(VertexOutput input) : SV_Target {
-    uint w = push_constants.screen_width;
-    uint h = push_constants.screen_height;
-    uint2 p = uint2(input.uv * float2(w, h));
-
-    uint seed = p.x + p.y * w;
-    seed = (seed ^ 61) ^ (seed >> 16);
-    seed = seed + (seed << 3);
-    seed = seed ^ (seed >> 4);
-    seed = seed * 0x27d4eb2d;
-    seed = seed ^ (seed >> 15);
-
-    float r = float(seed & 0xFF) / 255.0f;
-    float g = float((seed >> 8) & 0xFF) / 255.0f;
-    float b = float((seed >> 16) & 0xFF) / 255.0f;
-
-    return float4(r, g, b, 1.0f);
-}
-
 static const float COLOR_SCALE = 4096.0f;
 static const float3 LUMA = float3(0.299f, 0.587f, 0.114f);
 static const int    KERNEL_RADIUS = 6;
@@ -139,7 +120,6 @@ float4 kuwahara_filter(int2 coord, uint w, uint h) {
 }
 
 
-	/*
 float4 fs_main(VertexOutput input) : SV_Target {
     uint w = push_constants.screen_width;
     uint h = push_constants.screen_height;
@@ -164,4 +144,3 @@ float4 fs_main(VertexOutput input) : SV_Target {
 
     return float4(color, alpha);
 }
-	*/

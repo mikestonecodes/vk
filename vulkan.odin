@@ -543,7 +543,7 @@ vulkan_init :: proc() -> bool {
 	)
 
 	vk.load_proc_addresses_instance(instance)
-	init_window()
+	init_window(instance)
 	setup_physical_device() or_return
 	create_logical_device() or_return
 	vk.load_proc_addresses_device(device)

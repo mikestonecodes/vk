@@ -2,7 +2,6 @@ package main
 
 import "core:os"
 import "core:time"
-import "vendor:glfw"
 
 main :: proc() {
 	for arg in os.args[1:] {

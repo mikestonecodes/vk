@@ -149,7 +149,7 @@ resize :: proc() -> bool  {
 }
 
 record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
-//	compute(frame)
+	compute(frame)
 	graphics(frame, element)
 }
 
