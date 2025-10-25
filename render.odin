@@ -1,7 +1,5 @@
 package main
 
-import vk "vendor:vulkan"
-
 COMPUTE_GROUP_SIZE :: u32(128)
 PIPELINE_COUNT :: 2
 // Physics configuration
@@ -104,13 +102,6 @@ buffer_specs := []struct {
 	{DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size, {.STORAGE_BUFFER}, 31, {.COMPUTE}}, //grid_offset
 	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 32, {.COMPUTE}}, //grid_scan
 	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 33, {.COMPUTE}}, //body_grid_index
-}
-
-DescriptorBindingSpec :: struct {
-	binding:          u32,
-	descriptor_type:  DescriptorType,
-	descriptor_count: u32,
-	stage_flags:      ShaderStageFlags,
 }
 
 global_descriptor_extras :: []DescriptorBindingSpec {

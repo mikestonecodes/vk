@@ -113,7 +113,8 @@ DEBUG: GLFW platform setup complete
 Validation Warning: [ BestPractices-deprecated-extension ] | MessageID = 0xda8260ba
 vkCreateDevice(): Attempting to enable deprecated extension VK_EXT_swapchain_maintenance1, but this extension has been promoted to VK_KHR_swapchain_maintenance1.
 Objects: 1
-    [0] VkInstance 0x3971e80
+    [0] VkInstance 0x2815ff20
 
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x190000000019 to a memory block which is fully consumed by the buffer. The required size of the allocation is 32, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
 ↻ Shader changed, reloading...
+Window resized to 1856x1016

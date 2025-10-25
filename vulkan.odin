@@ -6,6 +6,64 @@ import "vendor:glfw"
 import vk "vendor:vulkan"
 
 //───────────────────────────
+// TYPE MAPPINGS (for vulkan package files)
+//───────────────────────────
+DeviceSize :: vk.DeviceSize
+BufferUsageFlags :: vk.BufferUsageFlags
+ShaderStageFlags :: vk.ShaderStageFlags
+DescriptorType :: vk.DescriptorType
+
+BufferResource :: struct {
+	buffer: vk.Buffer,
+	memory: vk.DeviceMemory,
+	size:   vk.DeviceSize,
+}
+
+TextureResource :: struct {
+	image:   vk.Image,
+	memory:  vk.DeviceMemory,
+	view:    vk.ImageView,
+	sampler: vk.Sampler,
+}
+
+CommandEncoder :: struct {
+	command_buffer: vk.CommandBuffer,
+}
+
+FrameInputs :: struct {
+	cmd:        vk.CommandBuffer,
+	time:       f32,
+	delta_time: f32,
+}
+
+SwapchainElement :: struct {
+	commandBuffer: vk.CommandBuffer,
+	image:         vk.Image,
+	imageView:     vk.ImageView,
+	layout:        vk.ImageLayout,
+}
+
+PushConstantInfo :: struct {
+	label: string,
+	stage: vk.ShaderStageFlags,
+	size:  u32,
+}
+
+ShaderProgramConfig :: struct {
+	compute_module:  string,
+	vertex_module:   string,
+	fragment_module: string,
+	push:            PushConstantInfo,
+}
+
+DescriptorBindingSpec :: struct {
+	binding:          u32,
+	descriptor_type:  vk.DescriptorType,
+	descriptor_count: u32,
+	stage_flags:      vk.ShaderStageFlags,
+}
+
+//───────────────────────────
 // GLOBALS
 //───────────────────────────
 ENABLE_VALIDATION := true
@@ -32,26 +90,6 @@ current_frame: u32 = 0
 
 MAX_SWAPCHAIN_IMAGES :: 4
 elements: [MAX_SWAPCHAIN_IMAGES]SwapchainElement
-
-SwapchainElement :: struct {
-	commandBuffer: vk.CommandBuffer,
-	image:         vk.Image,
-	imageView:     vk.ImageView,
-	layout:        vk.ImageLayout,
-}
-
-// buffer/texture structs exported for other files
-BufferResource :: struct {
-	buffer: vk.Buffer,
-	memory: vk.DeviceMemory,
-	size:   vk.DeviceSize,
-}
-TextureResource :: struct {
-	image:   vk.Image,
-	memory:  vk.DeviceMemory,
-	view:    vk.ImageView,
-	sampler: vk.Sampler,
-}
 
 //───────────────────────────
 // WRAPPERS
@@ -617,6 +655,7 @@ handle_resize :: proc() {
 }
 destroy_swapchain :: proc() {
 	for i in 0 ..< MAX_SWAPCHAIN_IMAGES {
+		if elements[i].commandBuffer != {} do vk.FreeCommandBuffers(device, command_pool, 1, &elements[i].commandBuffer)
 		if elements[i].imageView != {} do vk.DestroyImageView(device, elements[i].imageView, nil)
 		elements[i] = SwapchainElement{}
 	}

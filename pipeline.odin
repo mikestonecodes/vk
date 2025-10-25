@@ -13,47 +13,14 @@ import vk "vendor:vulkan"
 
 
 // ============================================================================
-// Type Aliases
+// Vulkan-Specific Structs (not in backend abstraction)
 // ============================================================================
-DeviceSize :: vk.DeviceSize
-
-BufferUsageFlags :: vk.BufferUsageFlags
-ShaderStageFlags :: vk.ShaderStageFlags
-DescriptorType :: vk.DescriptorType
-
-
-// ============================================================================
-// Structs
-// ============================================================================
-CommandEncoder :: struct {
-	command_buffer: vk.CommandBuffer,
-}
-
-FrameInputs :: struct {
-	cmd:        vk.CommandBuffer,
-	time:       f32,
-	delta_time: f32,
-}
-
 ShaderProgram :: struct {
 	layout:      vk.PipelineLayout,
 	push_stage:  vk.ShaderStageFlags,
 	stage_count: u32,
 	stages:      [3]vk.ShaderStageFlags,
 	shaders:     [3]vk.ShaderEXT,
-}
-
-PushConstantInfo :: struct {
-	label: string,
-	stage: vk.ShaderStageFlags,
-	size:  u32,
-}
-
-ShaderProgramConfig :: struct {
-	compute_module:  string,
-	vertex_module:   string,
-	fragment_module: string,
-	push:            PushConstantInfo,
 }
 
 
@@ -64,7 +31,7 @@ buffers: Array(32, BufferResource)
 last_frame_time: f32
 shaders_ready: bool
 
-render_shader_states: [PIPELINE_COUNT]ShaderProgram
+render_shader_states: [8]ShaderProgram
 
 // Global bindless set
 global_desc_layout: vk.DescriptorSetLayout
