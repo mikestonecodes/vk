@@ -606,7 +606,7 @@ begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 				imageLayout = .ATTACHMENT_OPTIMAL,
 				loadOp = .CLEAR,
 				storeOp = .STORE,
-				clearValue = vk.ClearValue{color = {float32 = {0, 0, 0, 1}}},
+				clearValue = vk.ClearValue{color = {float32 = {1, 0, 0, 1}}},
 			},
 		},
 	)
@@ -629,7 +629,7 @@ begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 		1,
 		&vk.Rect2D{offset = {0, 0}, extent = {window_width, window_height}},
 	)
-	vk.CmdSetPrimitiveTopology(frame.cmd, vk.PrimitiveTopology.TRIANGLE_LIST)
+	vk.CmdSetPrimitiveTopology(frame.cmd, vk.PrimitiveTopology.TRIANGLE_FAN)
 	vk.CmdSetFrontFace(frame.cmd, vk.FrontFace.CLOCKWISE)
 	vk.CmdSetPolygonModeEXT(frame.cmd, vk.PolygonMode.FILL)
 	vk.CmdSetRasterizerDiscardEnable(frame.cmd, b32(false))

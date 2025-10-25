@@ -7,8 +7,8 @@ import "vendor:glfw"
 
 // Global window state
 window: glfw.WindowHandle
-window_width: u32 = 800
-window_height: u32 = 600
+window_width: u32 = 1
+window_height: u32 = 1
 should_quit_key: bool = false
 
 // Input state
@@ -37,9 +37,14 @@ cursor_pos_callback :: proc "c" (window: glfw.WindowHandle, xpos, ypos: f64) {
 
 window_size_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
 	context = runtime.default_context()
+
+	fb_width, fb_height := glfw.GetFramebufferSize(window)
+	fmt.println("Framebuffer size:", fb_width, "x", fb_height)
 	// Use window size, not framebuffer size
 	window_width = u32(width)
 	window_height = u32(height)
+
+	fmt.println("Window size:", width, "x", height)
 	handle_resize()
 }
 
@@ -61,12 +66,15 @@ init_platform :: proc() -> bool {
 
 	// Don't create an OpenGL context
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
-	window = glfw.CreateWindow(i32(window_width), i32(window_height), "Vulkan with GLFW", nil, nil)
-	if window == nil {
-		fmt.println("Failed to create GLFW window")
-		glfw.Terminate()
-		return false
-	}
+	glfw.WindowHint(glfw.RESIZABLE, glfw.TRUE)
+	glfw.WindowHint(glfw.DOUBLEBUFFER, glfw.FALSE)
+	glfw.WindowHint(glfw.REFRESH_RATE, glfw.DONT_CARE)
+	glfw.WindowHint(glfw.SCALE_FRAMEBUFFER, glfw.FALSE)
+	glfw.WindowHint(glfw.SCALE_TO_MONITOR, glfw.FALSE)
+	glfw.WindowHint(glfw.DECORATED, glfw.FALSE)
+	if ENABLE_VALIDATION do glfw.WindowHint(glfw.CONTEXT_DEBUG, glfw.TRUE)
+
+	window = glfw.CreateWindow(1, 1, "CHAIN OVER", nil, nil)
 
 	// Check both window size and framebuffer size
 	win_w, win_h := glfw.GetWindowSize(window)
@@ -76,7 +84,7 @@ init_platform :: proc() -> bool {
 	window_height = u32(win_h)
 
 	// Set up callbacks
-	glfw.SetWindowSizeCallback(window, window_size_callback)
+	glfw.SetFramebufferSizeCallback(window, window_size_callback)
 	glfw.SetKeyCallback(window, key_callback)
 	glfw.SetMouseButtonCallback(window, mouse_button_callback)
 	glfw.SetCursorPosCallback(window, cursor_pos_callback)

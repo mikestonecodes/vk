@@ -592,19 +592,6 @@ handle_resize :: proc() {
 	destroy_swapchain()
 	create_swapchain()
 
-	for i in 0 ..< image_count {
-		vk.AllocateCommandBuffers(
-			device,
-			&vk.CommandBufferAllocateInfo{
-				sType = .COMMAND_BUFFER_ALLOCATE_INFO,
-				commandPool = command_pool,
-				level = .PRIMARY,
-				commandBufferCount = 1,
-			},
-			&elements[i].commandBuffer,
-		)
-	}
-
 	resize()
 }
 
