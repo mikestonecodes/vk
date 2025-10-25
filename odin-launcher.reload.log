@@ -109,3 +109,5 @@ Wayland window ready
 [INFO]            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 [VERBOSE] Copying old device 0 into new device 0
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x170000000017 to a memory block which is fully consumed by the buffer. The required size of the allocation is 32, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
+[VERBOSE] Unloading layer library /usr/lib/libVkLayer_MESA_device_select.so
+[VERBOSE] Unloading layer library /usr/lib/libVkLayer_khronos_validation.so

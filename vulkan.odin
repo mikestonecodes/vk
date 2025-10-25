@@ -306,10 +306,8 @@ create_swapchain :: proc() -> bool {
 	if caps.currentExtent.width != cast(u32)0xFFFFFFFF {
 		swapchain_extent = caps.currentExtent
 	} else {
-		w := window_width if window_width > 0 else u32(800)
-		h := window_height if window_height > 0 else u32(600)
-		swapchain_extent.width = clamp(w, caps.minImageExtent.width, caps.maxImageExtent.width)
-		swapchain_extent.height = clamp(h, caps.minImageExtent.height, caps.maxImageExtent.height)
+		swapchain_extent.width = window_width
+		swapchain_extent.height = window_height
 	}
 	// query formats
 	fmt_count: u32
