@@ -94,7 +94,6 @@ DEBUG: GLFW platform setup complete
 [INFO]            Library:  /usr/lib/libVkLayer_khronos_validation.so
 [INFO]      ||
 [INFO]    <Drivers>
-[WARNING] vkCreateInstance(): Attempting to enable deprecated extension VK_EXT_surface_maintenance1, but this extension has been promoted to VK_KHR_surface_maintenance1.
 [WARNING] vkCreateInstance(): Attempting to enable extension VK_EXT_debug_utils, but this extension is intended to support use by applications when debugging and it is strongly recommended that it be otherwise avoided.
 [INFO] vkCreateInstance(): Khronos Validation Layer Active:
     Current Enables: VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT, VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT.
@@ -111,10 +110,4 @@ DEBUG: GLFW platform setup complete
 [INFO]      Sorted order:
 [INFO]            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 [VERBOSE] Copying old device 0 into new device 0
-Validation Warning: [ BestPractices-deprecated-extension ] | MessageID = 0xda8260ba
-vkCreateDevice(): Attempting to enable deprecated extension VK_EXT_swapchain_maintenance1, but this extension has been promoted to VK_KHR_swapchain_maintenance1.
-Objects: 1
-    [0] VkInstance 0x3d8eb540
-
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x170000000017 to a memory block which is fully consumed by the buffer. The required size of the allocation is 32, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
-Window resized to 1856x1016

@@ -16,7 +16,6 @@ should_quit_key: bool = false
 key_states: [512]bool
 mouse_states: [8]bool
 mouse_x, mouse_y: f64
-scroll_x, scroll_y: f64
 
 // Callback implementations
 key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
@@ -36,22 +35,14 @@ cursor_pos_callback :: proc "c" (window: glfw.WindowHandle, xpos, ypos: f64) {
 	mouse_y = ypos
 }
 
-scroll_callback :: proc "c" (window: glfw.WindowHandle, xoffset, yoffset: f64) {
-	scroll_x += xoffset
-	scroll_y += yoffset
-}
 
 window_size_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
-	context = runtime.default_context()
 	window_width = u32(width)
 	window_height = u32(height)
-	fmt.printf("Window resized to %dx%d\n", width, height)
 	resize_needed = true
 }
 
 error_callback :: proc "c" (error_code: i32, description: cstring) {
-	context = runtime.default_context()
-	fmt.printf("GLFW Error %d: %s\n", error_code, description)
 }
 
 // Platform interface implementation
@@ -81,7 +72,6 @@ init_platform :: proc() -> bool {
 	glfw.SetKeyCallback(window, key_callback)
 	glfw.SetMouseButtonCallback(window, mouse_button_callback)
 	glfw.SetCursorPosCallback(window, cursor_pos_callback)
-	glfw.SetScrollCallback(window, scroll_callback)
 
 	fmt.println("DEBUG: GLFW platform setup complete")
 	return true

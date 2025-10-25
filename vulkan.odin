@@ -201,9 +201,6 @@ get_instance_extensions :: proc() -> []cstring {
 	for ext in get_required_instance_extensions(){
 		array_push(&instance_extensions, ext)
 	}
-	array_push(&instance_extensions, "VK_KHR_get_surface_capabilities2")
-	array_push(&instance_extensions, "VK_EXT_surface_maintenance1")
-	// Required by VK_EXT_swapchain_maintenance1
 	if ENABLE_VALIDATION {
 		array_push(&instance_extensions, "VK_EXT_debug_utils")
 		array_push(&instance_extensions, "VK_EXT_layer_settings")
@@ -254,13 +251,9 @@ create_logical_device :: proc() -> bool {
 		queueCount       = 1,
 		pQueuePriorities = &qp,
 	}
-	feat_swapchain_maintenance := vk.PhysicalDeviceSwapchainMaintenance1FeaturesEXT {
-		sType                 = .PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT,
-		swapchainMaintenance1 = true,
-	}
+
 	feat_shader_obj := vk.PhysicalDeviceShaderObjectFeaturesEXT {
 		sType        = .PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT,
-		pNext        = &feat_swapchain_maintenance,
 		shaderObject = true,
 	}
 	feat_dyn := vk.PhysicalDeviceDynamicRenderingFeatures {
@@ -273,24 +266,13 @@ create_logical_device :: proc() -> bool {
 		pNext            = &feat_dyn,
 		synchronization2 = true,
 	}
-	feat_12 := vk.PhysicalDeviceVulkan12Features {
-		sType                  = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-		pNext                  = &feat_sync,
-		descriptorIndexing     = true,
-		runtimeDescriptorArray = true,
-	}
-	feats := vk.PhysicalDeviceFeatures2 {
-		sType = .PHYSICAL_DEVICE_FEATURES_2,
-		pNext = &feat_12,
-		features = vk.PhysicalDeviceFeatures{fragmentStoresAndAtomics = true},
-	}
 
 	//Device extensions
-	exts := [?]cstring{"VK_KHR_swapchain", "VK_EXT_swapchain_maintenance1", "VK_EXT_shader_object"}
+	exts := [?]cstring{"VK_KHR_swapchain", "VK_EXT_shader_object"}
 	layers := [1]cstring{"VK_LAYER_KHRONOS_validation"}
 	info := vk.DeviceCreateInfo {
 		sType                   = .DEVICE_CREATE_INFO,
-		pNext                   = &feats,
+		pNext                   = &feat_sync,
 		queueCreateInfoCount    = 1,
 		pQueueCreateInfos       = &qinfo,
 		enabledExtensionCount   = u32(len(exts)),
@@ -343,19 +325,12 @@ create_swapchain :: proc() -> bool {
 	pms := make([]vk.PresentModeKHR, pm_count)
 	vk.GetPhysicalDeviceSurfacePresentModesKHR(phys_device, vulkan_surface, &pm_count, &pms[0])
 
-	present_mode := vk.PresentModeKHR.MAILBOX // spec-safe default
+	present_mode := vk.PresentModeKHR.MAILBOX
 
 	img_count := clamp(caps.minImageCount + 1, caps.minImageCount, caps.maxImageCount)
 
-	present_modes_info := vk.SwapchainPresentModesCreateInfoEXT {
-		sType            = .SWAPCHAIN_PRESENT_MODES_CREATE_INFO_EXT,
-		presentModeCount = 1,
-		pPresentModes    = &present_mode,
-	}
-
 	sc_info := vk.SwapchainCreateInfoKHR {
 		sType            = .SWAPCHAIN_CREATE_INFO_KHR,
-		pNext            = &present_modes_info,
 		surface          = vulkan_surface,
 		minImageCount    = img_count,
 		imageFormat      = format,
