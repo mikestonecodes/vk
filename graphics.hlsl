@@ -136,7 +136,8 @@ float4 fs_main(VertexOutput input) : SV_Target {
 
     float accumDensity = saturate(max(center_sample.a, filtered.a));
     if (accumDensity < 1e-6f) {
-        return float4(0.0f, 0.0f, 0.0f, 1.0f);
+        // Return a test pattern to verify rendering works
+        return float4(uv.x, uv.y, 0.5f, 1.0f);
     }
     float3 blended = lerp(center_sample.rgb, filtered.rgb, 0.7f);
     float3 color = ACESFilm(adjust_saturation(saturate(blended), 1.2f));

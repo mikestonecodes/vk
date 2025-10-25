@@ -114,6 +114,13 @@ init_sync_objects :: proc() -> bool {
 
 
 render_frame :: proc(start_time: time.Time) -> bool {
+	// Check if window was resized
+	if window_resized {
+		window_resized = false
+		handle_resize()
+		return true
+	}
+
 	// Wait until this frame's fence signals (GPU done with this slot)
 	vk.WaitForFences(device, 1, &in_flight_fences[current_frame], true, max(u64))
 	vk.ResetFences(device, 1, &in_flight_fences[current_frame])
@@ -128,7 +135,13 @@ render_frame :: proc(start_time: time.Time) -> bool {
 		&image_index,
 	)
 
-
+	if result == .ERROR_OUT_OF_DATE_KHR {
+		handle_resize()
+		return true
+	}
+	if result != .SUCCESS && result != .SUBOPTIMAL_KHR {
+		return false
+	}
 	e := &elements[image_index]
 
 	// Record work
@@ -285,10 +298,19 @@ debug_callback :: proc "system" (
 // SWAPCHAIN
 //───────────────────────────
 
+swapchain_extent: vk.Extent2D
 create_swapchain :: proc() -> bool {
 	caps: vk.SurfaceCapabilitiesKHR
 	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(phys_device, vulkan_surface, &caps)
 
+	if caps.currentExtent.width != cast(u32)0xFFFFFFFF {
+		swapchain_extent = caps.currentExtent
+	} else {
+		w := window_width if window_width > 0 else u32(800)
+		h := window_height if window_height > 0 else u32(600)
+		swapchain_extent.width = clamp(w, caps.minImageExtent.width, caps.maxImageExtent.width)
+		swapchain_extent.height = clamp(h, caps.minImageExtent.height, caps.maxImageExtent.height)
+	}
 	// query formats
 	fmt_count: u32
 	vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &fmt_count, nil)
@@ -310,7 +332,7 @@ create_swapchain :: proc() -> bool {
 		minImageCount    = img_count,
 		imageFormat      = surface_fmt.format,
 		imageColorSpace  = surface_fmt.colorSpace,
-		imageExtent      = {window_width, window_height},
+		imageExtent      = swapchain_extent,
 		imageArrayLayers = 1,
 		imageUsage       = {.COLOR_ATTACHMENT},
 		preTransform     = caps.currentTransform,
@@ -333,17 +355,18 @@ create_swapchain :: proc() -> bool {
 		e := &elements[i]
 		e.image = imgs[i]
 		if vk.CreateImageView(
-			device,
-			&vk.ImageViewCreateInfo {
-				sType = .IMAGE_VIEW_CREATE_INFO,
-				image = imgs[i],
-				viewType = .D2,
-				format = surface_fmt.format,
-				subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
-			},
-			nil,
-			&e.imageView,
-		) != .SUCCESS {
+			   device,
+			   &vk.ImageViewCreateInfo {
+				   sType = .IMAGE_VIEW_CREATE_INFO,
+				   image = imgs[i],
+				   viewType = .D2,
+				   format = surface_fmt.format,
+				   subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+			   },
+			   nil,
+			   &e.imageView,
+		   ) !=
+		   .SUCCESS {
 			fmt.printf("Create failed: %s\n", "view")
 			continue
 		}
@@ -566,16 +589,17 @@ vulkan_init :: proc() -> bool {
 	}
 
 	if vk.CreateCommandPool(
-		device,
-		&vk.CommandPoolCreateInfo {
-			.COMMAND_POOL_CREATE_INFO,
-			nil,
-			{.RESET_COMMAND_BUFFER},
-			queue_family_index,
-		},
-		nil,
-		&command_pool,
-	) != .SUCCESS {
+		   device,
+		   &vk.CommandPoolCreateInfo {
+			   .COMMAND_POOL_CREATE_INFO,
+			   nil,
+			   {.RESET_COMMAND_BUFFER},
+			   queue_family_index,
+		   },
+		   nil,
+		   &command_pool,
+	   ) !=
+	   .SUCCESS {
 		fmt.printf("Create failed: %s\n", "cmd pool")
 		return false
 	}

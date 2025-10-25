@@ -204,15 +204,16 @@ init_global_descriptors :: proc() -> bool {
 	}
 
 	if vk.CreateDescriptorSetLayout(
-		device,
-		&vk.DescriptorSetLayoutCreateInfo {
-			sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-			bindingCount = u32(binding_count),
-			pBindings = bindings_ptr,
-		},
-		nil,
-		&global_desc_layout,
-	) != .SUCCESS {
+		   device,
+		   &vk.DescriptorSetLayoutCreateInfo {
+			   sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			   bindingCount = u32(binding_count),
+			   pBindings = bindings_ptr,
+		   },
+		   nil,
+		   &global_desc_layout,
+	   ) !=
+	   .SUCCESS {
 		fmt.printf("Create failed: %s\n", "global descriptor set layout")
 		return false
 	}
@@ -260,30 +261,32 @@ init_global_descriptors :: proc() -> bool {
 		pool_sizes_ptr = &pool_sizes[0]
 	}
 	if vk.CreateDescriptorPool(
-		device,
-		&vk.DescriptorPoolCreateInfo {
-			sType = .DESCRIPTOR_POOL_CREATE_INFO,
-			maxSets = 1,
-			poolSizeCount = pool_count,
-			pPoolSizes = pool_sizes_ptr,
-		},
-		nil,
-		&global_desc_pool,
-	) != .SUCCESS {
+		   device,
+		   &vk.DescriptorPoolCreateInfo {
+			   sType = .DESCRIPTOR_POOL_CREATE_INFO,
+			   maxSets = 1,
+			   poolSizeCount = pool_count,
+			   pPoolSizes = pool_sizes_ptr,
+		   },
+		   nil,
+		   &global_desc_pool,
+	   ) !=
+	   .SUCCESS {
 		fmt.printf("Create failed: %s\n", "global descriptor pool")
 		return false
 	}
 
 	if vk.AllocateDescriptorSets(
-		device,
-		&vk.DescriptorSetAllocateInfo {
-			sType = .DESCRIPTOR_SET_ALLOCATE_INFO,
-			descriptorPool = global_desc_pool,
-			descriptorSetCount = 1,
-			pSetLayouts = &global_desc_layout,
-		},
-		&global_desc_set,
-	) != .SUCCESS {
+		   device,
+		   &vk.DescriptorSetAllocateInfo {
+			   sType = .DESCRIPTOR_SET_ALLOCATE_INFO,
+			   descriptorPool = global_desc_pool,
+			   descriptorSetCount = 1,
+			   pSetLayouts = &global_desc_layout,
+		   },
+		   &global_desc_set,
+	   ) !=
+	   .SUCCESS {
 		fmt.printf("Alloc failed: %s\n", "global descriptor set")
 		return false
 	}
@@ -325,17 +328,18 @@ make_shader_layout :: proc(push: ^PushConstantInfo) -> (layout: vk.PipelineLayou
 	}
 	layouts := [1]vk.DescriptorSetLayout{global_desc_layout}
 	if vk.CreatePipelineLayout(
-		device,
-		&vk.PipelineLayoutCreateInfo {
-			sType = .PIPELINE_LAYOUT_CREATE_INFO,
-			setLayoutCount = 1,
-			pSetLayouts = &layouts[0],
-			pushConstantRangeCount = count,
-			pPushConstantRanges = count > 0 ? &ranges[0] : nil,
-		},
-		nil,
-		&layout,
-	) != .SUCCESS {
+		   device,
+		   &vk.PipelineLayoutCreateInfo {
+			   sType = .PIPELINE_LAYOUT_CREATE_INFO,
+			   setLayoutCount = 1,
+			   pSetLayouts = &layouts[0],
+			   pushConstantRangeCount = count,
+			   pPushConstantRanges = count > 0 ? &ranges[0] : nil,
+		   },
+		   nil,
+		   &layout,
+	   ) !=
+	   .SUCCESS {
 		fmt.printf("Create failed: %s\n", "shader layout")
 		return {}, false
 	}
@@ -597,7 +601,7 @@ begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 		frame.cmd,
 		&vk.RenderingInfo {
 			sType = .RENDERING_INFO,
-			renderArea = {{0, 0}, {window_width, window_height}},
+			renderArea = {{0, 0}, {swapchain_extent.width, swapchain_extent.height}},
 			layerCount = 1,
 			colorAttachmentCount = 1,
 			pColorAttachments = &vk.RenderingAttachmentInfo {
@@ -617,8 +621,8 @@ begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 		&vk.Viewport {
 			x = 0,
 			y = 0,
-			width = f32(window_width),
-			height = f32(window_height),
+			width = f32(swapchain_extent.width),
+			height = f32(swapchain_extent.height),
 			minDepth = 0,
 			maxDepth = 1,
 		},
@@ -627,7 +631,7 @@ begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 	vk.CmdSetScissorWithCount(
 		frame.cmd,
 		1,
-		&vk.Rect2D{offset = {0, 0}, extent = {window_width, window_height}},
+		&vk.Rect2D{offset = {0, 0}, extent = {swapchain_extent.width, swapchain_extent.height}},
 	)
 	vk.CmdSetPrimitiveTopology(frame.cmd, vk.PrimitiveTopology.TRIANGLE_FAN)
 	vk.CmdSetFrontFace(frame.cmd, vk.FrontFace.CLOCKWISE)

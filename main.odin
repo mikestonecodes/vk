@@ -18,8 +18,8 @@ main :: proc() {
 
 
 	for should_quit() == false {
+		poll_events()
 		check_shader_reload()
 		render_frame(start_time)
-		poll_events()
 	}
 }
