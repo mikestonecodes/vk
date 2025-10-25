@@ -80,14 +80,14 @@ width, height: u32
 image_index, image_count: u32
 debug_messenger: vk.DebugUtilsMessengerEXT
 
-MAX_FRAMES_IN_FLIGHT :: 3
+MAX_FRAMES_IN_FLIGHT :: 2
+MAX_SWAPCHAIN_IMAGES :: 3
 
 image_available_semaphores: [MAX_FRAMES_IN_FLIGHT]vk.Semaphore
 in_flight_fences: [MAX_FRAMES_IN_FLIGHT]vk.Fence
 
 current_frame: u32 = 0
 
-MAX_SWAPCHAIN_IMAGES :: 4
 render_finished_semaphores: [MAX_SWAPCHAIN_IMAGES]vk.Semaphore
 elements: [MAX_SWAPCHAIN_IMAGES]SwapchainElement
 
@@ -353,10 +353,7 @@ create_swapchain :: proc() -> bool {
 	pms := make([]vk.PresentModeKHR, pm_count)
 	vk.GetPhysicalDeviceSurfacePresentModesKHR(phys_device, vulkan_surface, &pm_count, &pms[0])
 
-	present_mode := vk.PresentModeKHR.FIFO // spec-safe default
-	for m in pms {
-		if m == .IMMEDIATE {present_mode = .IMMEDIATE;break}
-	}
+	present_mode := vk.PresentModeKHR.MAILBOX // spec-safe default
 
 	img_count := clamp(caps.minImageCount + 1, caps.minImageCount, caps.maxImageCount)
 
@@ -639,7 +636,6 @@ handle_resize :: proc() {
 		// Wait for GPU to finish all work before destroying resources
 		vk.DeviceWaitIdle(device)
 
-		resize()
 		destroy_swapchain()
 		if !create_swapchain() {
 			return
@@ -649,6 +645,9 @@ handle_resize :: proc() {
 			runtime.assert(false, "width and height must be greater than 0")
 			return
 		}
+
+		// Resize buffers AFTER swapchain is created so width/height are updated
+		resize()
 		// Recreate offscreen resources with new dimensions (handled by render init)
 		//	init_render_resources()
 

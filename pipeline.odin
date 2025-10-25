@@ -79,6 +79,9 @@ begin_encoding :: proc(element: ^SwapchainElement) -> CommandEncoder {
 		command_buffer = element.commandBuffer,
 	}
 
+	// Reset command buffer to ensure it's not in pending state
+	vk.ResetCommandBuffer(encoder.command_buffer, {})
+
 	begin_info := vk.CommandBufferBeginInfo {
 		sType = .COMMAND_BUFFER_BEGIN_INFO,
 		flags = {.ONE_TIME_SUBMIT},
@@ -519,7 +522,7 @@ check_shader_reload :: proc() {
 	}
 
 	if reload {
-		fmt.println("↻ Shader changed, reloading...")
+		fmt.println("Shader changed, reloading...")
 		vk.DeviceWaitIdle(device)
 		cleanup_shaders()
 		init_shaders()
@@ -581,7 +584,6 @@ dispatch_compute :: proc(frame: FrameInputs, task: DispatchMode, count: u32) {
 // ============================================================================
 begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 
-
 	vk.CmdBeginRendering(
 		frame.cmd,
 		&vk.RenderingInfo {
@@ -606,8 +608,8 @@ begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 		&vk.Viewport {
 			x = 0,
 			y = 0,
-			width = f32(window_width),
-			height = f32(window_height),
+			width = f32(width),
+			height = f32(height),
 			minDepth = 0,
 			maxDepth = 1,
 		},
@@ -615,7 +617,7 @@ begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 	vk.CmdSetScissorWithCount(
 		frame.cmd,
 		1,
-		&vk.Rect2D{offset = {0, 0}, extent = {u32(window_width), u32(window_height)}},
+		&vk.Rect2D{offset = {0, 0}, extent = {width, height}},
 	)
 	vk.CmdSetPrimitiveTopology(frame.cmd, vk.PrimitiveTopology.TRIANGLE_LIST)
 	vk.CmdSetFrontFace(frame.cmd, vk.FrontFace.CLOCKWISE)
