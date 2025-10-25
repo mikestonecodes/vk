@@ -9,7 +9,6 @@ import "vendor:glfw"
 window: glfw.WindowHandle
 window_width: u32 = 800
 window_height: u32 = 600
-resize_needed: bool = false
 should_quit_key: bool = false
 
 // Input state
@@ -37,9 +36,11 @@ cursor_pos_callback :: proc "c" (window: glfw.WindowHandle, xpos, ypos: f64) {
 
 
 window_size_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
+	context = runtime.default_context()
+	// Use window size, not framebuffer size
 	window_width = u32(width)
 	window_height = u32(height)
-	resize_needed = true
+	handle_resize()
 }
 
 error_callback :: proc "c" (error_code: i32, description: cstring) {
@@ -67,6 +68,13 @@ init_platform :: proc() -> bool {
 		return false
 	}
 
+	// Check both window size and framebuffer size
+	win_w, win_h := glfw.GetWindowSize(window)
+
+	// Use window size for Vulkan, not framebuffer
+	window_width = u32(win_w)
+	window_height = u32(win_h)
+
 	// Set up callbacks
 	glfw.SetWindowSizeCallback(window, window_size_callback)
 	glfw.SetKeyCallback(window, key_callback)
@@ -77,7 +85,7 @@ init_platform :: proc() -> bool {
 	return true
 }
 get_instance_proc_address :: proc() -> rawptr {
-    return rawptr(glfw.GetInstanceProcAddress)
+	return rawptr(glfw.GetInstanceProcAddress)
 }
 get_required_instance_extensions :: proc() -> []cstring {
 	return glfw.GetRequiredInstanceExtensions()
@@ -107,4 +115,3 @@ is_key_pressed :: proc(key: i32) -> bool {
 is_mouse_button_pressed :: proc(button: i32) -> bool {
 	return mouse_states[button]
 }
-

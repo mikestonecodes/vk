@@ -19,9 +19,8 @@ main :: proc() {
 
 
 	for should_quit() == false {
-		poll_events()
-		handle_resize()
 		check_shader_reload()
 		render_frame(start_time)
+		poll_events()
 	}
 }

@@ -203,17 +203,19 @@ init_global_descriptors :: proc() -> bool {
 		bindings_ptr = &bindings_slice[0]
 	}
 
-	global_desc_layout = vkw(
-		vk.CreateDescriptorSetLayout,
+	if vk.CreateDescriptorSetLayout(
 		device,
 		&vk.DescriptorSetLayoutCreateInfo {
 			sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 			bindingCount = u32(binding_count),
 			pBindings = bindings_ptr,
 		},
-		"global descriptor set layout",
-		vk.DescriptorSetLayout,
-	) or_return
+		nil,
+		&global_desc_layout,
+	) != .SUCCESS {
+		fmt.printf("Create failed: %s\n", "global descriptor set layout")
+		return false
+	}
 
 	storage_count: u32 = 0
 	sampled_image_count: u32 = 0
@@ -257,8 +259,7 @@ init_global_descriptors :: proc() -> bool {
 	if pool_count > 0 {
 		pool_sizes_ptr = &pool_sizes[0]
 	}
-	global_desc_pool = vkw(
-		vk.CreateDescriptorPool,
+	if vk.CreateDescriptorPool(
 		device,
 		&vk.DescriptorPoolCreateInfo {
 			sType = .DESCRIPTOR_POOL_CREATE_INFO,
@@ -266,12 +267,14 @@ init_global_descriptors :: proc() -> bool {
 			poolSizeCount = pool_count,
 			pPoolSizes = pool_sizes_ptr,
 		},
-		"global descriptor pool",
-		vk.DescriptorPool,
-	) or_return
+		nil,
+		&global_desc_pool,
+	) != .SUCCESS {
+		fmt.printf("Create failed: %s\n", "global descriptor pool")
+		return false
+	}
 
-	vkw(
-		vk.AllocateDescriptorSets,
+	if vk.AllocateDescriptorSets(
 		device,
 		&vk.DescriptorSetAllocateInfo {
 			sType = .DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -280,8 +283,10 @@ init_global_descriptors :: proc() -> bool {
 			pSetLayouts = &global_desc_layout,
 		},
 		&global_desc_set,
-		"global descriptor set",
-	) or_return
+	) != .SUCCESS {
+		fmt.printf("Alloc failed: %s\n", "global descriptor set")
+		return false
+	}
 
 	return true
 }
@@ -319,8 +324,7 @@ make_shader_layout :: proc(push: ^PushConstantInfo) -> (layout: vk.PipelineLayou
 		count = 1
 	}
 	layouts := [1]vk.DescriptorSetLayout{global_desc_layout}
-	return vkw(
-		vk.CreatePipelineLayout,
+	if vk.CreatePipelineLayout(
 		device,
 		&vk.PipelineLayoutCreateInfo {
 			sType = .PIPELINE_LAYOUT_CREATE_INFO,
@@ -329,9 +333,13 @@ make_shader_layout :: proc(push: ^PushConstantInfo) -> (layout: vk.PipelineLayou
 			pushConstantRangeCount = count,
 			pPushConstantRanges = count > 0 ? &ranges[0] : nil,
 		},
-		"shader layout",
-		vk.PipelineLayout,
-	)
+		nil,
+		&layout,
+	) != .SUCCESS {
+		fmt.printf("Create failed: %s\n", "shader layout")
+		return {}, false
+	}
+	return layout, true
 }
 
 load_shader :: proc(spv_path, stage_name: string) -> ([]u32, bool) {

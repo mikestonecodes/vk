@@ -91,24 +91,6 @@ render_finished_semaphores: [MAX_SWAPCHAIN_IMAGES]vk.Semaphore
 elements: [MAX_SWAPCHAIN_IMAGES]SwapchainElement
 
 //───────────────────────────
-// WRAPPERS
-//───────────────────────────
-vkw_create :: proc(call: $T, dev: vk.Device, info: ^$U, msg: string, $Out: typeid) -> (Out, bool) {
-	out: Out
-	if call(dev, info, nil, &out) !=
-	   .SUCCESS {fmt.printf("Create failed: %s\n", msg);return {}, false}
-	return out, true
-}
-vkw_allocate :: proc(call: $T, dev: vk.Device, info: ^$U, out: ^$Out, msg: string) -> bool {
-	if call(dev, info, out) != .SUCCESS {fmt.printf("Alloc failed: %s\n", msg);return false}
-	return true
-}
-vkw :: proc {
-	vkw_create,
-	vkw_allocate,
-}
-
-//───────────────────────────
 // SYNC + FRAME
 //───────────────────────────
 init_sync_objects :: proc() -> bool {
@@ -145,7 +127,7 @@ render_frame :: proc(start_time: time.Time) -> bool {
 		{},
 		&image_index,
 	)
-	if result == .ERROR_OUT_OF_DATE_KHR do return false
+
 
 	e := &elements[image_index]
 
@@ -198,13 +180,14 @@ instance_extensions: Array(16, cstring)
 get_instance_extensions :: proc() -> []cstring {
 	instance_extensions.len = 0
 
-	for ext in get_required_instance_extensions(){
+	for ext in get_required_instance_extensions() {
 		array_push(&instance_extensions, ext)
 	}
 	if ENABLE_VALIDATION {
 		array_push(&instance_extensions, "VK_EXT_debug_utils")
 		array_push(&instance_extensions, "VK_EXT_layer_settings")
 	}
+
 	return array_slice(&instance_extensions)
 }
 
@@ -306,77 +289,65 @@ create_swapchain :: proc() -> bool {
 	caps: vk.SurfaceCapabilitiesKHR
 	vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(phys_device, vulkan_surface, &caps)
 
-	// Surface formats (dynamic, no fixed [8])
+	// query formats
 	fmt_count: u32
 	vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &fmt_count, nil)
-	fmts := make([]vk.SurfaceFormatKHR, fmt_count)
+	if fmt_count == 0 do return false
+	if fmt_count > 16 do fmt_count = 16
+	fmts: [16]vk.SurfaceFormatKHR
 	vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &fmt_count, &fmts[0])
+	surface_fmt := fmts[0]
 
-	format = fmts[0].format
-	for f in fmts {
-		if f.format == .B8G8R8A8_SRGB && f.colorSpace == .SRGB_NONLINEAR {
-			format = f.format
-			break
-		}
+	// choose image count within limits
+	img_count := caps.minImageCount + 1
+	if caps.maxImageCount > 0 && img_count > caps.maxImageCount {
+		img_count = caps.maxImageCount
 	}
-
-	pm_count: u32
-	vk.GetPhysicalDeviceSurfacePresentModesKHR(phys_device, vulkan_surface, &pm_count, nil)
-	pms := make([]vk.PresentModeKHR, pm_count)
-	vk.GetPhysicalDeviceSurfacePresentModesKHR(phys_device, vulkan_surface, &pm_count, &pms[0])
-
-	present_mode := vk.PresentModeKHR.MAILBOX
-
-	img_count := clamp(caps.minImageCount + 1, caps.minImageCount, caps.maxImageCount)
 
 	sc_info := vk.SwapchainCreateInfoKHR {
 		sType            = .SWAPCHAIN_CREATE_INFO_KHR,
 		surface          = vulkan_surface,
 		minImageCount    = img_count,
-		imageFormat      = format,
-		imageColorSpace  = vk.ColorSpaceKHR.SRGB_NONLINEAR,
+		imageFormat      = surface_fmt.format,
+		imageColorSpace  = surface_fmt.colorSpace,
 		imageExtent      = {window_width, window_height},
 		imageArrayLayers = 1,
 		imageUsage       = {.COLOR_ATTACHMENT},
 		preTransform     = caps.currentTransform,
 		compositeAlpha   = {.OPAQUE},
-		presentMode      = present_mode,
+		presentMode      = .FIFO, // always valid
 		clipped          = true,
 	}
 
-	swapchain = vkw(
-		vk.CreateSwapchainKHR,
-		device,
-		&sc_info,
-		"swapchain",
-		vk.SwapchainKHR,
-	) or_return
-
-	vk.GetSwapchainImagesKHR(device, swapchain, &image_count, nil)
-	imgs := Array(MAX_SWAPCHAIN_IMAGES, vk.Image){}
-	for i in 0 ..< image_count {
-		array_push(&imgs, vk.Image{})
+	if vk.CreateSwapchainKHR(device, &sc_info, nil, &swapchain) != .SUCCESS {
+		fmt.printf("Create failed: %s\n", "swapchain")
+		return false
 	}
 
-	vk.GetSwapchainImagesKHR(device, swapchain, &image_count, raw_data(array_slice(&imgs)))
+	vk.GetSwapchainImagesKHR(device, swapchain, &image_count, nil)
+	if image_count > MAX_SWAPCHAIN_IMAGES do image_count = MAX_SWAPCHAIN_IMAGES
+	imgs: [MAX_SWAPCHAIN_IMAGES]vk.Image
+	vk.GetSwapchainImagesKHR(device, swapchain, &image_count, &imgs[0])
+
 	for i in 0 ..< image_count {
-		e := &elements[i];e.image = imgs.data[i]
-		e.imageView =
-		vkw(
-			vk.CreateImageView,
+		e := &elements[i]
+		e.image = imgs[i]
+		if vk.CreateImageView(
 			device,
 			&vk.ImageViewCreateInfo {
 				sType = .IMAGE_VIEW_CREATE_INFO,
-				image = imgs.data[i],
+				image = imgs[i],
 				viewType = .D2,
-				format = format,
+				format = surface_fmt.format,
 				subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
 			},
-			"view",
-			vk.ImageView,
-		) or_continue
-		vkw(
-			vk.AllocateCommandBuffers,
+			nil,
+			&e.imageView,
+		) != .SUCCESS {
+			fmt.printf("Create failed: %s\n", "view")
+			continue
+		}
+		vk.AllocateCommandBuffers(
 			device,
 			&vk.CommandBufferAllocateInfo {
 				sType = .COMMAND_BUFFER_ALLOCATE_INFO,
@@ -385,9 +356,8 @@ create_swapchain :: proc() -> bool {
 				commandBufferCount = 1,
 			},
 			&e.commandBuffer,
-			"cmd",
 		)
-		e.layout = vk.ImageLayout.UNDEFINED
+		e.layout = .UNDEFINED
 	}
 	return true
 }
@@ -595,8 +565,7 @@ vulkan_init :: proc() -> bool {
 		)
 	}
 
-	command_pool = vkw(
-		vk.CreateCommandPool,
+	if vk.CreateCommandPool(
 		device,
 		&vk.CommandPoolCreateInfo {
 			.COMMAND_POOL_CREATE_INFO,
@@ -604,26 +573,41 @@ vulkan_init :: proc() -> bool {
 			{.RESET_COMMAND_BUFFER},
 			queue_family_index,
 		},
-		"cmd pool",
-		vk.CommandPool,
-	) or_return
+		nil,
+		&command_pool,
+	) != .SUCCESS {
+		fmt.printf("Create failed: %s\n", "cmd pool")
+		return false
+	}
 
 	vk.DeviceWaitIdle(device)
 	create_swapchain() or_return
 	init_sync_objects() or_return
 	init_shaders() or_return
-	resize()
 	return true
 }
 
 handle_resize :: proc() {
-	if resize_needed {
-		vk.DeviceWaitIdle(device)
-		destroy_swapchain()
-		create_swapchain()
-		resize()
+	vk.DeviceWaitIdle(device)
+	destroy_swapchain()
+	create_swapchain()
+
+	for i in 0 ..< image_count {
+		vk.AllocateCommandBuffers(
+			device,
+			&vk.CommandBufferAllocateInfo{
+				sType = .COMMAND_BUFFER_ALLOCATE_INFO,
+				commandPool = command_pool,
+				level = .PRIMARY,
+				commandBufferCount = 1,
+			},
+			&elements[i].commandBuffer,
+		)
 	}
+
+	resize()
 }
+
 destroy_swapchain :: proc() {
 	for i in 0 ..< MAX_SWAPCHAIN_IMAGES {
 		if elements[i].commandBuffer != {} do vk.FreeCommandBuffers(device, command_pool, 1, &elements[i].commandBuffer)
