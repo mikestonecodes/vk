@@ -113,6 +113,8 @@ init_sync_objects :: proc() -> bool {
 }
 
 
+images_in_flight: [MAX_SWAPCHAIN_IMAGES]vk.Fence
+
 render_frame :: proc(start_time: time.Time) -> bool {
 	// Check if window was resized
 	if window_resized {
@@ -142,6 +144,14 @@ render_frame :: proc(start_time: time.Time) -> bool {
 	if result != .SUCCESS && result != .SUBOPTIMAL_KHR {
 		return false
 	}
+
+	if images_in_flight[image_index] != {} &&
+	   images_in_flight[image_index] != in_flight_fences[current_frame] {
+		vk.WaitForFences(device, 1, &images_in_flight[image_index], true, max(u64))
+	}
+	images_in_flight[image_index] = in_flight_fences[current_frame]
+
+
 	e := &elements[image_index]
 
 	// Record work
@@ -335,7 +345,7 @@ create_swapchain :: proc() -> bool {
 		imageUsage       = {.COLOR_ATTACHMENT},
 		preTransform     = caps.currentTransform,
 		compositeAlpha   = {.OPAQUE},
-		presentMode      = .FIFO, // always valid
+		presentMode      = .FIFO,
 		clipped          = true,
 	}
 
