@@ -338,7 +338,6 @@ create_swapchain :: proc() -> bool {
 		}
 	}
 
-	// Present modes (the warning you saw)
 	pm_count: u32
 	vk.GetPhysicalDeviceSurfacePresentModesKHR(phys_device, vulkan_surface, &pm_count, nil)
 	pms := make([]vk.PresentModeKHR, pm_count)
@@ -420,41 +419,47 @@ create_swapchain :: proc() -> bool {
 
 // simple image transition helper
 transition_to_render :: proc(cmd: vk.CommandBuffer, e: ^SwapchainElement) {
-    vk.CmdPipelineBarrier2(cmd, &vk.DependencyInfo{
-        sType = .DEPENDENCY_INFO,
-        imageMemoryBarrierCount = 1,
-        pImageMemoryBarriers = &vk.ImageMemoryBarrier2{
-            sType         = .IMAGE_MEMORY_BARRIER_2,
-            oldLayout     = e.layout,
-            newLayout     = .ATTACHMENT_OPTIMAL,
-            srcStageMask  = {.BOTTOM_OF_PIPE},
-            dstStageMask  = {.COLOR_ATTACHMENT_OUTPUT},
-            dstAccessMask = {.COLOR_ATTACHMENT_WRITE},
-            image         = e.image,
-            subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
-        },
-    })
-    e.layout = .ATTACHMENT_OPTIMAL
+
+	vk.CmdPipelineBarrier2(
+		cmd,
+		&vk.DependencyInfo {
+			sType = .DEPENDENCY_INFO,
+			imageMemoryBarrierCount = 1,
+			pImageMemoryBarriers = &vk.ImageMemoryBarrier2 {
+				sType = .IMAGE_MEMORY_BARRIER_2,
+				oldLayout = e.layout,
+				newLayout = .ATTACHMENT_OPTIMAL,
+				srcStageMask = {.BOTTOM_OF_PIPE},
+				dstStageMask = {.COLOR_ATTACHMENT_OUTPUT},
+				dstAccessMask = {.COLOR_ATTACHMENT_WRITE},
+				image = e.image,
+				subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+			},
+		},
+	)
+	e.layout = .ATTACHMENT_OPTIMAL
 }
 
 transition_to_present :: proc(cmd: vk.CommandBuffer, e: ^SwapchainElement) {
-    vk.CmdPipelineBarrier2(cmd, &vk.DependencyInfo{
-        sType = .DEPENDENCY_INFO,
-        imageMemoryBarrierCount = 1,
-        pImageMemoryBarriers = &vk.ImageMemoryBarrier2{
-            sType         = .IMAGE_MEMORY_BARRIER_2,
-            oldLayout     = e.layout,
-            newLayout     = .PRESENT_SRC_KHR,
-            srcStageMask  = {.COLOR_ATTACHMENT_OUTPUT},
-            dstStageMask  = {.BOTTOM_OF_PIPE},
-            srcAccessMask = {.COLOR_ATTACHMENT_WRITE},
-            image         = e.image,
-            subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
-        },
-    })
-    e.layout = .PRESENT_SRC_KHR
+	vk.CmdPipelineBarrier2(
+		cmd,
+		&vk.DependencyInfo {
+			sType = .DEPENDENCY_INFO,
+			imageMemoryBarrierCount = 1,
+			pImageMemoryBarriers = &vk.ImageMemoryBarrier2 {
+				sType = .IMAGE_MEMORY_BARRIER_2,
+				oldLayout = e.layout,
+				newLayout = .PRESENT_SRC_KHR,
+				srcStageMask = {.COLOR_ATTACHMENT_OUTPUT},
+				dstStageMask = {.BOTTOM_OF_PIPE},
+				srcAccessMask = {.COLOR_ATTACHMENT_WRITE},
+				image = e.image,
+				subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+			},
+		},
+	)
+	e.layout = .PRESENT_SRC_KHR
 }
-
 
 
 //───────────────────────────
@@ -593,7 +598,7 @@ vulkan_init :: proc() -> bool {
 	)
 
 	vk.load_proc_addresses_instance(instance)
-	glfw.CreateWindowSurface(instance, get_glfw_window(), nil, &vulkan_surface)
+	init_window()
 	setup_physical_device() or_return
 	create_logical_device() or_return
 	vk.load_proc_addresses_device(device)
@@ -627,21 +632,19 @@ vulkan_init :: proc() -> bool {
 		"cmd pool",
 		vk.CommandPool,
 	) or_return
+
 	create_swapchain() or_return
 	init_sync_objects() or_return
 	init_shaders() or_return
+	resize()
 	return true
 }
 
 handle_resize :: proc() {
-	if glfw_resize_needed() != 0 {
+	if resize_needed {
 		vk.DeviceWaitIdle(device)
-
 		destroy_swapchain()
-		if !create_swapchain() {
-			return
-		}
-
+		create_swapchain()
 		resize()
 	}
 }

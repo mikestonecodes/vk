@@ -12,14 +12,14 @@ main :: proc() {
 	start_time := time.now()
 
 	if !init_platform() do return
-	defer glfw_cleanup()
+	defer platform_cleanup()
 
 	if !vulkan_init() do return
 	defer vulkan_cleanup()
 
 
-	for glfw_should_quit() == 0 {
-		glfw_poll_events()
+	for should_quit() == false {
+		poll_events()
 		handle_resize()
 		check_shader_reload()
 		render_frame(start_time)

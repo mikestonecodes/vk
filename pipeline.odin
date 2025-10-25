@@ -583,7 +583,8 @@ dispatch_compute :: proc(frame: FrameInputs, task: DispatchMode, count: u32) {
 // Rendering (Dynamic Rendering + Dynamic States)
 // ============================================================================
 begin_rendering :: proc(frame: FrameInputs, element: ^SwapchainElement) {
-transition_to_render(frame.cmd, element)
+	transition_to_render(frame.cmd, element)
+
 	vk.CmdBeginRendering(
 		frame.cmd,
 		&vk.RenderingInfo {
@@ -614,6 +615,7 @@ transition_to_render(frame.cmd, element)
 			maxDepth = 1,
 		},
 	)
+
 	vk.CmdSetScissorWithCount(
 		frame.cmd,
 		1,

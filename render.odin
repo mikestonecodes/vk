@@ -1,7 +1,6 @@
 package main
 
 COMPUTE_GROUP_SIZE :: u32(128)
-PIPELINE_COUNT :: 2
 // Physics configuration
 PHYS_MAX_BODIES :: u32(512000)
 PHYS_SOLVER_ITERATIONS :: u32(4)
@@ -154,7 +153,7 @@ resize :: proc() -> bool  {
 }
 
 record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
-	compute(frame)
+//	compute(frame)
 	graphics(frame, element)
 }
 
@@ -162,7 +161,7 @@ physics_initialized: bool
 
 // compute.hlsl -> accumulation_buffer
 compute :: proc(frame: FrameInputs) {
-	mouse_x, mouse_y := get_mouse_position()
+
 	compute_push_constants.time = frame.time
 	compute_push_constants.delta_time = frame.delta_time
 
