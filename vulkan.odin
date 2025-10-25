@@ -2,8 +2,11 @@ package main
 import "base:runtime"
 import "core:fmt"
 import "core:time"
-import "vendor:glfw"
 import vk "vendor:vulkan"
+
+ENABLE_VALIDATION := true
+MAX_FRAMES_IN_FLIGHT :: 2
+MAX_SWAPCHAIN_IMAGES :: 3
 
 //───────────────────────────
 // TYPE MAPPINGS (for vulkan package files)
@@ -66,7 +69,6 @@ DescriptorBindingSpec :: struct {
 //───────────────────────────
 // GLOBALS
 //───────────────────────────
-ENABLE_VALIDATION := true
 instance: vk.Instance
 vulkan_surface: vk.SurfaceKHR
 phys_device: vk.PhysicalDevice
@@ -79,8 +81,6 @@ format: vk.Format
 image_index, image_count: u32
 debug_messenger: vk.DebugUtilsMessengerEXT
 
-MAX_FRAMES_IN_FLIGHT :: 2
-MAX_SWAPCHAIN_IMAGES :: 3
 
 image_available_semaphores: [MAX_FRAMES_IN_FLIGHT]vk.Semaphore
 in_flight_fences: [MAX_FRAMES_IN_FLIGHT]vk.Fence
@@ -198,7 +198,7 @@ instance_extensions: Array(16, cstring)
 get_instance_extensions :: proc() -> []cstring {
 	instance_extensions.len = 0
 
-	for ext in glfw.GetRequiredInstanceExtensions() {
+	for ext in get_required_instance_extensions(){
 		array_push(&instance_extensions, ext)
 	}
 	array_push(&instance_extensions, "VK_KHR_get_surface_capabilities2")
@@ -538,9 +538,9 @@ destroy_buffer :: proc(resource: ^BufferResource) {
 
 
 vulkan_init :: proc() -> bool {
-	vk.load_proc_addresses_global(rawptr(glfw.GetInstanceProcAddress))
-
+	vk.load_proc_addresses_global(get_instance_proc_address())
 	exts := get_instance_extensions()
+
 	layers := [1]cstring{"VK_LAYER_KHRONOS_validation"}
 	enable_value := b32(true)
 
@@ -633,6 +633,7 @@ vulkan_init :: proc() -> bool {
 		vk.CommandPool,
 	) or_return
 
+	vk.DeviceWaitIdle(device)
 	create_swapchain() or_return
 	init_sync_objects() or_return
 	init_shaders() or_return

@@ -49,19 +49,26 @@ window_size_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32)
 	resize_needed = true
 }
 
+error_callback :: proc "c" (error_code: i32, description: cstring) {
+	context = runtime.default_context()
+	fmt.printf("GLFW Error %d: %s\n", error_code, description)
+}
+
 // Platform interface implementation
 init_platform :: proc() -> bool {
 	fmt.println("DEBUG: Initializing GLFW platform")
+
+	glfw.SetErrorCallback(error_callback)
 
 	if !glfw.Init() {
 		fmt.println("Failed to initialize GLFW")
 		return false
 	}
 
+	fmt.println("DEBUG: GLFW initialized successfully")
+
 	// Don't create an OpenGL context
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
-	glfw.SwapInterval(0)
-
 	window = glfw.CreateWindow(i32(window_width), i32(window_height), "Vulkan with GLFW", nil, nil)
 	if window == nil {
 		fmt.println("Failed to create GLFW window")
@@ -78,6 +85,12 @@ init_platform :: proc() -> bool {
 
 	fmt.println("DEBUG: GLFW platform setup complete")
 	return true
+}
+get_instance_proc_address :: proc() -> rawptr {
+    return rawptr(glfw.GetInstanceProcAddress)
+}
+get_required_instance_extensions :: proc() -> []cstring {
+	return glfw.GetRequiredInstanceExtensions()
 }
 
 platform_cleanup :: proc() {

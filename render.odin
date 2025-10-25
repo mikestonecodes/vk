@@ -24,8 +24,6 @@ PostProcessPushConstants :: struct {
 	screen_width:  u32,
 	screen_height: u32,
 }
-post_process_push_constants := PostProcessPushConstants{}
-
 ComputePushConstants :: struct {
 	time:          f32,
 	delta_time:    f32,
@@ -147,8 +145,6 @@ resize :: proc() -> bool  {
 
 	compute_push_constants.screen_width = window_width
 	compute_push_constants.screen_height = window_height
-	post_process_push_constants.screen_width = window_width
-	post_process_push_constants.screen_height = window_height
 	return true
 }
 
@@ -243,16 +239,14 @@ physics :: proc(frame: FrameInputs, pixel_dispatch: u32) {
 
 // accumulation_buffer -> post_process.hlsl -> swapchain image
 graphics :: proc(frame: FrameInputs, element: ^SwapchainElement) {
-
 	apply_compute_to_fragment_barrier(frame.cmd, &buffers.data[0])
-
-	begin_rendering(frame, element)
 	bind(
 		frame,
 		&render_shader_states[1],
 		.GRAPHICS,
-		&PostProcessPushConstants{window_width, window_height},
+		&PostProcessPushConstants{window_width, window_height}
 	)
+	begin_rendering(frame, element)
 	draw(frame, 3, 1, 0, 0)
 	end_rendering(frame)
 
