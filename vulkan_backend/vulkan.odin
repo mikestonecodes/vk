@@ -146,7 +146,7 @@ render_frame :: proc() -> bool {
 
 	// Submit this frame
 	wait_sem := image_available_semaphores[current_frame]
-	signal_sem := render_finished_semaphores[current_frame]
+	signal_sem := render_finished_semaphores[image_index]
 	submit_info := vk.SubmitInfo {
 		sType                = .SUBMIT_INFO,
 		waitSemaphoreCount   = 1,
@@ -157,6 +157,7 @@ render_frame :: proc() -> bool {
 		signalSemaphoreCount = 1,
 		pSignalSemaphores    = &signal_sem,
 	}
+
 	vk.QueueSubmit(queue, 1, &submit_info, in_flight_fences[current_frame])
 
 	// Present
@@ -169,6 +170,7 @@ render_frame :: proc() -> bool {
 		pImageIndices      = &image_index,
 	}
 	result = vk.QueuePresentKHR(queue, &present_info)
+
 	current_frame = (current_frame + 1) % MAX_FRAMES_IN_FLIGHT
 	return true
 }
