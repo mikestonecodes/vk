@@ -1,5 +1,5 @@
 package main
-
+import platform "wayland"
 
 COMPUTE_GROUP_SIZE :: u32(128)
 // Physics configuration
@@ -83,7 +83,7 @@ buffer_specs := []struct {
 	stage_flags: ShaderStageFlags,
 } {
 	{
-		DeviceSize(window_width * window_height * 4 * size_of(u32)),
+		DeviceSize(platform.window_width * platform.window_height * 4 * size_of(u32)),
 		{.STORAGE_BUFFER, .TRANSFER_DST},
 		0,
 		{.COMPUTE, .FRAGMENT},
@@ -139,15 +139,15 @@ resize :: proc() -> bool  {
 	destroy_buffer(&buffers.data[0])
 	create_buffer(
 		&buffers.data[0],
-		DeviceSize(window_width) * DeviceSize(window_height) * 4 * DeviceSize(size_of(u32)),
+		DeviceSize(platform.window_width) * DeviceSize(platform.window_height) * 4 * DeviceSize(size_of(u32)),
 		{.STORAGE_BUFFER, .TRANSFER_DST},
 	)
 	bind_resource(0, &buffers.data[0])
 
-	compute_push_constants.screen_width = window_width
-	compute_push_constants.screen_height = window_height
+	compute_push_constants.screen_width = platform.window_width
+	compute_push_constants.screen_height = platform.window_height
 
-	//&PostProcessPushConstants{window_width, window_height}
+	//&PostProcessPushConstants{platform.window_width, window_height}
 	return true
 }
 
@@ -165,21 +165,21 @@ compute :: proc(frame: FrameInputs) {
 	compute_push_constants.delta_time = frame.delta_time
 
 	for binding in key_bindings {
-		binding.field^ = b32(is_key_pressed(binding.key))
+		binding.field^ = b32(platform.is_key_pressed(binding.key))
 	}
 
-	compute_push_constants.spawn_body = b32(is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
+	compute_push_constants.spawn_body = b32(platform.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
 
 	compute_push_constants.mouse_ndc_x = f32(
-		clamp(mouse_x / max(f64(window_width), 1.0), 0.0, 1.0),
+		clamp(platform.mouse_x / max(f64(platform.window_width), 1.0), 0.0, 1.0),
 	)
 	compute_push_constants.mouse_ndc_y = f32(
-		clamp(mouse_y / max(f64(window_height), 1.0), 0.0, 1.0),
+		clamp(platform.mouse_y / max(f64(platform.window_height), 1.0), 0.0, 1.0),
 	)
 
 	// ---- Camera update ----
 	dispatch_compute(frame, .BEGIN_FRAME, 1)
-	total_pixels := window_width * window_height
+	total_pixels := platform.window_width * platform.window_height
 	pixel_dispatch := (total_pixels + COMPUTE_GROUP_SIZE - 1) / COMPUTE_GROUP_SIZE
 	physics(frame, pixel_dispatch)
 	dispatch_compute(frame, .RENDER, pixel_dispatch)
@@ -244,7 +244,7 @@ graphics :: proc(frame: FrameInputs, element: ^SwapchainElement) {
 		frame,
 		&render_shader_states[1],
 		.GRAPHICS,
-		&PostProcessPushConstants{window_width, window_height}
+		&PostProcessPushConstants{platform.window_width, platform.window_height}
 	)
 	begin_rendering(frame, element)
 	draw(frame, 3, 1, 0, 0)

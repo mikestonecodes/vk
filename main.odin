@@ -2,6 +2,7 @@ package main
 
 import "core:os"
 import "core:time"
+import platform "wayland"
 
 start_time: time.Time
 
@@ -10,13 +11,12 @@ main :: proc() {
 		if arg == "-release" do ENABLE_VALIDATION = false
 	}
 
-	start_time = time.now()
 
-	if !init_platform() do return
-	defer platform_cleanup()
+	if !platform.init() do return
+	defer platform.cleanup()
 
 	if !vulkan_init() do return
 	defer vulkan_cleanup()
 
-	platform_run()
+	platform.run()
 }

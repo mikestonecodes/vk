@@ -1,10 +1,14 @@
-package main
+package wayland
 
 import "base:runtime"
 import "core:c"
 import "core:fmt"
 import "core:os"
 import vk "vendor:vulkan"
+
+
+render_frame: proc() -> bool
+
 
 //──────────────────────────────────────────────
 // Wayland imports
@@ -270,7 +274,7 @@ wl_surface_commit :: proc(s: ^wl_surface) {
 // Init
 //──────────────────────────────────────────────
 
-init_platform :: proc() -> bool {
+init :: proc() -> bool {
 	display = wl_display_connect(nil)
 	if display == nil {
 		fmt.eprintln("Wayland connect failed")
@@ -333,6 +337,8 @@ init_platform :: proc() -> bool {
 //──────────────────────────────────────────────
 // Frame callback (Wayland vsync pacing)
 //──────────────────────────────────────────────
+
+
 wl_callback :: struct {} // opaque
 
 wl_callback_listener :: struct {
@@ -342,7 +348,7 @@ frame_listener := wl_callback_listener {
 	done = frame_done_cb,
 }
 frame_done_cb :: proc(data: rawptr, cb: ^wl_callback, time: u32) {
-	render_frame(start_time)
+	render_frame()
 	request_frame()
 	wl_surface_commit(surface)
 }
@@ -379,7 +385,7 @@ get_instance_proc_address :: proc() -> rawptr {
 	return nil
 }
 
-init_window :: proc(instance: vk.Instance) -> bool {
+init_window :: proc(instance: vk.Instance,vulkan_surface:^vk.SurfaceKHR) -> bool {
 	create_surface := cast(proc "c" (
 		instance: vk.Instance,
 		info: ^vk.WaylandSurfaceCreateInfoKHR,
@@ -396,7 +402,7 @@ init_window :: proc(instance: vk.Instance) -> bool {
 	}
 
 	fmt.println("window init")
-	return create_surface(instance, &info, nil, &vulkan_surface) == .SUCCESS
+	return create_surface(instance, &info, nil, vulkan_surface) == .SUCCESS
 }
 
 //──────────────────────────────────────────────
@@ -596,18 +602,18 @@ ptr_impl := wl_pointer_listener {
 //──────────────────────────────────────────────
 // Event / cleanup
 //──────────────────────────────────────────────
-platform_run :: proc() {
+run :: proc() {
 	fmt.println("starting prun")
-	render_frame(start_time)
+	render_frame()
 	wl_display_flush(display)
 	wl_display_dispatch_pending(display)
-	render_frame(start_time)
+	render_frame()
 	request_frame()
 	for !should_quit {
 		_ = wl_display_dispatch(display)
 	}
 }
 
-platform_cleanup :: proc() {
+cleanup :: proc() {
 	if display != nil {wl_display_disconnect(display)}
 }

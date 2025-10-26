@@ -4,6 +4,7 @@ import "base:runtime"
 import "core:fmt"
 import "core:time"
 import vk "vendor:vulkan"
+import platform "wayland"
 
 ENABLE_VALIDATION := true
 MAX_FRAMES_IN_FLIGHT :: 2
@@ -71,7 +72,6 @@ DescriptorBindingSpec :: struct {
 // GLOBALS
 //───────────────────────────
 instance: vk.Instance
-vulkan_surface: vk.SurfaceKHR
 phys_device: vk.PhysicalDevice
 device: vk.Device
 queue_family_index: u32
@@ -91,6 +91,8 @@ current_frame: u32 = 0
 render_finished_semaphores: [MAX_SWAPCHAIN_IMAGES]vk.Semaphore
 elements: [MAX_SWAPCHAIN_IMAGES]SwapchainElement
 
+
+vulkan_surface: vk.SurfaceKHR
 //───────────────────────────
 // SYNC + FRAME
 //───────────────────────────
@@ -113,10 +115,10 @@ init_sync_objects :: proc() -> bool {
 	return true
 }
 
-render_frame :: proc(start_time: time.Time) -> bool {
+render_frame :: proc() -> bool {
 	// Check if window was resized
-	if window_resized {
-		window_resized = false
+	if platform.window_resized {
+		platform.window_resized = false
 		handle_resize()
 		return true
 	}
@@ -183,7 +185,7 @@ instance_extensions: Array(16, cstring)
 get_instance_extensions :: proc() -> []cstring {
 	instance_extensions.len = 0
 
-	for ext in get_required_instance_extensions() {
+	for ext in platform.get_required_instance_extensions() {
 		array_push(&instance_extensions, ext)
 	}
 	if ENABLE_VALIDATION {
@@ -295,8 +297,8 @@ create_swapchain :: proc() -> bool {
 	if caps.currentExtent.width != cast(u32)0xFFFFFFFF {
 		swapchain_extent = caps.currentExtent
 	} else {
-		swapchain_extent.width = window_width
-		swapchain_extent.height = window_height
+		swapchain_extent.width = platform.window_width
+		swapchain_extent.height = platform.window_height
 	}
 	// query formats
 	fmt_count: u32
@@ -510,7 +512,13 @@ destroy_buffer :: proc(resource: ^BufferResource) {
 
 
 vulkan_init :: proc() -> bool {
-	vk.load_proc_addresses_global(get_instance_proc_address())
+
+
+	start_time = time.now()
+	platform.render_frame = render_frame
+	//platform.vulkan_surface= vulkan_surface
+
+	vk.load_proc_addresses_global(platform.get_instance_proc_address())
 	exts := get_instance_extensions()
 
 	layers := [1]cstring{"VK_LAYER_KHRONOS_validation"}
@@ -570,7 +578,7 @@ vulkan_init :: proc() -> bool {
 	)
 
 	vk.load_proc_addresses_instance(instance)
-	init_window(instance)
+	platform.init_window(instance,&vulkan_surface)
 	setup_physical_device() or_return
 	create_logical_device() or_return
 	vk.load_proc_addresses_device(device)
