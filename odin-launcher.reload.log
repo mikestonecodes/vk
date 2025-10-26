@@ -1,7 +1,7 @@
 
 
 Build succeeded, launching vk...
-Wayland window ready
+Wayland window ready (awaiting first frame callback)
 [INFO] No valid vk_loader_settings.json file found, no loader settings will be active
 [INFO] Searching for implicit layer manifest files
 [INFO]    In following locations:
@@ -108,4 +108,6 @@ Wayland window ready
 [INFO]      Sorted order:
 [INFO]            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 [VERBOSE] Copying old device 0 into new device 0
+window init
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x170000000017 to a memory block which is fully consumed by the buffer. The required size of the allocation is 32, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
+starting prun

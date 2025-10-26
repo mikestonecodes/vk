@@ -3,12 +3,14 @@ package main
 import "core:os"
 import "core:time"
 
+start_time: time.Time
+
 main :: proc() {
 	for arg in os.args[1:] {
 		if arg == "-release" do ENABLE_VALIDATION = false
 	}
 
-	start_time := time.now()
+	start_time = time.now()
 
 	if !init_platform() do return
 	defer platform_cleanup()
@@ -16,10 +18,5 @@ main :: proc() {
 	if !vulkan_init() do return
 	defer vulkan_cleanup()
 
-
-	for should_quit() == false {
-		poll_events()
-		check_shader_reload()
-		render_frame(start_time)
-	}
+	platform_run()
 }

@@ -1,5 +1,6 @@
 package main
 
+import "base:runtime"
 import "core:c"
 import "core:fmt"
 import "core:os"
@@ -24,8 +25,26 @@ wl_seat :: struct {}
 wl_keyboard :: struct {}
 wl_pointer :: struct {}
 wl_proxy :: struct {}
+
+// Correct C layouts for libwayland
+wl_message :: struct {
+	name:      cstring,
+	signature: cstring,
+	types:     ^^wl_interface,
+}
 wl_interface :: struct {
-	name: cstring,
+	name:         cstring,
+	version:      c.int,
+	method_count: c.int,
+	methods:      ^wl_message,
+	event_count:  c.int,
+	events:       ^wl_message,
+}
+// wl_array from <wayland-util.h>
+wl_array :: struct {
+	size:  c.size_t,
+	alloc: c.size_t,
+	data:  rawptr,
 }
 
 @(default_calling_convention = "c")
@@ -45,6 +64,7 @@ foreign wl {
 	wl_seat_interface: wl_interface
 	wl_keyboard_interface: wl_interface
 	wl_pointer_interface: wl_interface
+	wl_callback_interface: wl_interface
 }
 
 //──────────────────────────────────────────────
@@ -70,7 +90,7 @@ foreign xdg {
 //──────────────────────────────────────────────
 window_width, window_height: u32 = 800, 600
 window_resized: bool = false
-should_quit_key: bool = false
+should_quit: bool = false
 mouse_x, mouse_y: f64
 key_states: [512]bool
 mouse_states: [8]bool
@@ -93,110 +113,6 @@ keyboard: ^wl_keyboard
 pointer: ^wl_pointer
 
 //──────────────────────────────────────────────
-// Helpers
-//──────────────────────────────────────────────
-wl_registry_bind :: proc(
-	reg: ^wl_registry,
-	name: u32,
-	iface: ^wl_interface,
-	version: u32,
-) -> rawptr {
-	return(
-		cast(rawptr)wl_proxy_marshal_flags(
-			cast(^wl_proxy)reg,
-			0,
-			iface,
-			version,
-			0,
-			name,
-			iface.name,
-			version,
-			nil,
-		) \
-	)
-}
-
-wl_compositor_create_surface :: proc(c: ^wl_compositor) -> ^wl_surface {
-	return(
-		cast(^wl_surface)wl_proxy_marshal_flags(
-			cast(^wl_proxy)c,
-			0,
-			&wl_surface_interface,
-			wl_proxy_get_version(cast(^wl_proxy)c),
-			0,
-			nil,
-		) \
-	)
-}
-
-xdg_wm_base_get_xdg_surface :: proc(base: ^xdg_wm_base, surf: ^wl_surface) -> ^xdg_surface {
-	return(
-		cast(^xdg_surface)wl_proxy_marshal_flags(
-			cast(^wl_proxy)base,
-			2,
-			&xdg_surface_interface,
-			wl_proxy_get_version(cast(^wl_proxy)base),
-			0,
-			nil,
-			surf,
-		) \
-	)
-}
-
-xdg_surface_get_toplevel :: proc(x: ^xdg_surface) -> ^xdg_toplevel {
-	return(
-		cast(^xdg_toplevel)wl_proxy_marshal_flags(
-			cast(^wl_proxy)x,
-			1,
-			&xdg_toplevel_interface,
-			wl_proxy_get_version(cast(^wl_proxy)x),
-			0,
-		) \
-	)
-}
-
-xdg_surface_ack_configure :: proc(x: ^xdg_surface, serial: u32) {
-	wl_proxy_marshal_flags(
-		cast(^wl_proxy)x,
-		4,
-		nil,
-		wl_proxy_get_version(cast(^wl_proxy)x),
-		0,
-		serial,
-	)
-}
-
-wl_surface_commit :: proc(s: ^wl_surface) {
-	wl_proxy_marshal_flags(cast(^wl_proxy)s, 6, nil, wl_proxy_get_version(cast(^wl_proxy)s), 0)
-}
-
-wl_seat_get_keyboard :: proc(s: ^wl_seat) -> ^wl_keyboard {
-	return(
-		cast(^wl_keyboard)wl_proxy_marshal_flags(
-			cast(^wl_proxy)s,
-			1,
-			&wl_keyboard_interface,
-			wl_proxy_get_version(cast(^wl_proxy)s),
-			0,
-			nil,
-		) \
-	)
-}
-
-wl_seat_get_pointer :: proc(s: ^wl_seat) -> ^wl_pointer {
-	return(
-		cast(^wl_pointer)wl_proxy_marshal_flags(
-			cast(^wl_proxy)s,
-			0,
-			&wl_pointer_interface,
-			wl_proxy_get_version(cast(^wl_proxy)s),
-			0,
-			nil,
-		) \
-	)
-}
-
-//──────────────────────────────────────────────
 // Registry + listeners
 //──────────────────────────────────────────────
 wl_registry_listener :: struct {
@@ -214,7 +130,7 @@ reg_listener := wl_registry_listener {
 }
 
 //──────────────────────────────────────────────
-// XDG listeners
+// XDG listeners (correct signatures)
 //──────────────────────────────────────────────
 xdg_wm_base_listener :: struct {
 	ping: proc(data: rawptr, wm: ^xdg_wm_base, serial: u32),
@@ -223,253 +139,137 @@ xdg_surface_listener :: struct {
 	configure: proc(data: rawptr, surf: ^xdg_surface, serial: u32),
 }
 xdg_toplevel_listener :: struct {
-	configure: proc(data: rawptr, top: ^xdg_toplevel, w: i32, h: i32, s: ^rawptr, n: i32),
+	// FIX: states is a single wl_array*, not (ptr,count)
+	configure: proc(data: rawptr, top: ^xdg_toplevel, w: i32, h: i32, states: ^wl_array),
 	close:     proc(data: rawptr, top: ^xdg_toplevel),
 }
 
-base_impl := xdg_wm_base_listener{proc(_: rawptr, wm: ^xdg_wm_base, serial: u32) {
+base_impl := xdg_wm_base_listener {
+	proc(_: rawptr, wm: ^xdg_wm_base, serial: u32) {
 		wl_proxy_marshal_flags(
 			cast(^wl_proxy)wm,
-			3,
+			3, // xdg_wm_base.pong
 			nil,
 			wl_proxy_get_version(cast(^wl_proxy)wm),
 			0,
 			serial,
 		)
-	}}
+	},
+}
 
 surf_impl := xdg_surface_listener {
 	proc(_: rawptr, _: ^xdg_surface, serial: u32) {pending_serial = serial},
 }
 
-top_impl := xdg_toplevel_listener {
-	proc(_: rawptr, _: ^xdg_toplevel, w: i32, h: i32, _: ^rawptr, _: i32) {
+top_impl := xdg_toplevel_listener{proc(_: rawptr, _: ^xdg_toplevel, w: i32, h: i32, _: ^wl_array) {
 		if w > 0 && h > 0 {
 			window_width, window_height = u32(w), u32(h)
 			window_resized = true
 		}
-	},
-	proc(_: rawptr, _: ^xdg_toplevel) {should_quit_key = true},
-}
+	}, proc(_: rawptr, _: ^xdg_toplevel) {should_quit = true}}
 
 //──────────────────────────────────────────────
-// Keyboard + Pointer listener structs
+// Missing helper procs
 //──────────────────────────────────────────────
-wl_keyboard_listener :: struct {
-	keymap:      proc(data: rawptr, kbd: ^wl_keyboard, format: u32, fd: i32, size: u32),
-	enter:       proc(
-		data: rawptr,
-		kbd: ^wl_keyboard,
-		serial: u32,
-		surf: ^wl_surface,
-		keys: ^rawptr,
-	),
-	leave:       proc(data: rawptr, kbd: ^wl_keyboard, serial: u32, surf: ^wl_surface),
-	key:         proc(
-		data: rawptr,
-		kbd: ^wl_keyboard,
-		serial: u32,
-		time: u32,
-		key: u32,
-		state: u32,
-	),
-	modifiers:   proc(
-		data: rawptr,
-		kbd: ^wl_keyboard,
-		serial: u32,
-		md: u32,
-		ml: u32,
-		mk: u32,
-		grp: u32,
-	),
-	repeat_info: proc(data: rawptr, kbd: ^wl_keyboard, rate: i32, delay: i32),
+wl_registry_bind :: proc(
+	reg: ^wl_registry,
+	name: u32,
+	iface: ^wl_interface,
+	version: u32,
+) -> rawptr {
+	return cast(rawptr)wl_proxy_marshal_flags(
+			cast(^wl_proxy)reg,
+			0, // wl_registry.bind
+			iface,
+			version,
+			0,
+			name,
+			iface.name,
+			version,
+			nil,
+		)
 }
 
-wl_pointer_listener :: struct {
-	enter:  proc(data: rawptr, ptr: ^wl_pointer, serial: u32, surf: ^wl_surface, sx: i32, sy: i32),
-	leave:  proc(data: rawptr, ptr: ^wl_pointer, serial: u32, surf: ^wl_surface),
-	motion: proc(data: rawptr, ptr: ^wl_pointer, time: u32, sx: i32, sy: i32),
-	button: proc(data: rawptr, ptr: ^wl_pointer, serial: u32, time: u32, button: u32, state: u32),
-	axis:   proc(data: rawptr, ptr: ^wl_pointer, time: u32, axis: u32, value: i32),
-	frame:  proc(data: rawptr, ptr: ^wl_pointer),
+wl_compositor_create_surface :: proc(c: ^wl_compositor) -> ^wl_surface {
+	return cast(^wl_surface)wl_proxy_marshal_flags(
+			cast(^wl_proxy)c,
+			0, // wl_compositor.create_surface
+			&wl_surface_interface,
+			wl_proxy_get_version(cast(^wl_proxy)c),
+			0,
+			nil,
+		)
 }
 
-//──────────────────────────────────────────────
-// Keyboard + Pointer callbacks
-//──────────────────────────────────────────────
-fixed_to_f64 :: proc(v: i32) -> f64 {return f64(v) / 256.0}
-
-linux_to_key :: proc(code: u32) -> i32 {
-	switch code {
-	case 30:
-		return 65 // A
-	case 48:
-		return 66
-	case 46:
-		return 67
-	case 32:
-		return 68
-	case 18:
-		return 69
-	case 33:
-		return 70
-	case 34:
-		return 71
-	case 35:
-		return 72
-	case 23:
-		return 73
-	case 36:
-		return 74
-	case 37:
-		return 75
-	case 38:
-		return 76
-	case 50:
-		return 77
-	case 49:
-		return 78
-	case 24:
-		return 79
-	case 25:
-		return 80
-	case 16:
-		return 81
-	case 19:
-		return 82
-	case 31:
-		return 83
-	case 20:
-		return 84
-	case 22:
-		return 85
-	case 47:
-		return 86
-	case 17:
-		return 87
-	case 45:
-		return 88
-	case 21:
-		return 89
-	case 44:
-		return 90
-	}
-	if code >= 2 && code <= 10 do return 49 + i32(code - 2)
-	if code == 11 do return 48
-	switch code {
-	case 57:
-		return 32
-	case 1:
-		return 256
-	case 28:
-		return 257
-	case 14:
-		return 259
-	case 15:
-		return 258
-	case 105:
-		return 263
-	case 106:
-		return 262
-	case 103:
-		return 265
-	case 108:
-		return 264
-	}
-	return i32(code)
+xdg_wm_base_get_xdg_surface :: proc(base: ^xdg_wm_base, surf: ^wl_surface) -> ^xdg_surface {
+	return cast(^xdg_surface)wl_proxy_marshal_flags(
+			cast(^wl_proxy)base,
+			2, // xdg_wm_base.get_xdg_surface
+			&xdg_surface_interface,
+			wl_proxy_get_version(cast(^wl_proxy)base),
+			0,
+			nil,
+			surf,
+		)
 }
 
-keyboard_key_cb :: proc(
-	data: rawptr,
-	kbd: ^wl_keyboard,
-	serial: u32,
-	time: u32,
-	key: u32,
-	state: u32,
-) {
-	k := linux_to_key(key)
-	if k >= 0 && k < 512 {key_states[k] = (state == 1)}
+xdg_surface_get_toplevel :: proc(x: ^xdg_surface) -> ^xdg_toplevel {
+	return cast(^xdg_toplevel)wl_proxy_marshal_flags(
+			cast(^wl_proxy)x,
+			1, // xdg_surface.get_toplevel
+			&xdg_toplevel_interface,
+			wl_proxy_get_version(cast(^wl_proxy)x),
+			0,
+		)
 }
 
-pointer_enter_cb :: proc(
-	data: rawptr,
-	ptr: ^wl_pointer,
-	serial: u32,
-	surf: ^wl_surface,
-	sx: i32,
-	sy: i32,
-) {
-	mouse_x = fixed_to_f64(sx);mouse_y = fixed_to_f64(sy)
-}
-pointer_motion_cb :: proc(data: rawptr, ptr: ^wl_pointer, time: u32, sx: i32, sy: i32) {
-	mouse_x = fixed_to_f64(sx);mouse_y = fixed_to_f64(sy)
-}
-pointer_button_cb :: proc(
-	data: rawptr,
-	ptr: ^wl_pointer,
-	serial: u32,
-	time: u32,
-	button: u32,
-	state: u32,
-) {
-	btn: i32 = -1
-	switch button {
-	case 0x110:
-		btn = 0
-	case 0x111:
-		btn = 1
-	case 0x112:
-		btn = 2
-	}
-	if btn >= 0 && btn < len(mouse_states) {mouse_states[btn] = (state == 1)}
+xdg_surface_ack_configure :: proc(x: ^xdg_surface, serial: u32) {
+	wl_proxy_marshal_flags(
+		cast(^wl_proxy)x,
+		4, // xdg_surface.ack_configure
+		nil,
+		wl_proxy_get_version(cast(^wl_proxy)x),
+		0,
+		serial,
+	)
 }
 
-//──────────────────────────────────────────────
-// Listener instances
-//──────────────────────────────────────────────
-
-keyboard_keymap_cb :: proc(data: rawptr, kbd: ^wl_keyboard, format: u32, fd: i32, size: u32) {}
-keyboard_enter_cb :: proc(
-	data: rawptr,
-	kbd: ^wl_keyboard,
-	serial: u32,
-	surf: ^wl_surface,
-	keys: ^rawptr,
-) {}
-keyboard_leave_cb :: proc(data: rawptr, kbd: ^wl_keyboard, serial: u32, surf: ^wl_surface) {}
-keyboard_modifiers_cb :: proc(
-	data: rawptr,
-	kbd: ^wl_keyboard,
-	serial: u32,
-	md: u32,
-	ml: u32,
-	mk: u32,
-	grp: u32,
-) {}
-keyboard_repeat_info_cb :: proc(data: rawptr, kbd: ^wl_keyboard, rate: i32, delay: i32) {}
-kbd_impl := wl_keyboard_listener {
-	keyboard_keymap_cb,
-	keyboard_enter_cb,
-	keyboard_leave_cb,
-	keyboard_key_cb,
-	keyboard_modifiers_cb,
-	keyboard_repeat_info_cb,
+xdg_toplevel_set_title :: proc(t: ^xdg_toplevel, title: cstring) {
+	wl_proxy_marshal_flags(
+		cast(^wl_proxy)t,
+		2, // xdg_toplevel.set_title
+		nil,
+		wl_proxy_get_version(cast(^wl_proxy)t),
+		0,
+		title,
+	)
 }
 
-pointer_leave_cb :: proc(data: rawptr, ptr: ^wl_pointer, serial: u32, surf: ^wl_surface) {}
-pointer_frame_cb :: proc(data: rawptr, ptr: ^wl_pointer) {}
-pointer_axis_cb :: proc(data: rawptr, ptr: ^wl_pointer, time: u32, axis: u32, value: i32) {}
-ptr_impl := wl_pointer_listener{
-	pointer_enter_cb,   // 0 enter
-	pointer_leave_cb,   // 1 leave
-	pointer_motion_cb,  // 2 motion
-	pointer_button_cb,  // 3 button
-	pointer_axis_cb,    // 4 axis  ← added!
-	pointer_frame_cb,   // 5 frame
+xdg_toplevel_set_app_id :: proc(t: ^xdg_toplevel, app_id: cstring) {
+	wl_proxy_marshal_flags(
+		cast(^wl_proxy)t,
+		3, // xdg_toplevel.set_app_id
+		nil,
+		wl_proxy_get_version(cast(^wl_proxy)t),
+		0,
+		app_id,
+	)
 }
+
+wl_surface_commit :: proc(s: ^wl_surface) {
+	wl_proxy_marshal_flags(
+		cast(^wl_proxy)s,
+		6, // wl_surface.commit
+		nil,
+		wl_proxy_get_version(cast(^wl_proxy)s),
+		0,
+	)
+}
+
 //──────────────────────────────────────────────
 // Init
 //──────────────────────────────────────────────
+
 init_platform :: proc() -> bool {
 	display = wl_display_connect(nil)
 	if display == nil {
@@ -479,7 +279,7 @@ init_platform :: proc() -> bool {
 
 	reg := cast(^wl_registry)wl_proxy_marshal_flags(
 		cast(^wl_proxy)display,
-		1,
+		1, // wl_display.get_registry
 		&wl_registry_interface,
 		wl_proxy_get_version(cast(^wl_proxy)display),
 		0,
@@ -496,27 +296,66 @@ init_platform :: proc() -> bool {
 	xdg_surf = xdg_wm_base_get_xdg_surface(wm_base, surface)
 	toplevel = xdg_surface_get_toplevel(xdg_surf)
 
+	// Set window title & ID
+	xdg_toplevel_set_title(toplevel, "Vulkan Window")
+	xdg_toplevel_set_app_id(toplevel, "vk")
+
 	wl_proxy_add_listener(cast(^wl_proxy)wm_base, cast(^rawptr)&base_impl, nil)
 	wl_proxy_add_listener(cast(^wl_proxy)xdg_surf, cast(^rawptr)&surf_impl, nil)
 	wl_proxy_add_listener(cast(^wl_proxy)toplevel, cast(^rawptr)&top_impl, nil)
 
-	// Input setup
-	if seat != nil {
-		keyboard = wl_seat_get_keyboard(seat)
-		pointer = wl_seat_get_pointer(seat)
-		if keyboard !=
-		   nil {wl_proxy_add_listener(cast(^wl_proxy)keyboard, cast(^rawptr)&kbd_impl, nil)}
-		if pointer !=
-		   nil {wl_proxy_add_listener(cast(^wl_proxy)pointer, cast(^rawptr)&ptr_impl, nil)}
-	}
-
+	// First commit — tells compositor surface exists
 	wl_surface_commit(surface)
+	wl_display_roundtrip(display)
+
+	// Wait until we get initial configure from compositor
 	for pending_serial == 0 {
 		_ = wl_display_dispatch(display)
 	}
+
+	// Ack configure, THEN commit → surface becomes mapped/visible
 	xdg_surface_ack_configure(xdg_surf, pending_serial)
-	fmt.println("Wayland window ready")
+	if seat != nil {
+		keyboard = wl_seat_get_keyboard(seat)
+		pointer = wl_seat_get_pointer(seat)
+		if keyboard != nil {
+			wl_proxy_add_listener(cast(^wl_proxy)keyboard, cast(^rawptr)&kbd_impl, nil)
+		}
+		if pointer != nil {
+			wl_proxy_add_listener(cast(^wl_proxy)pointer, cast(^rawptr)&ptr_impl, nil)
+		}
+	}
+	fmt.println("Wayland window ready (awaiting first frame callback)")
 	return true
+}
+
+
+//──────────────────────────────────────────────
+// Frame callback (Wayland vsync pacing)
+//──────────────────────────────────────────────
+wl_callback :: struct {} // opaque
+
+wl_callback_listener :: struct {
+	done: proc(data: rawptr, cb: ^wl_callback, time: u32),
+}
+frame_listener := wl_callback_listener {
+	done = frame_done_cb,
+}
+frame_done_cb :: proc(data: rawptr, cb: ^wl_callback, time: u32) {
+	render_frame(start_time)
+	request_frame()
+	wl_surface_commit(surface)
+}
+
+request_frame :: proc() {
+	cb := cast(^wl_callback)wl_proxy_marshal_flags(
+		cast(^wl_proxy)surface,
+		3, // wl_surface.frame (correct opcode)
+		&wl_callback_interface, // must be the callback interface
+		wl_proxy_get_version(cast(^wl_proxy)surface),
+		0,
+	)
+	_ = wl_proxy_add_listener(cast(^wl_proxy)cb, cast(^rawptr)&frame_listener, nil)
 }
 
 //──────────────────────────────────────────────
@@ -548,19 +387,227 @@ init_window :: proc(instance: vk.Instance) -> bool {
 		out: ^vk.SurfaceKHR,
 	) -> vk.Result)vk.GetInstanceProcAddr(instance, "vkCreateWaylandSurfaceKHR")
 
-	if create_surface == nil {return false}
+	if create_surface == nil do return false
 
 	info := vk.WaylandSurfaceCreateInfoKHR {
 		sType   = .WAYLAND_SURFACE_CREATE_INFO_KHR,
 		display = cast(^vk.wl_display)display,
 		surface = cast(^vk.wl_surface)surface,
 	}
+
+	fmt.println("window init")
 	return create_surface(instance, &info, nil, &vulkan_surface) == .SUCCESS
 }
 
 //──────────────────────────────────────────────
+// Keyboard & Mouse input
+//──────────────────────────────────────────────
+
+linux_to_key :: proc(code: u32) -> i32 {
+    // A–Z (Linux scancode → ASCII)
+    letter_map := [][2]u32{
+        {30, 'A'}, {48, 'B'}, {46, 'C'}, {32, 'D'}, {18, 'E'}, {33, 'F'},
+        {34, 'G'}, {35, 'H'}, {23, 'I'}, {36, 'J'}, {37, 'K'}, {38, 'L'},
+        {50, 'M'}, {49, 'N'}, {24, 'O'}, {25, 'P'}, {16, 'Q'}, {19, 'R'},
+        {31, 'S'}, {20, 'T'}, {22, 'U'}, {47, 'V'}, {17, 'W'}, {45, 'X'},
+        {21, 'Y'}, {44, 'Z'},
+    }
+    for pair in letter_map {
+        if pair[0] == code do return i32(pair[1])
+    }
+
+    // numbers 1–9,0
+    if code >= 2 && code <= 10 do return '1' + i32(code - 2)
+    if code == 11 do return '0'
+
+    // space, escape, enter, tab, backspace, arrows
+    special_map := [][2]u32{
+        {57, 32},   // space
+        {1, 256},   // escape
+        {28, 257},  // enter
+        {15, 258},  // tab
+        {14, 259},  // backspace
+        {105, 263}, // left
+        {106, 262}, // right
+        {103, 265}, // up
+        {108, 264}, // down
+    }
+    for pair in special_map {
+        if pair[0] == code do return i32(pair[1])
+    }
+
+    return i32(code)
+}
+// seat helpers
+wl_seat_get_keyboard :: proc(s: ^wl_seat) -> ^wl_keyboard {
+	return(
+		cast(^wl_keyboard)wl_proxy_marshal_flags(
+			cast(^wl_proxy)s,
+			1,
+			&wl_keyboard_interface,
+			wl_proxy_get_version(cast(^wl_proxy)s),
+			0,
+			nil,
+		) \
+	)
+}
+wl_seat_get_pointer :: proc(s: ^wl_seat) -> ^wl_pointer {
+	return(
+		cast(^wl_pointer)wl_proxy_marshal_flags(
+			cast(^wl_proxy)s,
+			0,
+			&wl_pointer_interface,
+			wl_proxy_get_version(cast(^wl_proxy)s),
+			0,
+			nil,
+		) \
+	)
+}
+
+// keyboard listener struct
+wl_keyboard_listener :: struct {
+	keymap:      proc(data: rawptr, kbd: ^wl_keyboard, format: u32, fd: i32, size: u32),
+	enter:       proc(
+		data: rawptr,
+		kbd: ^wl_keyboard,
+		serial: u32,
+		surf: ^wl_surface,
+		keys: ^rawptr,
+	),
+	leave:       proc(data: rawptr, kbd: ^wl_keyboard, serial: u32, surf: ^wl_surface),
+	key:         proc(
+		data: rawptr,
+		kbd: ^wl_keyboard,
+		serial: u32,
+		time: u32,
+		key: u32,
+		state: u32,
+	),
+	modifiers:   proc(
+		data: rawptr,
+		kbd: ^wl_keyboard,
+		serial: u32,
+		md: u32,
+		ml: u32,
+		mk: u32,
+		grp: u32,
+	),
+	repeat_info: proc(data: rawptr, kbd: ^wl_keyboard, rate: i32, delay: i32),
+}
+
+// minimal key handler (ESC quits)
+keyboard_keymap_cb :: proc(data: rawptr, kbd: ^wl_keyboard, format: u32, fd: i32, size: u32) {}
+keyboard_enter_cb :: proc(
+	data: rawptr,
+	kbd: ^wl_keyboard,
+	serial: u32,
+	surf: ^wl_surface,
+	keys: ^rawptr,
+) {}
+keyboard_leave_cb :: proc(data: rawptr, kbd: ^wl_keyboard, serial: u32, surf: ^wl_surface) {}
+keyboard_modifiers_cb :: proc(
+	data: rawptr,
+	kbd: ^wl_keyboard,
+	serial: u32,
+	md: u32,
+	ml: u32,
+	mk: u32,
+	grp: u32,
+) {}
+keyboard_repeat_info_cb :: proc(data: rawptr, kbd: ^wl_keyboard, rate: i32, delay: i32) {}
+
+keyboard_key_cb :: proc(
+	data: rawptr,
+	kbd: ^wl_keyboard,
+	serial: u32,
+	time: u32,
+	key: u32,
+	state: u32,
+) {
+	k := linux_to_key(key)
+	if k >= 0 && k < 512 {key_states[k] = (state == 1)}
+}
+
+kbd_impl := wl_keyboard_listener {
+	keyboard_keymap_cb, // opcode 0: keymap
+	keyboard_enter_cb, // 1: enter
+	keyboard_leave_cb, // 2: leave
+	keyboard_key_cb, // 3: key
+	keyboard_modifiers_cb, // 4: modifiers
+	keyboard_repeat_info_cb, // 5: repeat_info
+}
+
+
+// pointer listener struct
+wl_pointer_listener :: struct {
+	enter:  proc(data: rawptr, ptr: ^wl_pointer, serial: u32, surf: ^wl_surface, sx: i32, sy: i32),
+	leave:  proc(data: rawptr, ptr: ^wl_pointer, serial: u32, surf: ^wl_surface),
+	motion: proc(data: rawptr, ptr: ^wl_pointer, time: u32, sx: i32, sy: i32),
+	button: proc(data: rawptr, ptr: ^wl_pointer, serial: u32, time: u32, button: u32, state: u32),
+	axis:   proc(data: rawptr, ptr: ^wl_pointer, time: u32, axis: u32, value: i32),
+	frame:  proc(data: rawptr, ptr: ^wl_pointer),
+}
+
+pointer_enter_cb :: proc(
+	data: rawptr,
+	ptr: ^wl_pointer,
+	serial: u32,
+	surf: ^wl_surface,
+	sx: i32,
+	sy: i32,
+) {}
+pointer_leave_cb :: proc(data: rawptr, ptr: ^wl_pointer, serial: u32, surf: ^wl_surface) {}
+pointer_motion_cb :: proc(data: rawptr, ptr: ^wl_pointer, time: u32, sx: i32, sy: i32) {
+	mouse_x = f64(sx) / 256.0
+	mouse_y = f64(sy) / 256.0
+}
+pointer_button_cb :: proc(
+	data: rawptr,
+	ptr: ^wl_pointer,
+	serial: u32,
+	time: u32,
+	button: u32,
+	state: u32,
+) {
+	btn: i32 = -1
+	switch button {
+	case 0x110:
+		btn = 0
+	case 0x111:
+		btn = 1
+	case 0x112:
+		btn = 2
+	}
+	if btn >= 0 && btn < len(mouse_states) {
+		mouse_states[btn] = (state == 1)
+	}
+}
+pointer_axis_cb :: proc(data: rawptr, ptr: ^wl_pointer, time: u32, axis: u32, value: i32) {}
+pointer_frame_cb :: proc(data: rawptr, ptr: ^wl_pointer) {}
+
+ptr_impl := wl_pointer_listener {
+	pointer_enter_cb, // 0
+	pointer_leave_cb, // 1
+	pointer_motion_cb, // 2
+	pointer_button_cb, // 3
+	pointer_axis_cb, // 4
+	pointer_frame_cb, // 5
+}
+//──────────────────────────────────────────────
 // Event / cleanup
 //──────────────────────────────────────────────
-poll_events :: proc() {wl_display_dispatch_pending(display);wl_display_flush(display)}
-should_quit :: proc() -> bool {return should_quit_key}
-platform_cleanup :: proc() {if display != nil {wl_display_disconnect(display)}}
+platform_run :: proc() {
+	fmt.println("starting prun")
+	render_frame(start_time)
+	wl_display_flush(display)
+	wl_display_dispatch_pending(display)
+	render_frame(start_time)
+	request_frame()
+	for !should_quit {
+		_ = wl_display_dispatch(display)
+	}
+}
+
+platform_cleanup :: proc() {
+	if display != nil {wl_display_disconnect(display)}
+}

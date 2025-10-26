@@ -125,7 +125,6 @@ render_frame :: proc(start_time: time.Time) -> bool {
 
 	// Wait until this frame's fence signals (GPU done with this slot)
 	vk.WaitForFences(device, 1, &in_flight_fences[current_frame], true, max(u64))
-	vk.ResetFences(device, 1, &in_flight_fences[current_frame])
 
 	// Acquire next image for this frame
 	result := vk.AcquireNextImageKHR(
@@ -144,6 +143,9 @@ render_frame :: proc(start_time: time.Time) -> bool {
 	if result != .SUCCESS && result != .SUBOPTIMAL_KHR {
 		return false
 	}
+
+	// Only reset fence after we know we'll submit work
+	vk.ResetFences(device, 1, &in_flight_fences[current_frame])
 
 	if images_in_flight[image_index] != {} &&
 	   images_in_flight[image_index] != in_flight_fences[current_frame] {
@@ -189,10 +191,15 @@ render_frame :: proc(start_time: time.Time) -> bool {
 	}
 	result = vk.QueuePresentKHR(queue, &present_info)
 
+	if result != .SUCCESS && result != .SUBOPTIMAL_KHR {
+		fmt.printf("QueuePresent failed: %v\n", result)
+		return false
+	}
+
 	// Cycle to next frame slot
 	current_frame = (current_frame + 1) % MAX_FRAMES_IN_FLIGHT
 
-	return result == .SUCCESS || result == .SUBOPTIMAL_KHR
+	return true
 }
 
 //───────────────────────────
@@ -328,6 +335,23 @@ create_swapchain :: proc() -> bool {
 	vk.GetPhysicalDeviceSurfaceFormatsKHR(phys_device, vulkan_surface, &fmt_count, &fmts[0])
 	surface_fmt := fmts[0]
 
+	// query present modes
+	mode_count: u32
+	vk.GetPhysicalDeviceSurfacePresentModesKHR(phys_device, vulkan_surface, &mode_count, nil)
+	if mode_count == 0 do return false
+	if mode_count > 16 do mode_count = 16
+	modes: [16]vk.PresentModeKHR
+	vk.GetPhysicalDeviceSurfacePresentModesKHR(phys_device, vulkan_surface, &mode_count, &modes[0])
+
+	// choose present mode (prefer MAILBOX, fallback to FIFO which is always supported)
+	present_mode := vk.PresentModeKHR.FIFO
+	for i in 0 ..< mode_count {
+		if modes[i] == .MAILBOX {
+			present_mode = .MAILBOX
+			break
+		}
+	}
+
 	// choose image count within limits
 	img_count := caps.minImageCount + 1
 	if caps.maxImageCount > 0 && img_count > caps.maxImageCount {
@@ -345,7 +369,7 @@ create_swapchain :: proc() -> bool {
 		imageUsage       = {.COLOR_ATTACHMENT},
 		preTransform     = caps.currentTransform,
 		compositeAlpha   = {.OPAQUE},
-		presentMode      = .FIFO,
+		presentMode      = present_mode,
 		clipped          = true,
 	}
 
