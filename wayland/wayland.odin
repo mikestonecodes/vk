@@ -170,7 +170,9 @@ surf_impl := xdg_surface_listener {
 top_impl := xdg_toplevel_listener{proc(_: rawptr, _: ^xdg_toplevel, w: i32, h: i32, _: ^wl_array) {
 		if w > 0 && h > 0 {
 			window_width, window_height = u32(w), u32(h)
-			handle_resize()
+			if handle_resize != nil {
+				handle_resize()
+			}
 		}
 	}, proc(_: rawptr, _: ^xdg_toplevel) {should_quit = true}}
 
