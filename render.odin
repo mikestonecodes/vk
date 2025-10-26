@@ -1,5 +1,6 @@
 package main
 
+
 COMPUTE_GROUP_SIZE :: u32(128)
 // Physics configuration
 PHYS_MAX_BODIES :: u32(512000)
@@ -145,6 +146,8 @@ resize :: proc() -> bool  {
 
 	compute_push_constants.screen_width = window_width
 	compute_push_constants.screen_height = window_height
+
+	//&PostProcessPushConstants{window_width, window_height}
 	return true
 }
 
@@ -173,7 +176,6 @@ compute :: proc(frame: FrameInputs) {
 	compute_push_constants.mouse_ndc_y = f32(
 		clamp(mouse_y / max(f64(window_height), 1.0), 0.0, 1.0),
 	)
-
 
 	// ---- Camera update ----
 	dispatch_compute(frame, .BEGIN_FRAME, 1)
@@ -233,8 +235,6 @@ physics :: proc(frame: FrameInputs, pixel_dispatch: u32) {
 		}
 	}
 	dispatch_compute(frame, .FINALIZE, body_dispatch)
-
-
 }
 
 // accumulation_buffer -> post_process.hlsl -> swapchain image

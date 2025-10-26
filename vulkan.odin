@@ -1,4 +1,5 @@
 package main
+
 import "base:runtime"
 import "core:fmt"
 import "core:time"
@@ -112,9 +113,6 @@ init_sync_objects :: proc() -> bool {
 	return true
 }
 
-
-images_in_flight: [MAX_SWAPCHAIN_IMAGES]vk.Fence
-
 render_frame :: proc(start_time: time.Time) -> bool {
 	// Check if window was resized
 	if window_resized {
@@ -125,6 +123,7 @@ render_frame :: proc(start_time: time.Time) -> bool {
 
 	// Wait until this frame's fence signals (GPU done with this slot)
 	vk.WaitForFences(device, 1, &in_flight_fences[current_frame], true, max(u64))
+	vk.ResetFences(device, 1, &in_flight_fences[current_frame])
 
 	// Acquire next image for this frame
 	result := vk.AcquireNextImageKHR(
@@ -135,24 +134,6 @@ render_frame :: proc(start_time: time.Time) -> bool {
 		{},
 		&image_index,
 	)
-
-	if result == .ERROR_OUT_OF_DATE_KHR {
-		handle_resize()
-		return true
-	}
-	if result != .SUCCESS && result != .SUBOPTIMAL_KHR {
-		return false
-	}
-
-	// Only reset fence after we know we'll submit work
-	vk.ResetFences(device, 1, &in_flight_fences[current_frame])
-
-	if images_in_flight[image_index] != {} &&
-	   images_in_flight[image_index] != in_flight_fences[current_frame] {
-		vk.WaitForFences(device, 1, &images_in_flight[image_index], true, max(u64))
-	}
-	images_in_flight[image_index] = in_flight_fences[current_frame]
-
 
 	e := &elements[image_index]
 
@@ -190,15 +171,7 @@ render_frame :: proc(start_time: time.Time) -> bool {
 		pImageIndices      = &image_index,
 	}
 	result = vk.QueuePresentKHR(queue, &present_info)
-
-	if result != .SUCCESS && result != .SUBOPTIMAL_KHR {
-		fmt.printf("QueuePresent failed: %v\n", result)
-		return false
-	}
-
-	// Cycle to next frame slot
 	current_frame = (current_frame + 1) % MAX_FRAMES_IN_FLIGHT
-
 	return true
 }
 
@@ -217,7 +190,6 @@ get_instance_extensions :: proc() -> []cstring {
 		array_push(&instance_extensions, "VK_EXT_debug_utils")
 		array_push(&instance_extensions, "VK_EXT_layer_settings")
 	}
-
 	return array_slice(&instance_extensions)
 }
 
