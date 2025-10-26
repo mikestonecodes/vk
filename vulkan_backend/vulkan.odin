@@ -93,6 +93,7 @@ current_frame: u32 = 0
 
 render_finished_semaphores: [MAX_SWAPCHAIN_IMAGES]vk.Semaphore
 elements: [MAX_SWAPCHAIN_IMAGES]SwapchainElement
+images_in_flight: [MAX_SWAPCHAIN_IMAGES]vk.Fence
 
 
 vulkan_surface: vk.SurfaceKHR
@@ -119,12 +120,10 @@ init_sync_objects :: proc() -> bool {
 }
 
 render_frame :: proc() -> bool {
-	// Wait until this frame's fence signals (GPU done with this slot)
-	vk.WaitForFences(device, 1, &in_flight_fences[current_frame], true, max(u64))
-	vk.ResetFences(device, 1, &in_flight_fences[current_frame])
+	frame_fence := &in_flight_fences[current_frame]
+	vk.WaitForFences(device, 1, frame_fence, true, max(u64))
 
-	// Acquire next image for this frame
-	result := vk.AcquireNextImageKHR(
+	acquire_result := vk.AcquireNextImageKHR(
 		device,
 		swapchain,
 		max(u64),
@@ -133,45 +132,59 @@ render_frame :: proc() -> bool {
 		&image_index,
 	)
 
-	e := &elements[image_index]
+	should_resize := acquire_result == .SUBOPTIMAL_KHR
 
-	// Record work
-	enc, f := begin_frame_commands(e, start_time)
-	record_commands(e, f)
-	transition_to_present(f.cmd, e)
+	if acquire_result == .ERROR_OUT_OF_DATE_KHR {
+		handle_resize()
+		return true
+	}
 
-	vk.EndCommandBuffer(enc.command_buffer)
+	if fence := images_in_flight[image_index]; fence != {} {
+		vk.WaitForFences(device, 1, &fence, true, max(u64))
+	}
 
-	stage := vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT}
+	vk.ResetFences(device, 1, frame_fence)
+	element := &elements[image_index]
+	encoder, frame := begin_frame_commands(element, start_time)
+	record_commands(element, frame)
+	transition_to_present(frame.cmd, element)
+	vk.EndCommandBuffer(encoder.command_buffer)
 
-	// Submit this frame
-	wait_sem := image_available_semaphores[current_frame]
-	signal_sem := render_finished_semaphores[image_index]
 	submit_info := vk.SubmitInfo {
 		sType                = .SUBMIT_INFO,
 		waitSemaphoreCount   = 1,
-		pWaitSemaphores      = &wait_sem,
-		pWaitDstStageMask    = &stage,
+		pWaitSemaphores      = &image_available_semaphores[current_frame],
+		pWaitDstStageMask    = &vk.PipelineStageFlags{.COLOR_ATTACHMENT_OUTPUT},
 		commandBufferCount   = 1,
-		pCommandBuffers      = &e.commandBuffer,
+		pCommandBuffers      = &element.commandBuffer,
 		signalSemaphoreCount = 1,
-		pSignalSemaphores    = &signal_sem,
+		pSignalSemaphores    = &render_finished_semaphores[image_index],
 	}
 
-	vk.QueueSubmit(queue, 1, &submit_info, in_flight_fences[current_frame])
+	if vk.QueueSubmit(queue, 1, &submit_info, frame_fence^) != .SUCCESS {
+		return false
+	}
 
-	// Present
+	images_in_flight[image_index] = frame_fence^
+
 	present_info := vk.PresentInfoKHR {
 		sType              = .PRESENT_INFO_KHR,
 		waitSemaphoreCount = 1,
-		pWaitSemaphores    = &signal_sem,
+		pWaitSemaphores    = &render_finished_semaphores[image_index],
 		swapchainCount     = 1,
 		pSwapchains        = &swapchain,
 		pImageIndices      = &image_index,
 	}
-	result = vk.QueuePresentKHR(queue, &present_info)
+
+	present_result := vk.QueuePresentKHR(queue, &present_info)
+	if present_result == .SUBOPTIMAL_KHR || present_result == .ERROR_OUT_OF_DATE_KHR {
+		should_resize = true
+	}
+
+	if should_resize do handle_resize()
 
 	current_frame = (current_frame + 1) % MAX_FRAMES_IN_FLIGHT
+
 	return true
 }
 
@@ -358,6 +371,7 @@ create_swapchain :: proc() -> bool {
 	for i in 0 ..< image_count {
 		e := &elements[i]
 		e.image = imgs[i]
+		images_in_flight[i] = {}
 		if vk.CreateImageView(
 			   device,
 			   &vk.ImageViewCreateInfo {
@@ -524,6 +538,7 @@ init :: proc(
 	start_time = time.now()
 	platform.render_frame = render_frame
 	platform.handle_resize = handle_resize
+	platform.check_shader_reload = check_shader_reload
 
 	vk.load_proc_addresses_global(platform.get_instance_proc_address())
 	exts := get_instance_extensions()
@@ -642,6 +657,7 @@ destroy_swapchain :: proc() {
 		if elements[i].commandBuffer != {} do vk.FreeCommandBuffers(device, command_pool, 1, &elements[i].commandBuffer)
 		if elements[i].imageView != {} do vk.DestroyImageView(device, elements[i].imageView, nil)
 		elements[i] = SwapchainElement{}
+		images_in_flight[i] = {}
 	}
 	if swapchain != {} do vk.DestroySwapchainKHR(device, swapchain, nil)
 	swapchain = {}

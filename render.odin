@@ -147,7 +147,7 @@ dispatch_compute :: proc(frame: FrameInputs, task: DispatchMode, count: u32) {
 	compute_push_constants.dispatch_mode = u32(task)
 	backend.bind(frame, &backend.render_shader_states[0], .COMPUTE, &compute_push_constants)
 	backend.dispatch(frame, count)
-	backend.compute_barrier(frame.cmd)
+	//	backend.compute_barrier(frame.cmd)
 }
 
 resize :: proc() -> bool {
@@ -163,7 +163,6 @@ resize :: proc() -> bool {
 	backend.bind_resource(0, &backend.buffers.data[0])
 	return true
 }
-
 
 
 // compute.hlsl -> accumulation_buffer
@@ -249,7 +248,7 @@ physics :: proc(frame: FrameInputs, pixel_dispatch: u32) {
 
 // accumulation_buffer -> post_process.hlsl -> swapchain image
 graphics :: proc(frame: FrameInputs, element: ^SwapchainElement) {
-	//	backend.apply_compute_to_fragment_barrier(frame.cmd, &buffers.data[0])
+	backend.apply_compute_to_fragment_barrier(frame.cmd, &backend.buffers.data[0])
 	backend.bind(
 		frame,
 		&backend.render_shader_states[1],

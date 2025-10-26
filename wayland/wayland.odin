@@ -9,6 +9,7 @@ import vk "vendor:vulkan"
 
 render_frame: proc() -> bool
 handle_resize: proc()
+check_shader_reload: proc()
 
 
 //──────────────────────────────────────────────
@@ -632,6 +633,7 @@ run :: proc() {
 	render_frame()
 	request_frame()
 	for !should_quit {
+		check_shader_reload()
 		_ = wl_display_dispatch(display)
 	}
 }

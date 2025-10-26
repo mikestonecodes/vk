@@ -119,7 +119,6 @@ float2 safe_normalize(float2 v, float fallback_x) {
         return float2(fallback_x, sqrt(1.0f - fallback_x * fallback_x));
     return v * rsqrt(len_sq);
 }
-
 // --- Grid Helpers ---
 uint wrap_int(int value, uint size_value) {
     return uint(clamp(value, 0, int(size_value - 1)));
@@ -224,16 +223,20 @@ void update_camera_state(float delta_time) {
 }
 
 
-void maybe_spawn_bodies() {
-    if (push_constants.spawn_body == 0u) return;
-
+void spawn_bodies_from_mouse() {
     uint capacity = BODY_CAPACITY;
     if (capacity <= DYNAMIC_BODY_START) return;
+
+    GlobalState state = global_state[0];
 
     uint pool = min(DYNAMIC_BODY_POOL, capacity - DYNAMIC_BODY_START);
     if (pool == 0u) return;
 
-    GlobalState state = global_state[0];
+    const uint SPAWN_BATCH = 16u;
+    if (state.spawn_active >= MAX_ACTIVE_DYNAMIC) return;
+
+    uint spawn_budget = min(SPAWN_BATCH, MAX_ACTIVE_DYNAMIC - state.spawn_active);
+    if (spawn_budget == 0u) return;
 
     float aspect = (push_constants.screen_height > 0u)
         ? (float(push_constants.screen_width) / float(push_constants.screen_height))
@@ -247,35 +250,29 @@ void maybe_spawn_bodies() {
     float2 center = GAME_START_CENTER;
     float2 dir = target_world - center;
     float len_sq = dot(dir, dir);
-    dir = (len_sq <= 1e-8f) ? float2(1.0f, 0.0f) : dir * rsqrt(len_sq);
-
-    const uint SPAWN_BATCH = 16u;
-    uint active_current = state.spawn_active;
-    if (active_current >= MAX_ACTIVE_DYNAMIC) return;
-
-    uint spawn_budget = min(SPAWN_BATCH, MAX_ACTIVE_DYNAMIC - active_current);
-    if (spawn_budget == 0u) return;
+    float2 spawn_dir = (len_sq <= 1e-8f) ? float2(1.0f, 0.0f) : dir * rsqrt(len_sq);
 
     uint next_index_base = state.spawn_next;
+    const float spread = 0.1f;
 
     for (uint n = 0u; n < spawn_budget; ++n) {
         uint next_index = next_index_base + n;
         uint slot = DYNAMIC_BODY_START + (next_index % pool);
         if (slot >= capacity) slot = capacity - 1u;
 
-        float jitter = (float(n) / float(max(SPAWN_BATCH, 1u))) - 0.5f;
-        float angle_step = 0.08f * float(n);
-        float2 rotated = float2(
-            dir.x * cos(angle_step) - dir.y * sin(angle_step),
-            dir.x * sin(angle_step) + dir.y * cos(angle_step)
-        );
+        float jitter = (float(n) / float(max(spawn_budget, 1u))) - 0.5f;
+        float angle = 0.08f * float(n);
+        float s = sin(angle);
+        float c = cos(angle);
+        float2 rotated = float2(spawn_dir.x * c - spawn_dir.y * s,
+                                spawn_dir.x * s + spawn_dir.y * c);
 
-        float spread = 0.1f;
         float spawn_offset = DYNAMIC_BODY_RADIUS + 0.05f + jitter * 0.1f;
         float2 spawn_pos = center + rotated * spawn_offset;
         float2 velocity = rotated * (DYNAMIC_BODY_SPEED * spread);
+        uint variant = (n % 2u == 0u) ? 1u : 2u;
 
-        body_type[slot] = (n % 2u == 0u) ? 1u : 2u;
+        body_type[slot] = variant;
         body_radius[slot] = DYNAMIC_BODY_RADIUS;
         body_inv_mass[slot] = 1.0f;
         body_pos[slot] = spawn_pos;
@@ -285,26 +282,16 @@ void maybe_spawn_bodies() {
     }
 
     state.spawn_next = next_index_base + spawn_budget;
-    state.spawn_active = active_current + spawn_budget;
+    state.spawn_active += spawn_budget;
     global_state[0] = state;
 }
 
 void begin_frame(uint id) {
     if (id == 0) {
         update_camera_state(push_constants.delta_time);
-        maybe_spawn_bodies();
-    }
-
-    uint width = push_constants.screen_width;
-    uint height = push_constants.screen_height;
-    uint total_pixels = width * height;
-    uint accum_idx = id * 4u;
-
-    if (id < total_pixels) {
-        accumulation_buffer[accum_idx + 0u] = 0u;
-        accumulation_buffer[accum_idx + 1u] = 0u;
-        accumulation_buffer[accum_idx + 2u] = 0u;
-        accumulation_buffer[accum_idx + 3u] = 0u;
+        if (push_constants.spawn_body != 0u) {
+            spawn_bodies_from_mouse();
+        }
     }
 }
 
@@ -318,7 +305,7 @@ void initialize_bodies(uint id) {
         global_state[0] = state;
     }
     uint capacity = BODY_CAPACITY;
-    if (id >= capacity) return;
+  //  if (id >= capacity) return;
 
     body_type[id] = 0u;
     body_radius[id] = DYNAMIC_BODY_RADIUS;
@@ -333,7 +320,7 @@ void initialize_bodies(uint id) {
 // (2) CLEAR GRID
 void clear_grid(uint id) {
     uint cells = grid_cell_count();
-    if (id >= cells) return;
+   // if (id >= cells) return;
     cell_counts[id] = 0u;
     cell_scratch[id] = 0u;
 }

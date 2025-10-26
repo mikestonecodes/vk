@@ -28,4 +28,5 @@ main :: proc() {
 	defer backend.cleanup()
 
 	platform.run()
+
 }
