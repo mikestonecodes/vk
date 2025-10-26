@@ -1,9 +1,11 @@
 package main
+import "core:fmt"
+import backend "vulkan_backend"
 import platform "wayland"
 
 COMPUTE_GROUP_SIZE :: u32(128)
 // Physics configuration
-PHYS_MAX_BODIES :: u32(512000)
+PHYS_MAX_BODIES :: u32(64000)
 PHYS_SOLVER_ITERATIONS :: u32(4)
 PHYS_SUBSTEPS :: u32(1)
 GRID_X :: u32(512)
@@ -48,7 +50,7 @@ ComputePushConstants :: struct {
 	_pad1:         u32,
 }
 
-compute_push_constants := ComputePushConstants {}
+compute_push_constants := ComputePushConstants{}
 
 
 DispatchMode :: enum u32 {
@@ -69,56 +71,17 @@ DispatchMode :: enum u32 {
 	RENDER,
 }
 
+DeviceSize :: backend.DeviceSize
+
 body_vec2_size := DeviceSize(size_of(f32) * 2)
 body_scalar_size := DeviceSize(size_of(f32))
 body_uint_size := DeviceSize(size_of(u32))
 body_capacity_size := DeviceSize(PHYS_MAX_BODIES)
 grid_cell_size := DeviceSize(GRID_CELL_COUNT)
 
+SwapchainElement :: backend.SwapchainElement
+FrameInputs :: backend.FrameInputs
 
-buffer_specs := []struct {
-	size:        DeviceSize,
-	flags:       BufferUsageFlags,
-	binding:     u32,
-	stage_flags: ShaderStageFlags,
-} {
-	{
-		DeviceSize(platform.window_width * platform.window_height * 4 * size_of(u32)),
-		{.STORAGE_BUFFER, .TRANSFER_DST},
-		0,
-		{.COMPUTE, .FRAGMENT},
-	},
-	{DeviceSize(size_of(GlobalStateGPU)), {.STORAGE_BUFFER, .TRANSFER_DST}, 3, {.COMPUTE}},
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 20, {.COMPUTE}}, //body_pos
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 21, {.COMPUTE}}, //body_pos_pred
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 22, {.COMPUTE}}, //body_vel
-	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 23, {.COMPUTE}}, //body_radius
-	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 24, {.COMPUTE}}, //body_inv_mass
-	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 25, {.COMPUTE}}, //body_flags
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 26, {.COMPUTE}}, //body_delta
-	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 30, {.COMPUTE}}, //grid_count
-	{DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size, {.STORAGE_BUFFER}, 31, {.COMPUTE}}, //grid_offset
-	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 32, {.COMPUTE}}, //grid_scan
-	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 33, {.COMPUTE}}, //body_grid_index
-}
-
-global_descriptor_extras :: []DescriptorBindingSpec {
-	{1, .SAMPLED_IMAGE, 2, {.FRAGMENT}},
-	{2, .SAMPLER, 2, {.FRAGMENT}},
-}
-
-
-render_shader_configs := []ShaderProgramConfig {
-	{
-		compute_module = "compute.spv",
-		push = {stage = {.COMPUTE}, size = u32(size_of(ComputePushConstants))},
-	},
-	{
-		vertex_module = "graphics_vs.spv",
-		fragment_module = "graphics_fs.spv",
-		push = {stage = {.VERTEX, .FRAGMENT}, size = u32(size_of(PostProcessPushConstants))},
-	},
-}
 
 key_bindings := []struct {
 	key:   i32,
@@ -133,23 +96,81 @@ key_bindings := []struct {
 	{i32(KEY_T), &compute_push_constants.speed},
 	{i32(KEY_R), &compute_push_constants.reset_camera},
 }
+buffer_specs := []backend.BufferSpec {
+	{
+		DeviceSize(platform.window_width * platform.window_height * 4 * size_of(u32)),
+		{.STORAGE_BUFFER},
+		0,
+		{.COMPUTE, .FRAGMENT},
+	},
+	{(size_of(GlobalStateGPU)), {.STORAGE_BUFFER}, 3, {.COMPUTE}},
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 20, {.COMPUTE}}, // body_pos
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 21, {.COMPUTE}}, // body_pos_pred
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 22, {.COMPUTE}}, // body_vel
+	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 23, {.COMPUTE}}, // body_radius
+	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 24, {.COMPUTE}}, // body_inv_mass
+	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 25, {.COMPUTE}}, // body_flags
+	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 26, {.COMPUTE}}, // body_delta
+	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 30, {.COMPUTE}}, // grid_count
+	{DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size, {.STORAGE_BUFFER}, 31, {.COMPUTE}}, // grid_offset
+	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 32, {.COMPUTE}}, // grid_scan
+	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 33, {.COMPUTE}}, // body_grid_index
+}
+
+global_descriptor_extras := []backend.DescriptorBindingSpec {
+	{1, .SAMPLED_IMAGE, 2, {.FRAGMENT}},
+	{2, .SAMPLER, 2, {.FRAGMENT}},
+}
+
+render_shader_configs := []backend.ShaderProgramConfig {
+	{
+		compute_module = "compute.spv",
+		push = {stage = {.COMPUTE}, size = u32(size_of(ComputePushConstants))},
+	},
+	{
+		vertex_module = "graphics_vs.spv",
+		fragment_module = "graphics_fs.spv",
+		push = {stage = {.VERTEX, .FRAGMENT}, size = u32(size_of(PostProcessPushConstants))},
+	},
+}
+
+init :: proc(
+) -> (
+	[]backend.BufferSpec,
+	[]backend.DescriptorBindingSpec,
+	[]backend.ShaderProgramConfig,
+) {
+
+	return buffer_specs, global_descriptor_extras, render_shader_configs
+}
 
 
-resize :: proc() -> bool  {
-	destroy_buffer(&buffers.data[0])
-	create_buffer(
-		&buffers.data[0],
-		DeviceSize(platform.window_width) * DeviceSize(platform.window_height) * 4 * DeviceSize(size_of(u32)),
+dispatch_compute :: proc(frame: FrameInputs, task: DispatchMode, count: u32) {
+	compute_push_constants.dispatch_mode = u32(task)
+	backend.bind(frame, &backend.render_shader_states[0], .COMPUTE, &compute_push_constants)
+	backend.dispatch(frame, count)
+	backend.compute_barrier(frame.cmd)
+}
+
+resize :: proc() -> bool {
+	backend.destroy_buffer(&backend.buffers.data[0])
+	backend.create_buffer(
+		&backend.buffers.data[0],
+		DeviceSize(platform.window_width) *
+		DeviceSize(platform.window_height) *
+		4 *
+		DeviceSize(size_of(u32)),
 		{.STORAGE_BUFFER, .TRANSFER_DST},
 	)
-	bind_resource(0, &buffers.data[0])
+	backend.bind_resource(0, &backend.buffers.data[0])
 
 	compute_push_constants.screen_width = platform.window_width
 	compute_push_constants.screen_height = platform.window_height
 
-	//&PostProcessPushConstants{platform.window_width, window_height}
+
 	return true
 }
+
 
 record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
 	compute(frame)
@@ -239,15 +260,14 @@ physics :: proc(frame: FrameInputs, pixel_dispatch: u32) {
 
 // accumulation_buffer -> post_process.hlsl -> swapchain image
 graphics :: proc(frame: FrameInputs, element: ^SwapchainElement) {
-	apply_compute_to_fragment_barrier(frame.cmd, &buffers.data[0])
-	bind(
+	//	backend.apply_compute_to_fragment_barrier(frame.cmd, &buffers.data[0])
+	backend.bind(
 		frame,
-		&render_shader_states[1],
+		&backend.render_shader_states[1],
 		.GRAPHICS,
-		&PostProcessPushConstants{platform.window_width, platform.window_height}
+		&PostProcessPushConstants{platform.window_width, platform.window_height},
 	)
-	begin_rendering(frame, element)
-	draw(frame, 3, 1, 0, 0)
-	end_rendering(frame)
-
+	backend.begin_rendering(frame, element)
+	backend.draw(frame, 3, 1, 0, 0)
+	backend.end_rendering(frame)
 }

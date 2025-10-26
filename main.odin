@@ -3,20 +3,19 @@ package main
 import "core:os"
 import "core:time"
 import platform "wayland"
+import backend "vulkan_backend"
 
-start_time: time.Time
 
 main :: proc() {
-	for arg in os.args[1:] {
-		if arg == "-release" do ENABLE_VALIDATION = false
-	}
 
+	backend.record_commands = record_commands
+	backend.resize = resize
 
 	if !platform.init() do return
 	defer platform.cleanup()
 
-	if !vulkan_init() do return
-	defer vulkan_cleanup()
+	if !backend.init(init()) do return
+	defer backend.cleanup()
 
 	platform.run()
 }

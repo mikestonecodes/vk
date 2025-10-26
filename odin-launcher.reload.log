@@ -2,7 +2,7 @@
 
 Build succeeded, launching vk...
 Wayland window ready (awaiting first frame callback)
-[INFO] No valid vk_loader_settings.json file found, no loader settings will be active
+YOINIT[INFO] No valid vk_loader_settings.json file found, no loader settings will be active
 [INFO] Searching for implicit layer manifest files
 [INFO]    In following locations:
 [INFO]       /home/mike/.config/vulkan/implicit_layer.d
@@ -109,5 +109,28 @@ Wayland window ready (awaiting first frame callback)
 [INFO]            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 [VERBOSE] Copying old device 0 into new device 0
 window init
+YODESV[DESC 00] binding=0  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{FRAGMENT, COMPUTE}
+[DESC 01] binding=3  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
+[DESC 02] binding=20  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
+[DESC 03] binding=21  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
+[DESC 04] binding=22  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
+[DESC 05] binding=23  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
+[DESC 06] binding=24  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
+[DESC 07] binding=25  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
+[DESC 08] binding=26  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
+[DESC 09] binding=30  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
+[DESC 10] binding=31  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
+[DESC 11] binding=32  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
+[DESC 12] binding=33  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
+[DESC 13] binding=1  type=SAMPLED_IMAGE  count=2  stages=ShaderStageFlags{FRAGMENT}
+[DESC 14] binding=2  type=SAMPLER  count=2  stages=ShaderStageFlags{FRAGMENT}
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x170000000017 to a memory block which is fully consumed by the buffer. The required size of the allocation is 32, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
+[WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x190000000019 to a memory block which is fully consumed by the buffer. The required size of the allocation is 512000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
+[WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x1b000000001b to a memory block which is fully consumed by the buffer. The required size of the allocation is 512000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
+[WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x1d000000001d to a memory block which is fully consumed by the buffer. The required size of the allocation is 512000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
+[WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x1f000000001f to a memory block which is fully consumed by the buffer. The required size of the allocation is 256000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
+[WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x210000000021 to a memory block which is fully consumed by the buffer. The required size of the allocation is 256000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
+[WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x230000000023 to a memory block which is fully consumed by the buffer. The required size of the allocation is 256000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
+[WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x250000000025 to a memory block which is fully consumed by the buffer. The required size of the allocation is 512000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
+[WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x2d000000002d to a memory block which is fully consumed by the buffer. The required size of the allocation is 256000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
 starting prun

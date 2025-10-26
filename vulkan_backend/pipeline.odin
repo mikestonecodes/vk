@@ -1,7 +1,7 @@
 // ============================================================================
 // Package & Imports
 // ============================================================================
-package main
+package vulkan_backend
 
 import "base:runtime"
 import "core:c"
@@ -21,6 +21,14 @@ ShaderProgram :: struct {
 	stage_count: u32,
 	stages:      [3]vk.ShaderStageFlags,
 	shaders:     [3]vk.ShaderEXT,
+}
+
+//{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 20, {.COMPUTE}}, // body_pos
+BufferSpec :: struct {
+	size:        vk.DeviceSize,
+	flags:       vk.BufferUsageFlags,
+	binding:     u32,
+	stage_flags: vk.ShaderStageFlags,
 }
 
 
@@ -179,6 +187,19 @@ get_global_descriptor_specs :: proc() -> []DescriptorBindingSpec {
 	}
 	for extra in global_descriptor_extras {
 		array_push(specs, extra)
+	}
+
+	fmt.printf("DESV")
+	for i in 0 ..< global_descriptor_specs.len {
+		d := global_descriptor_specs.data[i]
+		fmt.printf(
+			"[DESC %2d] binding=%d  type=%v  count=%d  stages=%v\n",
+			i,
+			d.binding,
+			d.descriptor_type,
+			d.descriptor_count,
+			d.stage_flags,
+		)
 	}
 	return array_slice(specs)
 }
@@ -411,7 +432,9 @@ create_shader_object :: proc(
 
 init_shaders :: proc() -> bool {
 
+	fmt.printf("YO")
 	if global_desc_set == {} && !init_global_descriptors() do return false
+
 	if !render_resources_initialized {
 		if !init_render_resources() do return false
 		render_resources_initialized = true
@@ -492,6 +515,10 @@ cleanup_shaders :: proc() {
 // Shader Hot Reload (Compact)
 // ============================================================================
 shader_mod_times := map[string]time.Time{}
+
+render_shader_configs: []ShaderProgramConfig
+buffer_specs: []BufferSpec
+global_descriptor_extras: []DescriptorBindingSpec
 
 check_shader_reload :: proc() {
 	reload := false
@@ -583,12 +610,6 @@ apply_compute_to_fragment_barrier :: proc(cmd: vk.CommandBuffer, buf: ^BufferRes
 }
 
 // Generic helper that respects solver_iteration etc.
-dispatch_compute :: proc(frame: FrameInputs, task: DispatchMode, count: u32) {
-	compute_push_constants.dispatch_mode = u32(task)
-	bind(frame, &render_shader_states[0], .COMPUTE, &compute_push_constants)
-	vk.CmdDispatch(frame.cmd, count, 1, 1)
-	compute_barrier(frame.cmd)
-}
 
 
 // ============================================================================
@@ -695,6 +716,9 @@ draw :: proc(
 
 end_rendering :: proc(frame: FrameInputs) {
 	vk.CmdEndRendering(frame.cmd)
+}
+dispatch :: proc(frame: FrameInputs, count: u32) {
+	vk.CmdDispatch(frame.cmd, count, 1, 1)
 }
 
 

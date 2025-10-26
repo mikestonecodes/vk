@@ -1,10 +1,14 @@
-package main
+package vulkan_backend
 
+import platform "../wayland"
 import "base:runtime"
 import "core:fmt"
 import "core:time"
 import vk "vendor:vulkan"
-import platform "wayland"
+
+
+record_commands: proc(element: ^SwapchainElement, frame: FrameInputs)
+resize: proc() -> bool
 
 ENABLE_VALIDATION := true
 MAX_FRAMES_IN_FLIGHT :: 2
@@ -13,10 +17,9 @@ MAX_SWAPCHAIN_IMAGES :: 3
 //───────────────────────────
 // TYPE MAPPINGS (for vulkan package files)
 //───────────────────────────
+
+start_time: time.Time
 DeviceSize :: vk.DeviceSize
-BufferUsageFlags :: vk.BufferUsageFlags
-ShaderStageFlags :: vk.ShaderStageFlags
-DescriptorType :: vk.DescriptorType
 
 BufferResource :: struct {
 	buffer: vk.Buffer,
@@ -511,7 +514,17 @@ destroy_buffer :: proc(resource: ^BufferResource) {
 //───────────────────────────
 
 
-vulkan_init :: proc() -> bool {
+init :: proc(
+	specs: []BufferSpec,
+	descriptors: []DescriptorBindingSpec,
+	shaders: []ShaderProgramConfig,
+) -> bool {
+
+	fmt.printf("YOINIT")
+	// Store slices into Vulkan globals
+	buffer_specs = specs
+	global_descriptor_extras = descriptors
+	render_shader_configs = shaders
 
 
 	start_time = time.now()
@@ -578,7 +591,7 @@ vulkan_init :: proc() -> bool {
 	)
 
 	vk.load_proc_addresses_instance(instance)
-	platform.init_window(instance,&vulkan_surface)
+	platform.init_window(instance, &vulkan_surface)
 	setup_physical_device() or_return
 	create_logical_device() or_return
 	vk.load_proc_addresses_device(device)
@@ -627,7 +640,6 @@ handle_resize :: proc() {
 	vk.DeviceWaitIdle(device)
 	destroy_swapchain()
 	create_swapchain()
-
 	resize()
 }
 
@@ -651,7 +663,7 @@ destroy_all_sync_objects :: proc() {
 	}
 }
 
-vulkan_cleanup :: proc() {
+cleanup :: proc() {
 	vk.DeviceWaitIdle(device)
 	cleanup_shaders()
 	cleanup_render_resources()

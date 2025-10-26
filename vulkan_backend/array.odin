@@ -1,4 +1,4 @@
-package main
+package vulkan_backend
 
 import "base:builtin"
 import "base:runtime"
