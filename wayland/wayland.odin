@@ -8,6 +8,7 @@ import vk "vendor:vulkan"
 
 
 render_frame: proc() -> bool
+handle_resize: proc()
 
 
 //──────────────────────────────────────────────
@@ -168,7 +169,7 @@ surf_impl := xdg_surface_listener {
 top_impl := xdg_toplevel_listener{proc(_: rawptr, _: ^xdg_toplevel, w: i32, h: i32, _: ^wl_array) {
 		if w > 0 && h > 0 {
 			window_width, window_height = u32(w), u32(h)
-			window_resized = true
+			handle_resize()
 		}
 	}, proc(_: rawptr, _: ^xdg_toplevel) {should_quit = true}}
 
@@ -385,7 +386,7 @@ get_instance_proc_address :: proc() -> rawptr {
 	return nil
 }
 
-init_window :: proc(instance: vk.Instance,vulkan_surface:^vk.SurfaceKHR) -> bool {
+init_window :: proc(instance: vk.Instance, vulkan_surface: ^vk.SurfaceKHR) -> bool {
 	create_surface := cast(proc "c" (
 		instance: vk.Instance,
 		info: ^vk.WaylandSurfaceCreateInfoKHR,
@@ -410,39 +411,60 @@ init_window :: proc(instance: vk.Instance,vulkan_surface:^vk.SurfaceKHR) -> bool
 //──────────────────────────────────────────────
 
 linux_to_key :: proc(code: u32) -> i32 {
-    // A–Z (Linux scancode → ASCII)
-    letter_map := [][2]u32{
-        {30, 'A'}, {48, 'B'}, {46, 'C'}, {32, 'D'}, {18, 'E'}, {33, 'F'},
-        {34, 'G'}, {35, 'H'}, {23, 'I'}, {36, 'J'}, {37, 'K'}, {38, 'L'},
-        {50, 'M'}, {49, 'N'}, {24, 'O'}, {25, 'P'}, {16, 'Q'}, {19, 'R'},
-        {31, 'S'}, {20, 'T'}, {22, 'U'}, {47, 'V'}, {17, 'W'}, {45, 'X'},
-        {21, 'Y'}, {44, 'Z'},
-    }
-    for pair in letter_map {
-        if pair[0] == code do return i32(pair[1])
-    }
+	// A–Z (Linux scancode → ASCII)
+	letter_map := [][2]u32 {
+		{30, 'A'},
+		{48, 'B'},
+		{46, 'C'},
+		{32, 'D'},
+		{18, 'E'},
+		{33, 'F'},
+		{34, 'G'},
+		{35, 'H'},
+		{23, 'I'},
+		{36, 'J'},
+		{37, 'K'},
+		{38, 'L'},
+		{50, 'M'},
+		{49, 'N'},
+		{24, 'O'},
+		{25, 'P'},
+		{16, 'Q'},
+		{19, 'R'},
+		{31, 'S'},
+		{20, 'T'},
+		{22, 'U'},
+		{47, 'V'},
+		{17, 'W'},
+		{45, 'X'},
+		{21, 'Y'},
+		{44, 'Z'},
+	}
+	for pair in letter_map {
+		if pair[0] == code do return i32(pair[1])
+	}
 
-    // numbers 1–9,0
-    if code >= 2 && code <= 10 do return '1' + i32(code - 2)
-    if code == 11 do return '0'
+	// numbers 1–9,0
+	if code >= 2 && code <= 10 do return '1' + i32(code - 2)
+	if code == 11 do return '0'
 
-    // space, escape, enter, tab, backspace, arrows
-    special_map := [][2]u32{
-        {57, 32},   // space
-        {1, 256},   // escape
-        {28, 257},  // enter
-        {15, 258},  // tab
-        {14, 259},  // backspace
-        {105, 263}, // left
-        {106, 262}, // right
-        {103, 265}, // up
-        {108, 264}, // down
-    }
-    for pair in special_map {
-        if pair[0] == code do return i32(pair[1])
-    }
+	// space, escape, enter, tab, backspace, arrows
+	special_map := [][2]u32 {
+		{57, 32}, // space
+		{1, 256}, // escape
+		{28, 257}, // enter
+		{15, 258}, // tab
+		{14, 259}, // backspace
+		{105, 263}, // left
+		{106, 262}, // right
+		{103, 265}, // up
+		{108, 264}, // down
+	}
+	for pair in special_map {
+		if pair[0] == code do return i32(pair[1])
+	}
 
-    return i32(code)
+	return i32(code)
 }
 // seat helpers
 wl_seat_get_keyboard :: proc(s: ^wl_seat) -> ^wl_keyboard {

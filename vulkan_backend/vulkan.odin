@@ -119,13 +119,6 @@ init_sync_objects :: proc() -> bool {
 }
 
 render_frame :: proc() -> bool {
-	// Check if window was resized
-	if platform.window_resized {
-		platform.window_resized = false
-		handle_resize()
-		return true
-	}
-
 	// Wait until this frame's fence signals (GPU done with this slot)
 	vk.WaitForFences(device, 1, &in_flight_fences[current_frame], true, max(u64))
 	vk.ResetFences(device, 1, &in_flight_fences[current_frame])
@@ -153,7 +146,7 @@ render_frame :: proc() -> bool {
 
 	// Submit this frame
 	wait_sem := image_available_semaphores[current_frame]
-	signal_sem := render_finished_semaphores[image_index]
+	signal_sem := render_finished_semaphores[current_frame]
 	submit_info := vk.SubmitInfo {
 		sType                = .SUBMIT_INFO,
 		waitSemaphoreCount   = 1,
@@ -520,7 +513,6 @@ init :: proc(
 	shaders: []ShaderProgramConfig,
 ) -> bool {
 
-	fmt.printf("YOINIT")
 	// Store slices into Vulkan globals
 	buffer_specs = specs
 	global_descriptor_extras = descriptors
@@ -529,7 +521,7 @@ init :: proc(
 
 	start_time = time.now()
 	platform.render_frame = render_frame
-	//platform.vulkan_surface= vulkan_surface
+	platform.handle_resize = handle_resize
 
 	vk.load_proc_addresses_global(platform.get_instance_proc_address())
 	exts := get_instance_extensions()

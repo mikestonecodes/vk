@@ -6,10 +6,20 @@ import platform "wayland"
 import backend "vulkan_backend"
 
 
-main :: proc() {
+init :: proc(
+) -> (
+	[]backend.BufferSpec,
+	[]backend.DescriptorBindingSpec,
+	[]backend.ShaderProgramConfig,
+) {
 
 	backend.record_commands = record_commands
 	backend.resize = resize
+	return buffer_specs, global_descriptor_extras, render_shader_configs
+}
+
+main :: proc() {
+	//using backend
 
 	if !platform.init() do return
 	defer platform.cleanup()

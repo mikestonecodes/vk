@@ -188,19 +188,6 @@ get_global_descriptor_specs :: proc() -> []DescriptorBindingSpec {
 	for extra in global_descriptor_extras {
 		array_push(specs, extra)
 	}
-
-	fmt.printf("DESV")
-	for i in 0 ..< global_descriptor_specs.len {
-		d := global_descriptor_specs.data[i]
-		fmt.printf(
-			"[DESC %2d] binding=%d  type=%v  count=%d  stages=%v\n",
-			i,
-			d.binding,
-			d.descriptor_type,
-			d.descriptor_count,
-			d.stage_flags,
-		)
-	}
 	return array_slice(specs)
 }
 

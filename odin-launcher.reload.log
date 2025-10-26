@@ -2,7 +2,7 @@
 
 Build succeeded, launching vk...
 Wayland window ready (awaiting first frame callback)
-YOINIT[INFO] No valid vk_loader_settings.json file found, no loader settings will be active
+[INFO] No valid vk_loader_settings.json file found, no loader settings will be active
 [INFO] Searching for implicit layer manifest files
 [INFO]    In following locations:
 [INFO]       /home/mike/.config/vulkan/implicit_layer.d
@@ -109,22 +109,7 @@ YOINIT[INFO] No valid vk_loader_settings.json file found, no loader settings wil
 [INFO]            [0] NVIDIA GeForce RTX 4070 Laptop GPU  
 [VERBOSE] Copying old device 0 into new device 0
 window init
-YODESV[DESC 00] binding=0  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{FRAGMENT, COMPUTE}
-[DESC 01] binding=3  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
-[DESC 02] binding=20  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
-[DESC 03] binding=21  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
-[DESC 04] binding=22  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
-[DESC 05] binding=23  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
-[DESC 06] binding=24  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
-[DESC 07] binding=25  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
-[DESC 08] binding=26  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
-[DESC 09] binding=30  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
-[DESC 10] binding=31  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
-[DESC 11] binding=32  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
-[DESC 12] binding=33  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags{COMPUTE}
-[DESC 13] binding=1  type=SAMPLED_IMAGE  count=2  stages=ShaderStageFlags{FRAGMENT}
-[DESC 14] binding=2  type=SAMPLER  count=2  stages=ShaderStageFlags{FRAGMENT}
-[WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x170000000017 to a memory block which is fully consumed by the buffer. The required size of the allocation is 32, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
+YO[WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x170000000017 to a memory block which is fully consumed by the buffer. The required size of the allocation is 32, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x190000000019 to a memory block which is fully consumed by the buffer. The required size of the allocation is 512000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x1b000000001b to a memory block which is fully consumed by the buffer. The required size of the allocation is 512000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x1d000000001d to a memory block which is fully consumed by the buffer. The required size of the allocation is 512000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
@@ -134,3 +119,84 @@ YODESV[DESC 00] binding=0  type=STORAGE_BUFFER  count=1  stages=ShaderStageFlags
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x250000000025 to a memory block which is fully consumed by the buffer. The required size of the allocation is 512000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x2d000000002d to a memory block which is fully consumed by the buffer. The required size of the allocation is 256000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
 starting prun
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
+Most recently acquired image indices: [0], 1, 2.
+(Brackets mark the last use of VkSemaphore 0xf000000000f in a presentation operation.)
+Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0xf000000000f may still be in use and cannot be safely reused with image index 2.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x100000000010) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
+Most recently acquired image indices: 0, [1], 2, 0.
+(Brackets mark the last use of VkSemaphore 0x100000000010 in a presentation operation.)
+Swapchain image 1 was presented but was not re-acquired, so VkSemaphore 0x100000000010 may still be in use and cannot be safely reused with image index 0.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x100000000010) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
+Most recently acquired image indices: 1, 0, 1, 0, 1, [0], 1, 2.
+(Brackets mark the last use of VkSemaphore 0x100000000010 in a presentation operation.)
+Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0x100000000010 may still be in use and cannot be safely reused with image index 2.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
+Most recently acquired image indices: 1, 0, 1, 0, 1, [0], 1, 2.
+(Brackets mark the last use of VkSemaphore 0xf000000000f in a presentation operation.)
+Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0xf000000000f may still be in use and cannot be safely reused with image index 2.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x100000000010) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
+Most recently acquired image indices: 0, 1, 2, 0, 1, [0], 2, 1.
+(Brackets mark the last use of VkSemaphore 0x100000000010 in a presentation operation.)
+Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0x100000000010 may still be in use and cannot be safely reused with image index 1.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x100000000010) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
+Most recently acquired image indices: 1, 0, 2, 1, 0, [1], 2, 0.
+(Brackets mark the last use of VkSemaphore 0x100000000010 in a presentation operation.)
+Swapchain image 1 was presented but was not re-acquired, so VkSemaphore 0x100000000010 may still be in use and cannot be safely reused with image index 0.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
+Most recently acquired image indices: 0, 1, 2, 0, 1, [0], 2, 1.
+(Brackets mark the last use of VkSemaphore 0xf000000000f in a presentation operation.)
+Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0xf000000000f may still be in use and cannot be safely reused with image index 1.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x100000000010) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
+Most recently acquired image indices: 0, 2, 1, 0, 2, [0], 1, 2.
+(Brackets mark the last use of VkSemaphore 0x100000000010 in a presentation operation.)
+Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0x100000000010 may still be in use and cannot be safely reused with image index 2.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
+Most recently acquired image indices: 0, 1, 2, 0, 1, [0], 1, 2.
+(Brackets mark the last use of VkSemaphore 0xf000000000f in a presentation operation.)
+Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0xf000000000f may still be in use and cannot be safely reused with image index 2.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+[ERROR] (Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
+vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
+Most recently acquired image indices: 0, 1, 2, 0, 1, [0], 2, 1.
+(Brackets mark the last use of VkSemaphore 0xf000000000f in a presentation operation.)
+Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0xf000000000f may still be in use and cannot be safely reused with image index 1.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)

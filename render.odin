@@ -96,6 +96,7 @@ key_bindings := []struct {
 	{i32(KEY_T), &compute_push_constants.speed},
 	{i32(KEY_R), &compute_push_constants.reset_camera},
 }
+
 buffer_specs := []backend.BufferSpec {
 	{
 		DeviceSize(platform.window_width * platform.window_height * 4 * size_of(u32)),
@@ -134,16 +135,13 @@ render_shader_configs := []backend.ShaderProgramConfig {
 	},
 }
 
-init :: proc(
-) -> (
-	[]backend.BufferSpec,
-	[]backend.DescriptorBindingSpec,
-	[]backend.ShaderProgramConfig,
-) {
+physics_initialized: bool
 
-	return buffer_specs, global_descriptor_extras, render_shader_configs
+
+record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
+	compute(frame)
+	graphics(frame, element)
 }
-
 
 dispatch_compute :: proc(frame: FrameInputs, task: DispatchMode, count: u32) {
 	compute_push_constants.dispatch_mode = u32(task)
@@ -163,27 +161,18 @@ resize :: proc() -> bool {
 		{.STORAGE_BUFFER, .TRANSFER_DST},
 	)
 	backend.bind_resource(0, &backend.buffers.data[0])
-
-	compute_push_constants.screen_width = platform.window_width
-	compute_push_constants.screen_height = platform.window_height
-
-
 	return true
 }
 
 
-record_commands :: proc(element: ^SwapchainElement, frame: FrameInputs) {
-	compute(frame)
-	graphics(frame, element)
-}
-
-physics_initialized: bool
 
 // compute.hlsl -> accumulation_buffer
 compute :: proc(frame: FrameInputs) {
 
 	compute_push_constants.time = frame.time
 	compute_push_constants.delta_time = frame.delta_time
+	compute_push_constants.screen_width = platform.window_width
+	compute_push_constants.screen_height = platform.window_height
 
 	for binding in key_bindings {
 		binding.field^ = b32(platform.is_key_pressed(binding.key))
