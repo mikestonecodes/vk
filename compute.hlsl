@@ -33,8 +33,6 @@ static const uint  PHYS_SUBSTEPS = 1u;
 
 static const float DELTA_SCALE = 332768.0f;
 static const float2 GAME_START_CENTER = float2(float(GRID_X*CELL_SIZE) * 0.5f, float(GRID_Y*CELL_SIZE) * 0.5f);
-
-
 // ============================================================================
 // STRUCTS & BUFFERS
 // ============================================================================
@@ -165,11 +163,136 @@ void atomic_add_body_delta(uint id, float2 v) {
     if (iy != 0) InterlockedAdd(body_delta_accum[id].y, iy);
 }
 
-// --- Common ---
+// Shared helper for setting up body state for spawns and resets.
+void init_body(uint slot, uint type, float radius, float inv_mass, float2 position, float2 velocity) {
+    body_type[slot] = type;
+    body_radius[slot] = radius;
+    body_inv_mass[slot] = inv_mass;
+    body_pos[slot] = position;
+    body_pos_pred[slot] = position;
+    body_vel[slot] = velocity;
+    store_body_delta(slot, float2(0.0f, 0.0f));
+}
+
 float2 camera_pos()  { return global_state[0].camera_position; }
 float  camera_zoom() { return global_state[0].camera_zoom; }
 
+struct BodyInitData {
+    float radius;
+    float inv_mass;
+};
 
+BodyInitData init(uint type) {
+    BodyInitData data;
+    switch (type) {
+        case 1u: {
+            data.radius = DYNAMIC_BODY_RADIUS;
+            data.inv_mass = 1.0f;
+            break;
+        }
+        case 2u: {
+            data.radius = DYNAMIC_BODY_RADIUS * 0.9f;
+            data.inv_mass = 1.0f;
+            break;
+        }
+        default: {
+            data.radius = DYNAMIC_BODY_RADIUS;
+            data.inv_mass = 0.0f;
+            break;
+        }
+    }
+    return data;
+}
+
+bool spawn(uint type, float2 position, float2 velocity) {
+    if (type == 0u) return false;
+
+    uint capacity = BODY_CAPACITY;
+    if (capacity <= DYNAMIC_BODY_START) return false;
+
+    GlobalState state = global_state[0];
+
+    uint pool = min(DYNAMIC_BODY_POOL, capacity - DYNAMIC_BODY_START);
+    if (pool == 0u) return false;
+    if (state.spawn_active >= MAX_ACTIVE_DYNAMIC) return false;
+
+    uint next_index = state.spawn_next;
+    uint slot = DYNAMIC_BODY_START + (next_index % pool);
+    if (slot >= capacity) slot = capacity - 1u;
+
+    BodyInitData config = init(type);
+    if (config.inv_mass <= 0.0f) return false;
+
+    bool was_inactive = (body_type[slot] == 0u);
+
+    init_body(slot, type, config.radius, config.inv_mass, position, velocity);
+
+    state.spawn_next = next_index + 1u;
+    if (was_inactive && state.spawn_active < MAX_ACTIVE_DYNAMIC) {
+        state.spawn_active += 1u;
+    }
+    global_state[0] = state;
+
+    return true;
+}
+
+void update(uint id, float dt) {
+    if (id == 0u) {
+        if (push_constants.spawn_body != 0u) {
+            GlobalState state = global_state[0];
+            float seed = float(state.spawn_next) * 41.239f + push_constants.time * 13.73f;
+            float type_choice = hash11(seed);
+            uint spawn_type = (type_choice > 0.5f) ? 1u : 2u;
+
+            float angle_rand = hash11(seed + 37.342f);
+            float angle = angle_rand * 6.2831853f; // 2*pi
+            float2 dir = float2(cos(angle), sin(angle));
+
+            float base_speed = DYNAMIC_BODY_SPEED;
+            float speed = (spawn_type == 1u) ? base_speed : base_speed * 0.65f;
+            float2 spawn_velocity = dir * speed;
+
+            float2 spawn_position = camera_pos();
+            spawn(spawn_type, spawn_position, spawn_velocity);
+        }
+    }
+
+    uint type = body_type[id];
+    if (type == 0u) return;
+
+    float2 vel = body_vel[id];
+    switch (type) {
+        case 1u: {
+            float speed = length(vel);
+            float target_speed = DYNAMIC_BODY_SPEED;
+            if (speed > 1e-5f) {
+                float blend = saturate(dt * 2.5f);
+                float new_speed = lerp(speed, target_speed, blend);
+                vel *= new_speed / max(speed, 1e-5f);
+            } else {
+                vel = float2(target_speed, 0.0f);
+            }
+            body_vel[id] = vel;
+            break;
+        }
+        case 2u: {
+            float2 cam = camera_pos();
+            float2 to_camera = cam - body_pos[id];
+            float2 accel_dir = safe_normalize(to_camera, 1.0f);
+            float attraction = DYNAMIC_BODY_SPEED * 0.5f;
+            vel += accel_dir * (attraction * dt);
+            float max_speed = DYNAMIC_BODY_SPEED * 1.3f;
+            float speed = length(vel);
+            if (speed > max_speed) {
+                vel *= max_speed / max(speed, 1e-5f);
+            }
+            body_vel[id] = vel;
+            break;
+        }
+        default:
+            break;
+    }
+}
 
 // ============================================================================
 // === DISPATCH KERNELS ===
@@ -223,75 +346,9 @@ void update_camera_state(float delta_time) {
 }
 
 
-void spawn_bodies_from_mouse() {
-    uint capacity = BODY_CAPACITY;
-    if (capacity <= DYNAMIC_BODY_START) return;
-
-    GlobalState state = global_state[0];
-
-    uint pool = min(DYNAMIC_BODY_POOL, capacity - DYNAMIC_BODY_START);
-    if (pool == 0u) return;
-
-    const uint SPAWN_BATCH = 16u;
-    if (state.spawn_active >= MAX_ACTIVE_DYNAMIC) return;
-
-    uint spawn_budget = min(SPAWN_BATCH, MAX_ACTIVE_DYNAMIC - state.spawn_active);
-    if (spawn_budget == 0u) return;
-
-    float aspect = (push_constants.screen_height > 0u)
-        ? (float(push_constants.screen_width) / float(push_constants.screen_height))
-        : 1.0f;
-
-    float2 uv = float2(push_constants.mouse_ndc_x, push_constants.mouse_ndc_y);
-    float2 view = uv * 2.0f - 1.0f;
-    view.x *= aspect;
-    float zoom = max(state.camera_zoom, 0.001f);
-    float2 target_world = state.camera_position + view * zoom;
-    float2 center = GAME_START_CENTER;
-    float2 dir = target_world - center;
-    float len_sq = dot(dir, dir);
-    float2 spawn_dir = (len_sq <= 1e-8f) ? float2(1.0f, 0.0f) : dir * rsqrt(len_sq);
-
-    uint next_index_base = state.spawn_next;
-    const float spread = 0.1f;
-
-    for (uint n = 0u; n < spawn_budget; ++n) {
-        uint next_index = next_index_base + n;
-        uint slot = DYNAMIC_BODY_START + (next_index % pool);
-        if (slot >= capacity) slot = capacity - 1u;
-
-        float jitter = (float(n) / float(max(spawn_budget, 1u))) - 0.5f;
-        float angle = 0.08f * float(n);
-        float s = sin(angle);
-        float c = cos(angle);
-        float2 rotated = float2(spawn_dir.x * c - spawn_dir.y * s,
-                                spawn_dir.x * s + spawn_dir.y * c);
-
-        float spawn_offset = DYNAMIC_BODY_RADIUS + 0.05f + jitter * 0.1f;
-        float2 spawn_pos = center + rotated * spawn_offset;
-        float2 velocity = rotated * (DYNAMIC_BODY_SPEED * spread);
-        uint variant = (n % 2u == 0u) ? 1u : 2u;
-
-        body_type[slot] = variant;
-        body_radius[slot] = DYNAMIC_BODY_RADIUS;
-        body_inv_mass[slot] = 1.0f;
-        body_pos[slot] = spawn_pos;
-        body_pos_pred[slot] = spawn_pos;
-        body_vel[slot] = velocity;
-        store_body_delta(slot, float2(0.0f, 0.0f));
-    }
-
-    state.spawn_next = next_index_base + spawn_budget;
-    state.spawn_active += spawn_budget;
-    global_state[0] = state;
-}
-
 void begin_frame(uint id) {
     if (id == 0) {
         update_camera_state(push_constants.delta_time);
-        if (push_constants.spawn_body != 0u) {
-            spawn_bodies_from_mouse();
-        }
     }
 }
 
@@ -304,16 +361,7 @@ void initialize_bodies(uint id) {
         state.spawn_active = 0u;
         global_state[0] = state;
     }
-    uint capacity = BODY_CAPACITY;
-  //  if (id >= capacity) return;
-
-    body_type[id] = 0u;
-    body_radius[id] = DYNAMIC_BODY_RADIUS;
-    body_inv_mass[id] = 1.0f;
-    body_pos[id] = float2(0.0f, 0.0f);
-    body_pos_pred[id] = body_pos[id];
-    body_vel[id] = float2(0.0f, 0.0f);
-    store_body_delta(id, float2(0.0f, 0.0f));
+    init_body(id, 0u, DYNAMIC_BODY_RADIUS, 1.0f, float2(0.0f, 0.0f), float2(0.0f, 0.0f));
 }
 
 
@@ -330,11 +378,14 @@ void clear_grid(uint id) {
 void integrate_predict(uint id) {
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) return;
-    if (body_type[id] == 0u) return;
 
     float dt = min(push_constants.delta_time, DT_CLAMP);
     dt = max(dt, 0.0f);
     if (PHYS_SUBSTEPS > 1u) dt /= float(PHYS_SUBSTEPS);
+
+    update(id, dt);
+
+    if (body_type[id] == 0u) return;
 
     float inv_mass = body_inv_mass[id];
     float2 vel = body_vel[id];
@@ -532,7 +583,6 @@ void constraints_kernel(uint id) {
             atomic_add_body_delta(id, corr);
         }
     }
-
 	*/
 
     uint2 gi = world_to_cell(xi);
