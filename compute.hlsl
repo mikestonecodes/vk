@@ -236,6 +236,33 @@ bool spawn(uint type, float2 position, float2 velocity) {
     return true;
 }
 
+struct BodyRenderData {
+    float3 color;
+    float intensity;
+};
+
+BodyRenderData render(uint type) {
+    BodyRenderData data;
+    switch (type) {
+        case 1u: {
+            data.color = float3(0.65f, 0.55f, 0.25f);
+            data.intensity = 0.9f;
+            break;
+        }
+        case 2u: {
+            data.color = float3(0.85f, 0.15f, 0.15f);
+            data.intensity = 0.1f;
+            break;
+        }
+        default: {
+            data.color = float3(0.40f, 0.45f, 0.55f);
+            data.intensity = 0.0f;
+            break;
+        }
+    }
+    return data;
+}
+
 void update(uint id, float dt) {
     if (id == 0u) {
         if (push_constants.spawn_body != 0u) {
@@ -787,21 +814,18 @@ void render_kernel(uint id) {
 			if (c >= cells) continue;
 			uint begin = cell_offsets[c];
 			uint end = cell_offsets[c + 1u];
-			float3 cell_color = hash31(float2(nx, ny));
-
-			//color = cell_color;
-
 			for (uint k = begin; k < end; ++k) {
 				uint j = sorted_indices[k];
 				float2 pos = body_pos[j];
 				float radius = body_radius[j];
-				int type = body_type[j];
+				uint type = body_type[j];
 				float softness = max(radius * 0.6f, 0.05f);
 				float dist = length(world - pos);
 				float coverage = soft_circle(dist, radius, softness);
-				float3 body_col = (type == 2) ? float3(0.85f, 0.15f, 0.15f) : float3(0.65f, 0.55f, 0.25f);
-
-				color += body_col * coverage * 0.4f;
+				BodyRenderData render_info = render(type);
+				if (render_info.intensity > 0.0f) {
+					color += render_info.color * coverage * render_info.intensity;
+				}
 				density = max(density, coverage);
 			}
 		}
