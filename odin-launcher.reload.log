@@ -119,7 +119,7 @@ YO[WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x170000000017 to a me
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x250000000025 to a memory block which is fully consumed by the buffer. The required size of the allocation is 512000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x2d000000002d to a memory block which is fully consumed by the buffer. The required size of the allocation is 256000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
 starting prun
-[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0x14050790, but it may still be in use by VkSwapchainKHR 0x40000000004.
 Most recently acquired image indices: [0], 1, 2.
 (Brackets mark the last use of VkSemaphore 0xf000000000f in a presentation operation.)
 Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0xf000000000f may still be in use and cannot be safely reused with image index 2.
@@ -127,75 +127,34 @@ Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reu
    a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
    b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
 The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
-[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x100000000010) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x100000000010) is being signaled by VkQueue 0x14050790, but it may still be in use by VkSwapchainKHR 0x460000000046.
+Most recently acquired image indices: [0], 1, 2.
+(Brackets mark the last use of VkSemaphore 0x100000000010 in a presentation operation.)
+Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0x100000000010 may still be in use and cannot be safely reused with image index 2.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0x14050790, but it may still be in use by VkSwapchainKHR 0x460000000046.
+Most recently acquired image indices: 0, [1], 2, 0.
+(Brackets mark the last use of VkSemaphore 0xf000000000f in a presentation operation.)
+Swapchain image 1 was presented but was not re-acquired, so VkSemaphore 0xf000000000f may still be in use and cannot be safely reused with image index 0.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0x14050790, but it may still be in use by VkSwapchainKHR 0x4f000000004f.
+Most recently acquired image indices: [0], 1, 2.
+(Brackets mark the last use of VkSemaphore 0xf000000000f in a presentation operation.)
+Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0xf000000000f may still be in use and cannot be safely reused with image index 2.
+Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
+   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x100000000010) is being signaled by VkQueue 0x14050790, but it may still be in use by VkSwapchainKHR 0x4f000000004f.
 Most recently acquired image indices: 0, [1], 2, 0.
 (Brackets mark the last use of VkSemaphore 0x100000000010 in a presentation operation.)
 Swapchain image 1 was presented but was not re-acquired, so VkSemaphore 0x100000000010 may still be in use and cannot be safely reused with image index 0.
-Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
-   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
-   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
-The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
-[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x100000000010) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
-Most recently acquired image indices: 1, 0, 1, 0, 1, [0], 1, 2.
-(Brackets mark the last use of VkSemaphore 0x100000000010 in a presentation operation.)
-Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0x100000000010 may still be in use and cannot be safely reused with image index 2.
-Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
-   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
-   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
-The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
-[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
-Most recently acquired image indices: 1, 0, 1, 0, 1, [0], 1, 2.
-(Brackets mark the last use of VkSemaphore 0xf000000000f in a presentation operation.)
-Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0xf000000000f may still be in use and cannot be safely reused with image index 2.
-Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
-   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
-   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
-The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
-[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x100000000010) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
-Most recently acquired image indices: 0, 1, 2, 0, 1, [0], 2, 1.
-(Brackets mark the last use of VkSemaphore 0x100000000010 in a presentation operation.)
-Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0x100000000010 may still be in use and cannot be safely reused with image index 1.
-Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
-   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
-   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
-The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
-[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x100000000010) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
-Most recently acquired image indices: 1, 0, 2, 1, 0, [1], 2, 0.
-(Brackets mark the last use of VkSemaphore 0x100000000010 in a presentation operation.)
-Swapchain image 1 was presented but was not re-acquired, so VkSemaphore 0x100000000010 may still be in use and cannot be safely reused with image index 0.
-Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
-   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
-   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
-The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
-[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
-Most recently acquired image indices: 0, 1, 2, 0, 1, [0], 2, 1.
-(Brackets mark the last use of VkSemaphore 0xf000000000f in a presentation operation.)
-Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0xf000000000f may still be in use and cannot be safely reused with image index 1.
-Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
-   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
-   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
-The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
-[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x100000000010) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
-Most recently acquired image indices: 0, 2, 1, 0, 2, [0], 1, 2.
-(Brackets mark the last use of VkSemaphore 0x100000000010 in a presentation operation.)
-Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0x100000000010 may still be in use and cannot be safely reused with image index 2.
-Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
-   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
-   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
-The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
-[ERROR] vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
-Most recently acquired image indices: 0, 1, 2, 0, 1, [0], 1, 2.
-(Brackets mark the last use of VkSemaphore 0xf000000000f in a presentation operation.)
-Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0xf000000000f may still be in use and cannot be safely reused with image index 2.
-Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
-   a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
-   b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
-The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
-[ERROR] (Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
-vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0xf000000000f) is being signaled by VkQueue 0x89639d0, but it may still be in use by VkSwapchainKHR 0x460000000046.
-Most recently acquired image indices: 0, 1, 2, 0, 1, [0], 2, 1.
-(Brackets mark the last use of VkSemaphore 0xf000000000f in a presentation operation.)
-Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0xf000000000f may still be in use and cannot be safely reused with image index 1.
 Vulkan insight: See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html for details on swapchain semaphore reuse. Examples of possible approaches:
    a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
    b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.

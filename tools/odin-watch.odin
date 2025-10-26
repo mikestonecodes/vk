@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 import "core:time"
+import "core:path/filepath"
 
 // Extremely small watcher: polls specified directory for .odin changes
 last_times: map[string]time.Time
@@ -17,7 +18,11 @@ foreign libc {
 }
 
 scan_once :: proc() -> bool {
-	handle, err := os.open(watch_dir)
+	return scan_dir_recursive(watch_dir)
+}
+
+scan_dir_recursive :: proc(dir_path: string) -> bool {
+	handle, err := os.open(dir_path)
 	if err != nil {
 		return false
 	}
@@ -26,17 +31,28 @@ scan_once :: proc() -> bool {
 	if read_err != nil {
 		return false
 	}
+	defer delete(files)
+
 	changed := false
 	for file in files {
-		if strings.has_suffix(file.name, ".odin") {
-			if prev, ok := last_times[file.name]; !ok || prev != file.modification_time {
-				last_times[strings.clone(file.name)] = file.modification_time
-				fmt.printf("CHANGED: %s\n", file.name)
+		full_path := filepath.join({dir_path, file.name})
+		defer delete(full_path)
+
+		if file.is_dir {
+			// Recursively scan subdirectories
+			if scan_dir_recursive(full_path) {
+				changed = true
+			}
+		} else if strings.has_suffix(file.name, ".odin") {
+			// Check if .odin file changed
+			if prev, ok := last_times[full_path]; !ok || prev != file.modification_time {
+				last_times[strings.clone(full_path)] = file.modification_time
+				fmt.printf("CHANGED: %s\n", full_path)
 				changed = true
 			}
 		}
 	}
-	delete(files)
+
 	return changed
 }
 
