@@ -7,6 +7,7 @@ import "base:runtime"
 import "core:c"
 import "core:fmt"
 import "core:os"
+import "core:path/filepath"
 import "core:strings"
 import "core:time"
 import vk "vendor:vulkan"
@@ -544,6 +545,7 @@ check_shader_reload :: proc() {
 				reload = true
 			}
 			shader_mod_times[hlsl] = mod_time
+
 		}
 	}
 
