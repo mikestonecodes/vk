@@ -43,7 +43,7 @@ BodyRenderData render(uint type) {
             break;
         }
         case 2u: {
-            data.color = float3(0.85f, 0.15f, 0.15f);
+            data.color = float3(0.85f, 0.15f, 3.15f);
             data.intensity = 0.1f;
             break;
         }

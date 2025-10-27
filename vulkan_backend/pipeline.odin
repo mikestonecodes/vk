@@ -420,7 +420,6 @@ create_shader_object :: proc(
 
 init_shaders :: proc() -> bool {
 
-	fmt.printf("YO")
 	if global_desc_set == {} && !init_global_descriptors() do return false
 
 	if !render_resources_initialized {
@@ -503,6 +502,7 @@ cleanup_shaders :: proc() {
 // Shader Hot Reload (Compact)
 // ============================================================================
 shader_mod_times := map[string]time.Time{}
+shader_dependency_files := []string{"game.hlsl"}
 
 render_shader_configs: []ShaderProgramConfig
 buffer_specs: []BufferSpec
@@ -522,6 +522,7 @@ check_shader_reload :: proc() {
 			} else if stage_name == "fragment" {
 				spv = cfg.fragment_module
 			}
+
 			if spv == "" || !os.exists(spv) {
 				continue
 			}
@@ -529,24 +530,30 @@ check_shader_reload :: proc() {
 			info := get_stage_info(stage_name)
 			hlsl := fmt.aprintf("%s.hlsl", strings.trim_suffix(spv, info.suffix))
 
-			// Only check HLSL source files, not compiled SPV files
-			// This prevents infinite reload loops when SPV is recompiled
-			if !os.exists(hlsl) {
-				continue
-			}
-
+			if !os.exists(hlsl) do continue
 			file_info, err := os.stat(hlsl)
-			if err != os.ERROR_NONE {
-				continue
-			}
+
+			if err != os.ERROR_NONE do continue
+
 			mod_time := file_info.modification_time
 			prev_time, exists := shader_mod_times[hlsl]
-			if exists && prev_time != mod_time {
-				reload = true
-			}
+			if exists && prev_time != mod_time do reload = true
+
 			shader_mod_times[hlsl] = mod_time
 
 		}
+	}
+
+	for dep in shader_dependency_files {
+		if !os.exists(dep) do continue
+		file_info, err := os.stat(dep)
+		if err != os.ERROR_NONE do continue
+
+		mod_time := file_info.modification_time
+		prev_time, exists := shader_mod_times[dep]
+		if exists && prev_time != mod_time do reload = true
+
+		shader_mod_times[dep] = mod_time
 	}
 
 	if reload {
