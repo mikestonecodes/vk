@@ -103,26 +103,26 @@ buffer_specs := []backend.BufferSpec {
 	{
 		0,
 		DeviceSize(platform.window_width * platform.window_height * 4 * size_of(u32)),
-		{BufferAccess.WRITE, BufferAccess.READ},
-		{BufferStage.FRAGMENT, BufferStage.COMPUTE},
+		{.WRITE, .READ},
+		{.FRAGMENT, BufferStage.COMPUTE},
 	},
 	{
 		3,
 		DeviceSize(size_of(GlobalStateGPU)),
-		{BufferAccess.WRITE, BufferAccess.READ},
-		{BufferStage.COMPUTE},
+		{.WRITE, .READ},
+		{.COMPUTE},
 	},
-	{20, body_capacity_size * body_vec2_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_pos
-	{21, body_capacity_size * body_vec2_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_pos_pred
-	{22, body_capacity_size * body_vec2_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_vel
-	{23, body_capacity_size * body_scalar_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_radius
-	{24, body_capacity_size * body_scalar_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_inv_mass
-	{25, body_capacity_size * body_uint_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_flags
-	{26, body_capacity_size * body_vec2_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_delta
-	{30, grid_cell_size * body_uint_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // grid_count
-	{31, DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // grid_offset
-	{32, grid_cell_size * body_uint_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // grid_scan
-	{33, body_capacity_size * body_uint_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_grid_index
+	{20, body_capacity_size * body_vec2_size, {.WRITE, .READ}, {.COMPUTE}}, // body_pos
+	{21, body_capacity_size * body_vec2_size, {.WRITE, .READ}, {.COMPUTE}}, // body_pos_pred
+	{22, body_capacity_size * body_vec2_size, {.WRITE, .READ}, {.COMPUTE}}, // body_vel
+	{23, body_capacity_size * body_scalar_size, {.WRITE, .READ}, {.COMPUTE}}, // body_radius
+	{24, body_capacity_size * body_scalar_size, {.WRITE, .READ}, {.COMPUTE}}, // body_inv_mass
+	{25, body_capacity_size * body_uint_size, {.WRITE, .READ}, {.COMPUTE}}, // body_flags
+	{26, body_capacity_size * body_vec2_size, {.WRITE, .READ}, {.COMPUTE}}, // body_delta
+	{30, grid_cell_size * body_uint_size, {.WRITE, .READ}, {.COMPUTE}}, // grid_count
+	{31, DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size, {.WRITE, .READ}, {.COMPUTE}}, // grid_offset
+	{32, grid_cell_size * body_uint_size, {.WRITE, .READ}, {.COMPUTE}}, // grid_scan
+	{33, body_capacity_size * body_uint_size, {.WRITE, .READ}, {.COMPUTE}}, // body_grid_index
 }
 
 global_descriptor_extras := []backend.DescriptorBindingSpec {
