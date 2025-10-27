@@ -104,14 +104,9 @@ buffer_specs := []backend.BufferSpec {
 		0,
 		DeviceSize(platform.window_width * platform.window_height * 4 * size_of(u32)),
 		{.WRITE, .READ},
-		{.FRAGMENT, BufferStage.COMPUTE},
+		{.FRAGMENT, .COMPUTE},
 	},
-	{
-		3,
-		DeviceSize(size_of(GlobalStateGPU)),
-		{.WRITE, .READ},
-		{.COMPUTE},
-	},
+	{3, DeviceSize(size_of(GlobalStateGPU)), {.WRITE, .READ}, {.COMPUTE}},
 	{20, body_capacity_size * body_vec2_size, {.WRITE, .READ}, {.COMPUTE}}, // body_pos
 	{21, body_capacity_size * body_vec2_size, {.WRITE, .READ}, {.COMPUTE}}, // body_pos_pred
 	{22, body_capacity_size * body_vec2_size, {.WRITE, .READ}, {.COMPUTE}}, // body_vel

@@ -48,21 +48,21 @@ MAX_SPIRV_BYTES :: 1 << 20
 spirv_words := Array(MAX_SPIRV_BYTES / 4, u32){}
 
 buffer_access_to_vk_usage :: proc(access: BufferAccessFlags) -> vk.BufferUsageFlags {
-	flags := vk.BufferUsageFlags{}
-	if BufferAccess.READ in access || BufferAccess.WRITE in access {
-		flags |= {.STORAGE_BUFFER}
-	}
-	return flags
+    flags: vk.BufferUsageFlags = {}
+
+    if .READ   in access do flags |= {.STORAGE_BUFFER, .TRANSFER_SRC}
+    if .WRITE  in access do flags |= {.STORAGE_BUFFER, .TRANSFER_DST}
+    if .UNIFORM in access do flags |= {.UNIFORM_BUFFER}
+    if .VERTEX  in access do flags |= {.VERTEX_BUFFER}
+    if .INDEX   in access do flags |= {.INDEX_BUFFER}
+
+    return flags
 }
 
 buffer_stage_to_vk_flags :: proc(stages: BufferStageFlags) -> vk.ShaderStageFlags {
 	flags := vk.ShaderStageFlags{}
-	if BufferStage.COMPUTE in stages {
-		flags |= {.COMPUTE}
-	}
-	if BufferStage.FRAGMENT in stages {
-		flags |= {.FRAGMENT}
-	}
+	if .COMPUTE in stages do flags |= {.COMPUTE}
+	if .FRAGMENT in stages do flags |= {.FRAGMENT}
 	return flags
 }
 

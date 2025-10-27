@@ -74,6 +74,9 @@ DescriptorBindingSpec :: struct {
 BufferAccess :: enum u32 {
 	READ,
 	WRITE,
+	UNIFORM,
+	VERTEX,
+	INDEX,
 }
 
 BufferAccessFlags :: bit_set[BufferAccess; u32]
