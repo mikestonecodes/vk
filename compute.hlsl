@@ -538,6 +538,8 @@ void constraints_kernel(uint id) {
 
                 atomic_add_body_delta(id, corr_i);
                 atomic_add_body_delta(j, corr_j);
+
+                collision_callback(id, j, n, penetration);
             }
         }
     }
@@ -712,7 +714,7 @@ void render_kernel(uint id) {
 				float softness = max(radius * 0.6f, 0.05f);
 				float dist = length(world - pos);
 				float coverage = soft_circle(dist, radius, softness);
-				BodyRenderData render_info = render(type);
+				BodyRenderData render_info = render(j, type);
 				if (render_info.intensity > 0.0f) {
 					color += render_info.color * coverage * render_info.intensity;
 				}

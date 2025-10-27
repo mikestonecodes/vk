@@ -1,6 +1,7 @@
 // Gameplay-specific body initialization, rendering colors, and per-tick updates.
 
 bool spawn(uint type, float2 position, float2 velocity);
+float2 load_body_delta(uint id);
 
 struct BodyInitData {
     float radius;
@@ -34,7 +35,7 @@ struct BodyRenderData {
     float intensity;
 };
 
-BodyRenderData render(uint type) {
+BodyRenderData render(uint id, uint type) {
     BodyRenderData data;
     switch (type) {
         case 1u: {
@@ -52,6 +53,15 @@ BodyRenderData render(uint type) {
             data.intensity = 0.0f;
             break;
         }
+    }
+
+    float2 delta = load_body_delta(id);
+    float signal = length(delta);
+    if (signal > 0.0f) {
+        float flash = saturate(signal * 10.0f);
+        float3 collision_color = float3(3.0f, 0.2f, 0.2f);
+        data.color = lerp(data.color, collision_color, flash);
+        data.intensity = max(data.intensity, flash);
     }
     return data;
 }
@@ -111,5 +121,27 @@ void update(uint id, float dt) {
         }
         default:
             break;
+    }
+}
+
+void collision_callback(uint a, uint b, float2 normal, float penetration) {
+    if (penetration <= 0.0f) return;
+    if (a >= BODY_CAPACITY || b >= BODY_CAPACITY) return;
+
+    uint type_a = body_type[a];
+    uint type_b = body_type[b];
+    if (type_a == 0u || type_b == 0u) return;
+
+    float weight_a = body_inv_mass[a];
+    float weight_b = body_inv_mass[b];
+    if (weight_a <= 0.0f && weight_b <= 0.0f) return;
+
+    float2 impulse = normal * penetration * 0.5f;
+
+    if (weight_a > 0.0f) {
+ //       atomic_add_body_delta(a, -impulse);
+    }
+    if (weight_b > 0.0f) {
+  //      atomic_add_body_delta(b, impulse);
     }
 }
