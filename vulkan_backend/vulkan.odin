@@ -71,6 +71,27 @@ DescriptorBindingSpec :: struct {
 	stage_flags:      vk.ShaderStageFlags,
 }
 
+BufferAccess :: enum u32 {
+	READ,
+	WRITE,
+}
+
+BufferAccessFlags :: bit_set[BufferAccess; u32]
+
+BufferStage :: enum u32 {
+	FRAGMENT,
+	COMPUTE,
+}
+
+BufferStageFlags :: bit_set[BufferStage; u32]
+
+BufferSpec :: struct {
+	binding: u32,
+	size:    DeviceSize,
+	access:  BufferAccessFlags,
+	stages:  BufferStageFlags,
+}
+
 //───────────────────────────
 // GLOBALS
 //───────────────────────────
@@ -468,9 +489,10 @@ find_memory_type :: proc(type_filter: u32, properties: vk.MemoryPropertyFlags) -
 create_buffer :: proc(
 	res: ^BufferResource,
 	size: vk.DeviceSize,
-	usage: vk.BufferUsageFlags,
+	access: BufferAccessFlags,
 	memory_properties: vk.MemoryPropertyFlags = {vk.MemoryPropertyFlag.DEVICE_LOCAL},
 ) -> bool {
+	usage := buffer_access_to_vk_usage(access)
 	info := vk.BufferCreateInfo {
 		sType       = .BUFFER_CREATE_INFO,
 		size        = size,

@@ -24,14 +24,6 @@ ShaderProgram :: struct {
 	shaders:     [3]vk.ShaderEXT,
 }
 
-//{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 20, {.COMPUTE}}, // body_pos
-BufferSpec :: struct {
-	size:        vk.DeviceSize,
-	flags:       vk.BufferUsageFlags,
-	binding:     u32,
-	stage_flags: vk.ShaderStageFlags,
-}
-
 
 // ============================================================================
 // Global State
@@ -54,6 +46,25 @@ render_resources_initialized: bool
 
 MAX_SPIRV_BYTES :: 1 << 20
 spirv_words := Array(MAX_SPIRV_BYTES / 4, u32){}
+
+buffer_access_to_vk_usage :: proc(access: BufferAccessFlags) -> vk.BufferUsageFlags {
+	flags := vk.BufferUsageFlags{}
+	if BufferAccess.READ in access || BufferAccess.WRITE in access {
+		flags |= {.STORAGE_BUFFER}
+	}
+	return flags
+}
+
+buffer_stage_to_vk_flags :: proc(stages: BufferStageFlags) -> vk.ShaderStageFlags {
+	flags := vk.ShaderStageFlags{}
+	if BufferStage.COMPUTE in stages {
+		flags |= {.COMPUTE}
+	}
+	if BufferStage.FRAGMENT in stages {
+		flags |= {.FRAGMENT}
+	}
+	return flags
+}
 
 
 // ============================================================================
@@ -182,7 +193,7 @@ get_global_descriptor_specs :: proc() -> []DescriptorBindingSpec {
 			binding          = buffer_spec.binding,
 			descriptor_type  = .STORAGE_BUFFER,
 			descriptor_count = 1,
-			stage_flags      = buffer_spec.stage_flags,
+			stage_flags      = buffer_stage_to_vk_flags(buffer_spec.stages),
 		}
 		array_push(specs, descriptor)
 	}
@@ -723,7 +734,7 @@ dispatch :: proc(frame: FrameInputs, count: u32) {
 // ============================================================================
 init_render_resources :: proc() -> bool {
 	for spec, i in buffer_specs {
-		create_buffer(&buffers.data[i], spec.size, spec.flags)
+		create_buffer(&buffers.data[i], spec.size, spec.access)
 		bind_resource(0, &buffers.data[i], spec.binding)
 	}
 	return true

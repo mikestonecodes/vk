@@ -72,6 +72,8 @@ DispatchMode :: enum u32 {
 }
 
 DeviceSize :: backend.DeviceSize
+BufferAccess :: backend.BufferAccess
+BufferStage :: backend.BufferStage
 
 body_vec2_size := DeviceSize(size_of(f32) * 2)
 body_scalar_size := DeviceSize(size_of(f32))
@@ -99,23 +101,28 @@ key_bindings := []struct {
 
 buffer_specs := []backend.BufferSpec {
 	{
-		DeviceSize(platform.window_width * platform.window_height * 4 * size_of(u32)),
-		{.STORAGE_BUFFER},
 		0,
-		{.COMPUTE, .FRAGMENT},
+		DeviceSize(platform.window_width * platform.window_height * 4 * size_of(u32)),
+		{BufferAccess.WRITE, BufferAccess.READ},
+		{BufferStage.FRAGMENT, BufferStage.COMPUTE},
 	},
-	{(size_of(GlobalStateGPU)), {.STORAGE_BUFFER}, 3, {.COMPUTE}},
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 20, {.COMPUTE}}, // body_pos
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 21, {.COMPUTE}}, // body_pos_pred
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 22, {.COMPUTE}}, // body_vel
-	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 23, {.COMPUTE}}, // body_radius
-	{body_capacity_size * body_scalar_size, {.STORAGE_BUFFER}, 24, {.COMPUTE}}, // body_inv_mass
-	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 25, {.COMPUTE}}, // body_flags
-	{body_capacity_size * body_vec2_size, {.STORAGE_BUFFER}, 26, {.COMPUTE}}, // body_delta
-	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 30, {.COMPUTE}}, // grid_count
-	{DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size, {.STORAGE_BUFFER}, 31, {.COMPUTE}}, // grid_offset
-	{grid_cell_size * body_uint_size, {.STORAGE_BUFFER}, 32, {.COMPUTE}}, // grid_scan
-	{body_capacity_size * body_uint_size, {.STORAGE_BUFFER}, 33, {.COMPUTE}}, // body_grid_index
+	{
+		3,
+		DeviceSize(size_of(GlobalStateGPU)),
+		{BufferAccess.WRITE, BufferAccess.READ},
+		{BufferStage.COMPUTE},
+	},
+	{20, body_capacity_size * body_vec2_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_pos
+	{21, body_capacity_size * body_vec2_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_pos_pred
+	{22, body_capacity_size * body_vec2_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_vel
+	{23, body_capacity_size * body_scalar_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_radius
+	{24, body_capacity_size * body_scalar_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_inv_mass
+	{25, body_capacity_size * body_uint_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_flags
+	{26, body_capacity_size * body_vec2_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_delta
+	{30, grid_cell_size * body_uint_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // grid_count
+	{31, DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // grid_offset
+	{32, grid_cell_size * body_uint_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // grid_scan
+	{33, body_capacity_size * body_uint_size, {BufferAccess.WRITE, BufferAccess.READ}, {BufferStage.COMPUTE}}, // body_grid_index
 }
 
 global_descriptor_extras := []backend.DescriptorBindingSpec {
@@ -158,7 +165,7 @@ resize :: proc() -> bool {
 		DeviceSize(platform.window_height) *
 		4 *
 		DeviceSize(size_of(u32)),
-		{.STORAGE_BUFFER, .TRANSFER_DST},
+		{BufferAccess.WRITE, BufferAccess.READ},
 	)
 	backend.bind_resource(0, &backend.buffers.data[0])
 	return true
