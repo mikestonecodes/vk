@@ -162,15 +162,11 @@ float2 camera_pos()  { return global_state[0].camera_position; }
 float  camera_zoom() { return global_state[0].camera_zoom; }
 
 // Camera-space helpers shared by gameplay and rendering code.
-float safe_camera_zoom() {
-    return max(camera_zoom(), CAMERA_MIN_ZOOM);
-}
+float safe_camera_zoom() { return max(camera_zoom(), CAMERA_MIN_ZOOM); }
 
 float2 screen_resolution() {
-    return float2(
-        max(float(push_constants.screen_width), 1.0f),
-        max(float(push_constants.screen_height), 1.0f)
-    );
+    return float2(max(float(push_constants.screen_width), 1.0f),
+                  max(float(push_constants.screen_height), 1.0f));
 }
 
 float aspect_ratio() {
@@ -283,10 +279,9 @@ void update_camera_state(float delta_time) {
 
 
 void begin_frame(uint id) {
-    if (id == 0) {
-		begin();
-        update_camera_state(push_constants.delta_time);
-    }
+    if (id != 0u) return;
+    begin();
+    update_camera_state(push_constants.delta_time);
 }
 
 
@@ -304,8 +299,6 @@ void initialize_bodies(uint id) {
 
 // (2) CLEAR GRID
 void clear_grid(uint id) {
-    uint cells = grid_cell_count();
-   // if (id >= cells) return;
     cell_counts[id] = 0u;
     cell_scratch[id] = 0u;
 }
@@ -478,7 +471,8 @@ void constraints_kernel(uint id) {
         for (int ox = -1; ox <= 1; ++ox) {
             uint nx = wrap_int(int(gi.x) + ox, GRID_X);
             uint ny = wrap_int(int(gi.y) + oy, GRID_Y);
-            uint c = ny * GRID_X + nx;
+            uint2 neighbor = uint2(nx, ny);
+            uint c = cell_index(neighbor);
             if (c >= cells) continue;
             uint begin = cell_offsets[c];
             uint end = cell_offsets[c + 1u];
@@ -618,22 +612,10 @@ void render_kernel(uint id) {
 
 	float2 uv = pixel_center_uv(id, width, height);
 	float2 world = uv_to_world(uv);
-	float zoom = safe_camera_zoom();
-	float2 resolution = screen_resolution();
-	float aspect = aspect_ratio();
 
 	float3 color = float3(0.016f, 0.018f, 0.020f);
 	float density = 0.001f;
 
-	float world_step_x = abs(zoom) * (2.0f / resolution.x) * aspect;
-	float world_step_y = abs(zoom) * (2.0f / resolution.y);
-	float max_step = max(world_step_x, world_step_y);
-	int extra = (int)ceil(max_step);
-	int sample_radius= clamp(extra + 2, 2, 10);
-
-
-
-	uint grid_x = GRID_X;
 	uint cells = grid_cell_count();
 	uint2 gi = world_to_cell(world);
 	for (int oy = -1; oy <= 1; ++oy) {
@@ -642,7 +624,8 @@ void render_kernel(uint id) {
 			uint nx = wrap_int(int(gi.x) + ox, GRID_X);
 			uint ny = wrap_int(int(gi.y) + oy, GRID_Y);
 
-			uint c = ny * grid_x + nx;
+			uint2 neighbor = uint2(nx, ny);
+			uint c = cell_index(neighbor);
 			if (c >= cells) continue;
 			uint begin = cell_offsets[c];
 			uint end = cell_offsets[c + 1u];
@@ -651,9 +634,8 @@ void render_kernel(uint id) {
 				float2 pos = body_pos[j];
 				float radius = body_radius[j];
 				uint type = body_type[j];
-				float softness = max(radius * 0.6f, 0.05f);
 				float render_radius = radius;
-				float render_softness = softness;
+				float render_softness = max(radius * 0.6f, 0.05f);
 				if (type == 2u) {
 					// Slightly dilate clustered type-2 bodies so their halos blend without visible seams.
 					float expand = radius * 0.4f;
@@ -662,9 +644,9 @@ void render_kernel(uint id) {
 				}
 				float dist = length(world - pos);
 				float coverage = soft_circle(dist, render_radius, render_softness);
-				BodyRenderData render_info = render(j, type);
-				if (render_info.intensity > 0.0f) {
-					color += render_info.color * coverage * render_info.intensity;
+				BodyRenderData info = render(j, type);
+				if (info.intensity > 0.0f) {
+					color += info.color * coverage * info.intensity;
 				}
 				density = max(density, coverage);
 			}
@@ -674,7 +656,7 @@ void render_kernel(uint id) {
 	density = saturate(density);
 
 	uint accum_idx = id * 4u;
-	accumulation_buffer[accum_idx + 0u] = (uint)(color.r * COLOR_SCALE);
+	accumulation_buffer[accum_idx] = (uint)(color.r * COLOR_SCALE);
 	accumulation_buffer[accum_idx + 1u] = (uint)(color.g * COLOR_SCALE);
 	accumulation_buffer[accum_idx + 2u] = (uint)(color.b * COLOR_SCALE);
 	accumulation_buffer[accum_idx + 3u] = (uint)(density * COLOR_SCALE);
