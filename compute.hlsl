@@ -608,18 +608,6 @@ void render_kernel(uint id) {
 	int sample_radius= clamp(extra + 2, 2, 10);
 
 
-    if (density <= 0.1f) {
-        WorldBody body;
-        body.center = GAME_START_CENTER;
-        body.radius = ROOT_BODY_RADIUS;
-        body.softness = body.radius * 0.5f;
-        body.color = float3(0.85f, 0.90f, 0.98f);
-        body.energy = 0.65f;
-        float dist = length(world - body.center);
-		float coverage = soft_circle(dist, body.radius, body.softness);
-		color += body.color * body.energy * coverage;
-		density = max(density, coverage);
-	}
 
 	uint grid_x = GRID_X, grid_y = GRID_Y;
 	uint cells = grid_cell_count();
@@ -640,8 +628,16 @@ void render_kernel(uint id) {
 				float radius = body_radius[j];
 				uint type = body_type[j];
 				float softness = max(radius * 0.6f, 0.05f);
+				float render_radius = radius;
+				float render_softness = softness;
+				if (type == 2u) {
+					// Slightly dilate clustered type-2 bodies so their halos blend without visible seams.
+					float expand = radius * 0.4f;
+					render_radius += expand;
+					render_softness = max(render_softness, render_radius * 0.55f);
+				}
 				float dist = length(world - pos);
-				float coverage = soft_circle(dist, radius, softness);
+				float coverage = soft_circle(dist, render_radius, render_softness);
 				BodyRenderData render_info = render(j, type);
 				if (render_info.intensity > 0.0f) {
 					color += render_info.color * coverage * render_info.intensity;
