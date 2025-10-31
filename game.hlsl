@@ -8,6 +8,14 @@ struct BodyInitData {
     float inv_mass;
 };
 
+uint collision_mask(uint type) {
+    return (type == 2u) ? 1u : 0u;
+}
+
+bool can_collide(uint type_a, uint type_b) {
+    return (collision_mask(type_a) & collision_mask(type_b)) != 0u;
+}
+
 BodyInitData init(uint type) {
     BodyInitData data;
     switch (type) {
@@ -132,6 +140,7 @@ void collision_callback(uint a, uint b, float2 normal, float penetration) {
     uint type_a = body_type[a];
     uint type_b = body_type[b];
     if (type_a == 0u || type_b == 0u) return;
+    if (!can_collide(type_a, type_b)) return;
 
     float weight_a = body_inv_mass[a];
     float weight_b = body_inv_mass[b];

@@ -425,7 +425,11 @@ void zero_deltas(uint id) {
 void constraints_kernel(uint id) {
     uint capacity = BODY_CAPACITY;
     if (id >= capacity) return;
-    if (body_type[id] == 0u) return;
+    uint type_i = body_type[id];
+    if (type_i == 0u) return;
+
+    uint mask_i = collision_mask(type_i);
+    if (mask_i == 0u) return;
 
     float2 xi = body_pos_pred[id];
     float  ri = body_radius[id];
@@ -447,7 +451,10 @@ void constraints_kernel(uint id) {
             for (uint k = begin; k < end; ++k) {
                 uint j = sorted_indices[k];
                 if (j <= id || j >= capacity) continue;
-                if (body_type[j] == 0u) continue;
+                uint type_j = body_type[j];
+                if (type_j == 0u) continue;
+                uint mask_j = collision_mask(type_j);
+                if ((mask_i & mask_j) == 0u) continue;
 
                 float2 xj = body_pos_pred[j];
                 float  rj = body_radius[j];
