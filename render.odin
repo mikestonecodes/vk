@@ -114,6 +114,7 @@ buffer_specs := []backend.BufferSpec {
 	{24, body_capacity_size * body_scalar_size, {.WRITE, .READ}, {.COMPUTE}}, // body_inv_mass
 	{25, body_capacity_size * body_uint_size, {.WRITE, .READ}, {.COMPUTE}}, // body_flags
 	{26, body_capacity_size * body_vec2_size, {.WRITE, .READ}, {.COMPUTE}}, // body_delta
+	{27, body_capacity_size * body_scalar_size, {.WRITE, .READ}, {.COMPUTE}}, // body_lifetime
 	{30, grid_cell_size * body_uint_size, {.WRITE, .READ}, {.COMPUTE}}, // grid_count
 	{31, DeviceSize(GRID_CELL_COUNT + 1) * body_uint_size, {.WRITE, .READ}, {.COMPUTE}}, // grid_offset
 	{32, grid_cell_size * body_uint_size, {.WRITE, .READ}, {.COMPUTE}}, // grid_scan

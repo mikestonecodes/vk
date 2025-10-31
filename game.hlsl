@@ -2,6 +2,7 @@
 
 bool spawn(uint type, float2 position, float2 velocity);
 float2 load_body_delta(uint id);
+void deactivate_body(uint id);
 
 struct BodyInitData {
     float radius;
@@ -45,6 +46,10 @@ bool can_collide(uint type_a, uint type_b) {
     return (collision_mask(type_a) & collision_mask(type_b)) != 0u;
 }
 
+uint clamp_body_type(uint type) {
+    return min(type, 2u);
+}
+
 BodyInitData init(uint type) {
     uint idx = clamp_body_type(type);
     BodyInitData data;
@@ -82,13 +87,25 @@ BodyRenderData render(uint id, uint type) {
 
 void begin() {
     if (push_constants.spawn_body == 0u) return;
+
     GlobalState state = global_state[0];
+
+    // Fire rate cooldown: 0.25 seconds between shots
+    const float FIRE_COOLDOWN = 0.25f;
+    float time_since_last_fire = push_constants.time - state.last_fire_time;
+    if (time_since_last_fire < FIRE_COOLDOWN) return;
+
     float seed = float(state.spawn_next) * 41.239f + push_constants.time * 13.73f;
-    float speed = BODY_MOVE_SPEED[spawn_idx];
+    float speed = BODY_MOVE_SPEED[1u];
     float2 spawn_position = GAME_START_CENTER;
     float2 uv = float2(push_constants.mouse_ndc_x, push_constants.mouse_ndc_y);
     float2 pointer_world = uv_to_world(uv);
     float2 aim_dir = safe_normalize(pointer_world - spawn_position, 1.0f);
+
+    // Signal to remove one type 2 particle
+    state.remove_type2_flag = 1u;
+    state.last_fire_time = push_constants.time;
+    global_state[0] = state;
 
     spawn(1u, spawn_position, aim_dir * speed);
 }
@@ -97,6 +114,33 @@ void update(uint id, float dt) {
 
     uint type = body_type[id];
     if (type == 0u) return;
+
+    // Check if we should remove a type 2 particle
+    if (type == 2u && global_state[0].remove_type2_flag != 0u) {
+        uint old_flag;
+        InterlockedExchange(global_state[0].remove_type2_flag, 0u, old_flag);
+        if (old_flag != 0u) {
+            deactivate_body(id);
+            return;
+        }
+    }
+
+    // Update lifetime
+    float lifetime = body_lifetime[id];
+    if (lifetime > 0.0f) {
+        lifetime -= dt;
+        body_lifetime[id] = lifetime;
+		if (type == 1u && lifetime <= 2.5f) {
+            body_type[id] = 2u;
+			body_lifetime[id] = -1.0f;
+            type = 2u;
+        }
+        // Type 1 expires after lifetime
+		else if (lifetime <= 0.0f) {
+            deactivate_body(id);
+            return;
+        }
+    }
 
     float2 vel = body_vel[id];
     switch (type) {

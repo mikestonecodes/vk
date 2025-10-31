@@ -117,35 +117,10 @@ window init
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x210000000021 to a memory block which is fully consumed by the buffer. The required size of the allocation is 256000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x230000000023 to a memory block which is fully consumed by the buffer. The required size of the allocation is 256000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
 [WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x250000000025 to a memory block which is fully consumed by the buffer. The required size of the allocation is 512000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
-[WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x2d000000002d to a memory block which is fully consumed by the buffer. The required size of the allocation is 256000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
+[WARNING] vkBindBufferMemory(): Trying to bind VkBuffer 0x270000000027 to a memory block which is fully consumed by the buffer. The required size of the allocation is 256000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
+[WARNING] (Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
+vkBindBufferMemory(): Trying to bind VkBuffer 0x2f000000002f to a memory block which is fully consumed by the buffer. The required size of the allocation is 256000, but smaller buffers like this should be sub-allocated from larger memory blocks. (Current threshold is 1048576 bytes)
 starting prun
 Shader compiled, IGNORE BUILD ERROR ABOVE ^^^ 
-In file included from compute.hlsl:193:
-./game.hlsl:103:5: error: use of undeclared identifier 'ensure_type2_population'
-    ensure_type2_population();
-    ^
-
 Shader compiled, IGNORE BUILD ERROR ABOVE ^^^ 
 Shader compiled, IGNORE BUILD ERROR ABOVE ^^^ 
-Shader compiled, IGNORE BUILD ERROR ABOVE ^^^ 
-Shader compiled, IGNORE BUILD ERROR ABOVE ^^^ 
-Shader compiled, IGNORE BUILD ERROR ABOVE ^^^ 
-Shader compiled, IGNORE BUILD ERROR ABOVE ^^^ 
-Shader compiled, IGNORE BUILD ERROR ABOVE ^^^ 
-In file included from compute.hlsl:193:
-./game.hlsl:49:16: error: use of undeclared identifier 'clamp_body_type'
-    uint idx = clamp_body_type(type);
-               ^
-./game.hlsl:88:35: error: use of undeclared identifier 'spawn_idx'
-    float speed = BODY_MOVE_SPEED[spawn_idx];
-                                  ^
-
-Shader compiled, IGNORE BUILD ERROR ABOVE ^^^ 
-In file included from compute.hlsl:193:
-./game.hlsl:49:16: error: use of undeclared identifier 'clamp_body_type'
-    uint idx = clamp_body_type(type);
-               ^
-./game.hlsl:87:35: error: use of undeclared identifier 'spawn_idx'
-    float speed = BODY_MOVE_SPEED[spawn_idx];
-                                  ^
-

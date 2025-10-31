@@ -61,11 +61,11 @@ struct ComputePushConstants {
 struct GlobalState {
     float2 camera_position;
     float  camera_zoom;
-    float  _pad0;
+    float  last_fire_time;
     uint   spawn_next;
     uint   spawn_active;
     uint   fire_button_prev;
-    uint   _pad2;
+    uint   remove_type2_flag;
 };
 struct WorldBody { float2 center; float radius; float softness; float3 color; float energy; };
 
@@ -78,6 +78,7 @@ struct WorldBody { float2 center; float radius; float softness; float3 color; fl
 [[vk::binding(24, 0)]] RWStructuredBuffer<float>  body_inv_mass;
 [[vk::binding(25, 0)]] RWStructuredBuffer<uint>   body_type;
 [[vk::binding(26, 0)]] RWStructuredBuffer<int2>   body_delta_accum;
+[[vk::binding(27, 0)]] RWStructuredBuffer<float>  body_lifetime;
 [[vk::binding(30, 0)]] RWStructuredBuffer<uint> cell_counts;
 [[vk::binding(31, 0)]] RWStructuredBuffer<uint> cell_offsets;
 [[vk::binding(32, 0)]] RWStructuredBuffer<uint> cell_scratch;
@@ -145,6 +146,12 @@ void atomic_add_body_delta(uint id, float2 v) {
     if (iy != 0) InterlockedAdd(body_delta_accum[id].y, iy);
 }
 
+static const float BODY_LIFETIME[3] = {
+    -1.0f,  // type 0: infinite (static)
+    3.5f,   // type 1: 3.5 seconds
+    -1.0f   // type 2: infinite
+};
+
 // Shared helper for setting up body state for spawns and resets.
 void init_body(uint slot, uint type, float radius, float inv_mass, float2 position, float2 velocity) {
     body_type[slot] = type;
@@ -153,6 +160,7 @@ void init_body(uint slot, uint type, float radius, float inv_mass, float2 positi
     body_pos[slot] = position;
     body_pos_pred[slot] = position;
     body_vel[slot] = velocity;
+    body_lifetime[slot] = BODY_LIFETIME[type];
     store_body_delta(slot, float2(0.0f, 0.0f));
 }
 
@@ -287,13 +295,35 @@ void begin_frame(uint id) {
 void initialize_bodies(uint id) {
     if (id == 0u) {
         GlobalState state = global_state[0];
-        state.spawn_next = 0u;
-        state.spawn_active = 0u;
+        state.spawn_next = 500u;
+        state.spawn_active = 500u;
         state.fire_button_prev = 0u;
+        state.remove_type2_flag = 0u;
+        state.last_fire_time = -1.0f;  // Initialize to allow immediate first shot
         global_state[0] = state;
     }
-    const BodyInitData defaults = init(1u);
-    init_body(id, 0u, defaults.radius, defaults.inv_mass, float2(0.0f, 0.0f), float2(0.0f, 0.0f));
+
+    const uint INITIAL_TYPE2_COUNT = 500u;
+    if (id >= DYNAMIC_BODY_START && id < DYNAMIC_BODY_START + INITIAL_TYPE2_COUNT) {
+        // Spawn type 2 particle with orbital motion
+        BodyInitData config = init(2u);
+        float2 seed = float2(float(id), float(id) * 1.618f);
+        float2 rand = hash21(seed);
+        float angle = rand.x * 6.28318530718f; // 2 * PI
+        float radius_dist = rand.y * 20.0f + 10.0f;  // Spread them out more (10-30 units)
+        float2 offset = float2(cos(angle), sin(angle)) * radius_dist;
+        float2 position = GAME_START_CENTER + offset;
+
+        // Give them tangential velocity to orbit
+        float2 tangent = float2(-sin(angle), cos(angle));
+        float orbit_speed = 20.0f + rand.y * 15.0f;
+        float2 velocity = tangent * orbit_speed;
+
+        init_body(id, 2u, config.radius, config.inv_mass, position, velocity);
+    } else {
+        const BodyInitData defaults = init(1u);
+        init_body(id, 0u, defaults.radius, defaults.inv_mass, float2(0.0f, 0.0f), float2(0.0f, 0.0f));
+    }
 }
 
 
@@ -547,6 +577,7 @@ void deactivate_body(uint id) {
     body_pos[id] = current;
     body_pos_pred[id] = current;
     body_vel[id] = float2(0.0f, 0.0f);
+    body_lifetime[id] = 0.0f;
     store_body_delta(id, float2(0.0f, 0.0f));
 }
 
@@ -632,23 +663,53 @@ void render_kernel(uint id) {
 			for (uint k = begin; k < end; ++k) {
 				uint j = sorted_indices[k];
 				float2 pos = body_pos[j];
+				float2 vel = body_vel[j];
 				float radius = body_radius[j];
 				uint type = body_type[j];
 				float render_radius = radius;
 				float render_softness = max(radius * 0.6f, 0.05f);
+
+				float2 to_pixel = world - pos;
+				float dist = length(to_pixel);
+
+				// Velocity-based tail - triangle cone shape
+				float speed = length(vel);
+				float tail_contrib = 0.0f;
+				if (speed > 1.0f && type != 0u) {
+					float2 vel_dir = vel / max(speed, 1e-5f);
+					float2 tail_dir = -vel_dir;
+					float along_tail = dot(to_pixel, tail_dir);
+
+					if (along_tail > 0.0f) {
+						float tail_length = min(speed * 0.15f, 6.0f);
+						float perp_dist = length(to_pixel - tail_dir * along_tail);
+
+						// Linear taper from circle radius to point
+						float tail_t = saturate(along_tail / tail_length);
+						float max_width = radius * (1.0f - tail_t);
+
+						// Smooth falloff at edges
+						float edge_softness = max_width * 0.3f;
+						tail_contrib = 1.0f - smoothstep(max_width - edge_softness, max_width + edge_softness, perp_dist);
+						tail_contrib *= (1.0f - tail_t);
+					}
+				}
+
 				if (type == 2u) {
 					// Slightly dilate clustered type-2 bodies so their halos blend without visible seams.
 					float expand = radius * 0.4f;
 					render_radius += expand;
 					render_softness = max(render_softness, render_radius * 0.55f);
 				}
-				float dist = length(world - pos);
+
 				float coverage = soft_circle(dist, render_radius, render_softness);
+				float combined_coverage = max(coverage, tail_contrib);
+
 				BodyRenderData info = render(j, type);
 				if (info.intensity > 0.0f) {
-					color += info.color * coverage * info.intensity;
+					color += info.color * combined_coverage * info.intensity;
 				}
-				density = max(density, coverage);
+				density = max(density, combined_coverage);
 			}
 		}
 	}
