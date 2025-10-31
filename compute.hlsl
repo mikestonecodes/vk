@@ -2,37 +2,38 @@
 // GLOBAL CONSTANTS
 // ============================================================================
 
-#define COLOR_SCALE 4096.0f
+static const float COLOR_SCALE = 4096.0f;
 
-#define CAMERA_DEFAULT_ZOOM 5.0f
-#define CAMERA_MOVE_SPEED   40.0f
-#define CAMERA_MIN_ZOOM     2.0f
-#define CAMERA_MAX_ZOOM     5000.0f
-#define CAMERA_ZOOM_RATE    2.2f
-#define CAMERA_FAST_SCALE   2.4f
+static const float CAMERA_DEFAULT_ZOOM = 3.0f;
+static const float CAMERA_MOVE_SPEED   = 40.0f;
+static const float CAMERA_MIN_ZOOM     = 2.0f;
+static const float CAMERA_MAX_ZOOM     = 5000.0f;
+static const float CAMERA_ZOOM_RATE    = 2.2f;
+static const float CAMERA_FAST_SCALE   = 2.4f;
 
-#define CELL_SIZE 5.0f
+static const float CELL_SIZE = 5.0f;
 
-#define DYNAMIC_BODY_START 1u
-#define MAX_ACTIVE_DYNAMIC 25000u
-#define DYNAMIC_BODY_POOL  60000u
+static const uint DYNAMIC_BODY_START     = 1u;
+static const uint MAX_ACTIVE_DYNAMIC     = 25000u;
+static const uint DYNAMIC_BODY_POOL      = 60000u;
 
-#define BODY_CAPACITY 512000u
-#define GRID_X 512u
-#define GRID_Y 512u
+static const uint BODY_CAPACITY = 512000u;
+static const uint GRID_X        = 512u;
+static const uint GRID_Y        = 512u;
 
-#define DYNAMIC_BODY_SPEED 42.0f
-#define DYNAMIC_BODY_RADIUS 0.20f
-#define DYNAMIC_BODY_MAX_DISTANCE 99950.0f
-#define ROOT_BODY_RADIUS 0.65f
+static const float DYNAMIC_BODY_SPEED        = 42.0f;
+static const float DYNAMIC_BODY_RADIUS       = 0.20f;
+static const float DYNAMIC_BODY_MAX_DISTANCE = 99950.0f;
+static const float ROOT_BODY_RADIUS          = 0.65f;
 
-#define BODY_DAMPING 0.02f
-#define RELAXATION 1.0f
-#define DT_CLAMP (1.0f / 30.0f)
-#define PHYS_SUBSTEPS 1u
+static const float BODY_DAMPING  = 0.02f;
+static const float RELAXATION    = 1.0f;
+static const float DT_CLAMP      = (1.0f / 30.0f);
+static const uint  PHYS_SUBSTEPS = 1u;
 
-#define DELTA_SCALE 332768.0f
-#define GAME_START_CENTER float2(float(GRID_X*CELL_SIZE) * 0.5f, float(GRID_Y*CELL_SIZE) * 0.5f)
+static const float  DELTA_SCALE       = 332768.0f;
+static const float2 GAME_START_CENTER = float2(float(GRID_X * CELL_SIZE) * 0.5f, float(GRID_Y * CELL_SIZE) * 0.5f);
+
 // ============================================================================
 // STRUCTS & BUFFERS
 // ============================================================================
