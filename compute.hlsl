@@ -2,37 +2,37 @@
 // GLOBAL CONSTANTS
 // ============================================================================
 
-static const float COLOR_SCALE = 4096.0f;
+#define COLOR_SCALE 4096.0f
 
-static const float CAMERA_DEFAULT_ZOOM = 5.0f;
-static const float CAMERA_MOVE_SPEED   = 40.0f;
-static const float CAMERA_MIN_ZOOM     = 2.0f;
-static const float CAMERA_MAX_ZOOM     = 5000.0f;
-static const float CAMERA_ZOOM_RATE    = 2.2f;
-static const float CAMERA_FAST_SCALE   = 2.4f;
+#define CAMERA_DEFAULT_ZOOM 5.0f
+#define CAMERA_MOVE_SPEED   40.0f
+#define CAMERA_MIN_ZOOM     2.0f
+#define CAMERA_MAX_ZOOM     5000.0f
+#define CAMERA_ZOOM_RATE    2.2f
+#define CAMERA_FAST_SCALE   2.4f
 
-static const float CELL_SIZE = 5.0f;
+#define CELL_SIZE 5.0f
 
-static const uint  DYNAMIC_BODY_START = 1u;
-static const uint  MAX_ACTIVE_DYNAMIC = 25000u;
-static const uint  DYNAMIC_BODY_POOL  = 60000u;
+#define DYNAMIC_BODY_START 1u
+#define MAX_ACTIVE_DYNAMIC 25000u
+#define DYNAMIC_BODY_POOL  60000u
 
-static const uint  BODY_CAPACITY = 512000u;
-static const uint  GRID_X = 512u;
-static const uint  GRID_Y = 512u;
+#define BODY_CAPACITY 512000u
+#define GRID_X 512u
+#define GRID_Y 512u
 
-static const float DYNAMIC_BODY_SPEED = 42.0f;
-static const float DYNAMIC_BODY_RADIUS = 0.20f;
-static const float DYNAMIC_BODY_MAX_DISTANCE = 99950.0f;
-static const float ROOT_BODY_RADIUS = 0.65f;
+#define DYNAMIC_BODY_SPEED 42.0f
+#define DYNAMIC_BODY_RADIUS 0.20f
+#define DYNAMIC_BODY_MAX_DISTANCE 99950.0f
+#define ROOT_BODY_RADIUS 0.65f
 
-static const float BODY_DAMPING = 0.02f;
-static const float RELAXATION = 1.0f;
-static const float DT_CLAMP = 1.0f / 30.0f;
-static const uint  PHYS_SUBSTEPS = 1u;
+#define BODY_DAMPING 0.02f
+#define RELAXATION 1.0f
+#define DT_CLAMP (1.0f / 30.0f)
+#define PHYS_SUBSTEPS 1u
 
-static const float DELTA_SCALE = 332768.0f;
-static const float2 GAME_START_CENTER = float2(float(GRID_X*CELL_SIZE) * 0.5f, float(GRID_Y*CELL_SIZE) * 0.5f);
+#define DELTA_SCALE 332768.0f
+#define GAME_START_CENTER float2(float(GRID_X*CELL_SIZE) * 0.5f, float(GRID_Y*CELL_SIZE) * 0.5f)
 // ============================================================================
 // STRUCTS & BUFFERS
 // ============================================================================
@@ -130,21 +130,6 @@ uint2 world_to_cell(float2 p) {
 uint cell_index(uint2 g) { return g.y * GRID_X + g.x; }
 uint grid_cell_count() { return GRID_X * GRID_Y; }
 
-// --- World Generation ---
-bool world_body_from_cell(float2 cell, out WorldBody body) {
-    float seed = dot(cell, float2(53.34f, 19.13f));
-    float presence = hash11(seed);
-    if (presence < 0.97f) { body = (WorldBody)0; return false; }
-
-    float2 jitter = hash21(cell) - 0.5f;
-    body.center = cell + jitter * 0.9f;
-    body.radius = lerp(0.35f, 0.10f, hash11(seed + 17.23f));
-    body.softness = lerp(0.20f, 0.55f, hash11(seed + 41.07f));
-    float3 randomColor = hash31(cell);
-    body.color = pow(randomColor, float3(1.8f, 1.6f, 1.4f));
-    body.energy = lerp(0.18f, 0.95f, hash11(seed + 63.5f));
-    return true;
-}
 
 // --- Delta Encoding ---
 int float_to_delta(float value) { return int(clamp(value * DELTA_SCALE, -214748000.0f, 214748000.0f)); }
@@ -265,6 +250,7 @@ void update_camera_state(float delta_time) {
 
 void begin_frame(uint id) {
     if (id == 0) {
+		begin();
         update_camera_state(push_constants.delta_time);
     }
 }
@@ -435,50 +421,6 @@ void zero_deltas(uint id) {
 // (11) CONSTRAINTS
 
 // --- World collision query (against static cells) ---
-bool collide_world(
-    float2 p, float expand,
-    out float2 n_out, out float depth_out,
-    out float2 center_out, out float radius_out, out float energy_out
-) {
-    float2 base_cell = floor(p);
-    bool hit = false;
-    float best_depth = 0.0f;
-    float2 best_normal = float2(0.0f, 0.0f);
-    WorldBody best_body = (WorldBody)0;
-
-    for (int oy = -1; oy <= 1; ++oy) {
-        for (int ox = -1; ox <= 1; ++ox) {
-            float2 cell = base_cell + float2(ox, oy);
-            WorldBody body;
-            if (!world_body_from_cell(cell, body)) continue;
-            float2 delta = p - body.center;
-            float dist = length(delta);
-            float penetration = (body.radius + expand) - dist;
-            if (penetration > best_depth) {
-                float safe_dist = max(dist, 1e-4f);
-                best_depth = penetration;
-                best_normal = delta / safe_dist;
-                hit = true;
-                best_body = body;
-            }
-        }
-    }
-
-    if (hit) {
-        n_out = best_normal;
-        depth_out = best_depth;
-        center_out = best_body.center;
-        radius_out = best_body.radius;
-        energy_out = best_body.energy;
-    } else {
-        n_out = float2(0.0f, 0.0f);
-        depth_out = 0.0f;
-        center_out = float2(0.0f, 0.0f);
-        radius_out = 0.0f;
-        energy_out = 0.0f;
-    }
-    return hit;
-}
 
 void constraints_kernel(uint id) {
     uint capacity = BODY_CAPACITY;
@@ -490,17 +432,6 @@ void constraints_kernel(uint id) {
     float  wi = body_inv_mass[id];
 
     if (!all(isfinite(xi))) return;
-/*
-    if (wi > 0.0f) {
-        float2 normal, body_center;
-        float depth, body_radius_out, body_energy;
-        if (collide_world(xi, ri, normal, depth, body_center, body_radius_out, body_energy)) {
-            if (id >= DYNAMIC_BODY_START) return;
-            float2 corr = -(depth)*normal * wi;
-            atomic_add_body_delta(id, corr);
-        }
-    }
-	*/
 
     uint2 gi = world_to_cell(xi);
     uint cells = grid_cell_count();
@@ -668,17 +599,6 @@ void render_kernel(uint id) {
 	int extra = (int)ceil(max_step);
 	int sample_radius= clamp(extra + 2, 2, 10);
 
-	for (int oy = -sample_radius; oy <= sample_radius; ++oy) {
-		for (int ox = -sample_radius; ox <= sample_radius; ++ox) {
-			float2 cell = baseCell + float2(ox, oy);
-			WorldBody body;
-			if (!world_body_from_cell(cell, body)) continue;
-			float dist = length(world - body.center);
-			float coverage = soft_circle(dist, body.radius, body.softness);
-			color += body.color * body.energy * coverage;
-			density = max(density, coverage);
-		}
-	}
 
     if (density <= 0.1f) {
         WorldBody body;

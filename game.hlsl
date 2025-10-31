@@ -66,26 +66,27 @@ BodyRenderData render(uint id, uint type) {
     return data;
 }
 
+void begin(){
+	if (push_constants.spawn_body != 0u) {
+		GlobalState state = global_state[0];
+		float seed = float(state.spawn_next) * 41.239f + push_constants.time * 13.73f;
+		float type_choice = hash11(seed);
+		uint spawn_type = (type_choice > 0.5f) ? 1u : 2u;
+
+		float angle_rand = hash11(seed + 37.342f);
+		float angle = angle_rand * 6.2831853f;
+		float2 dir = float2(cos(angle), sin(angle));
+
+		float base_speed = DYNAMIC_BODY_SPEED;
+		float speed = (spawn_type == 1u) ? base_speed : base_speed * 0.65f;
+		float2 spawn_velocity = dir * speed;
+
+		float2 spawn_position = camera_pos();
+		spawn(spawn_type, spawn_position, spawn_velocity);
+	}
+}
+
 void update(uint id, float dt) {
-    if (id == 0u) {
-        if (push_constants.spawn_body != 0u) {
-            GlobalState state = global_state[0];
-            float seed = float(state.spawn_next) * 41.239f + push_constants.time * 13.73f;
-            float type_choice = hash11(seed);
-            uint spawn_type = (type_choice > 0.5f) ? 1u : 2u;
-
-            float angle_rand = hash11(seed + 37.342f);
-            float angle = angle_rand * 6.2831853f;
-            float2 dir = float2(cos(angle), sin(angle));
-
-            float base_speed = DYNAMIC_BODY_SPEED;
-            float speed = (spawn_type == 1u) ? base_speed : base_speed * 0.65f;
-            float2 spawn_velocity = dir * speed;
-
-            float2 spawn_position = camera_pos();
-            spawn(spawn_type, spawn_position, spawn_velocity);
-        }
-    }
 
     uint type = body_type[id];
     if (type == 0u) return;
