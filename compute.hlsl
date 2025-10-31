@@ -24,8 +24,6 @@ static const uint GRID_Y        = 512u;
 static const float DYNAMIC_BODY_SPEED        = 42.0f;
 static const float DYNAMIC_BODY_RADIUS       = 0.20f;
 static const float DYNAMIC_BODY_MAX_DISTANCE = 99950.0f;
-static const float ROOT_BODY_RADIUS          = 0.65f;
-
 static const float BODY_DAMPING  = 0.02f;
 static const float RELAXATION    = 1.0f;
 static const float DT_CLAMP      = (1.0f / 30.0f);
@@ -162,6 +160,41 @@ void init_body(uint slot, uint type, float radius, float inv_mass, float2 positi
 
 float2 camera_pos()  { return global_state[0].camera_position; }
 float  camera_zoom() { return global_state[0].camera_zoom; }
+
+// Camera-space helpers shared by gameplay and rendering code.
+float safe_camera_zoom() {
+    return max(camera_zoom(), CAMERA_MIN_ZOOM);
+}
+
+float2 screen_resolution() {
+    return float2(
+        max(float(push_constants.screen_width), 1.0f),
+        max(float(push_constants.screen_height), 1.0f)
+    );
+}
+
+float aspect_ratio() {
+    float2 resolution = screen_resolution();
+    return resolution.x / resolution.y;
+}
+
+float2 view_from_uv(float2 uv) {
+    float2 view = uv * 2.0f - 1.0f;
+    view.x *= aspect_ratio();
+    return view;
+}
+
+float2 uv_to_world(float2 uv) {
+    return camera_pos() + view_from_uv(uv) * safe_camera_zoom();
+}
+
+float2 pixel_center_uv(uint id, uint width, uint height) {
+    uint safe_width = max(width, 1u);
+    uint safe_height = max(height, 1u);
+    float2 dims = float2(float(safe_width), float(safe_height));
+    float2 pixel = float2(float(id % safe_width), float(id / safe_width));
+    return (pixel + 0.5f) / dims;
+}
 
 #include "game.hlsl"
 
@@ -583,23 +616,14 @@ void render_kernel(uint id) {
 	uint total_pixels = width * height;
 	if (id >= total_pixels || width == 0u || height == 0u) return;
 
-	GlobalState state = global_state[0];
-	float zoom = max(state.camera_zoom, CAMERA_MIN_ZOOM);
-	float2 cam_position = state.camera_position;
-
-	float2 resolution = float2(float(width), float(height));
-	float2 invResolution = 1.0f / resolution;
-	float2 uv = (float2(id % width, id / width) + 0.5f) * invResolution;
-
-	float aspect = resolution.x / resolution.y;
-	float2 view = uv * 2.0f - 1.0f;
-	view.x *= aspect;
-	float2 world = cam_position + view * zoom;
+	float2 uv = pixel_center_uv(id, width, height);
+	float2 world = uv_to_world(uv);
+	float zoom = safe_camera_zoom();
+	float2 resolution = screen_resolution();
+	float aspect = aspect_ratio();
 
 	float3 color = float3(0.016f, 0.018f, 0.020f);
 	float density = 0.001f;
-
-	float2 baseCell = floor(world);
 
 	float world_step_x = abs(zoom) * (2.0f / resolution.x) * aspect;
 	float world_step_y = abs(zoom) * (2.0f / resolution.y);
@@ -609,7 +633,7 @@ void render_kernel(uint id) {
 
 
 
-	uint grid_x = GRID_X, grid_y = GRID_Y;
+	uint grid_x = GRID_X;
 	uint cells = grid_cell_count();
 	uint2 gi = world_to_cell(world);
 	for (int oy = -1; oy <= 1; ++oy) {

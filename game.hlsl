@@ -43,23 +43,6 @@ struct BodyRenderData {
     float intensity;
 };
 
-float2 world_from_ndc(float ndc_x, float ndc_y) {
-    float2 cam = camera_pos();
-    float zoom = max(camera_zoom(), CAMERA_MIN_ZOOM);
-
-    float width  = max(float(push_constants.screen_width), 1.0f);
-    float height = max(float(push_constants.screen_height), 1.0f);
-    float aspect = width / height;
-
-    float2 view = float2(ndc_x * 2.0f - 1.0f, ndc_y * 2.0f - 1.0f);
-    view.x *= aspect;
-    return cam + view * zoom;
-}
-
-float2 cursor_world_position() {
-    return world_from_ndc(push_constants.mouse_ndc_x, push_constants.mouse_ndc_y);
-}
-
 BodyRenderData render(uint id, uint type) {
     BodyRenderData data;
     switch (type) {
@@ -101,8 +84,15 @@ void begin(){
 		float base_speed = DYNAMIC_BODY_SPEED;
 		float speed = (spawn_type == 1u) ? base_speed : base_speed * 0.65f;
 		float2 spawn_position = GAME_START_CENTER;
-		float2 target = cursor_world_position();
-		float2 aim_dir = safe_normalize(target - spawn_position, 1.0f);
+		float width = max(float(push_constants.screen_width), 1.0f);
+		float height = max(float(push_constants.screen_height), 1.0f);
+		float aspect = width / height;
+		float2 uv = float2(push_constants.mouse_ndc_x, push_constants.mouse_ndc_y);
+		float2 view = uv * 2.0f - 1.0f;
+		view.x *= aspect;
+		float zoom = max(camera_zoom(), CAMERA_MIN_ZOOM);
+		float2 pointer_world = camera_pos() + view * zoom;
+		float2 aim_dir = safe_normalize(pointer_world - spawn_position, 1.0f);
 		float2 spawn_velocity = aim_dir * speed;
 
 		spawn(spawn_type, spawn_position, spawn_velocity);
