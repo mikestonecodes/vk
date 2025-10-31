@@ -8,13 +8,37 @@ struct BodyInitData {
     float inv_mass;
 };
 
-static const float BODY_TYPE1_RADIUS = 0.20f;
-static const float BODY_TYPE2_RADIUS = BODY_TYPE1_RADIUS * 0.9f;
+static const float BODY_RADIUS_BY_TYPE[3] = {
+    0.20f,
+    0.20f,
+    0.20f * 0.9f
+};
 
-static const float BODY_TYPE1_SPEED = 42.0f;
-static const float BODY_TYPE2_SPEED = BODY_TYPE1_SPEED * 0.65f;
-static const float BODY_TYPE2_ATTRACTION = BODY_TYPE1_SPEED * 0.5f;
-static const float BODY_TYPE2_MAX_SPEED = BODY_TYPE1_SPEED * 1.3f;
+static const float BODY_INV_MASS_BY_TYPE[3] = {
+    0.0f,
+    1.0f,
+    1.0f
+};
+
+static const float BODY_MOVE_SPEED_BY_TYPE[3] = {
+    0.0f,
+    92.0f,
+    42.0f * 0.65f
+};
+
+static const float BODY_ATTRACTION_BY_TYPE[3] = {
+    0.0f,
+    0.0f,
+    42.0f * 0.5f
+};
+
+static const float BODY_MAX_SPEED_BY_TYPE[3] = {
+    0.0f,
+    42.0f,
+    42.0f * 1.3f
+};
+
+uint clamp_body_type(uint type) { return (type < 3u) ? type : 0u; }
 
 uint collision_mask(uint type) { return (type == 2u) ? 1u : 0u; }
 
@@ -23,15 +47,10 @@ bool can_collide(uint type_a, uint type_b) {
 }
 
 BodyInitData init(uint type) {
+    uint idx = clamp_body_type(type);
     BodyInitData data;
-    data.radius = BODY_TYPE1_RADIUS;
-    data.inv_mass = 0.0f;
-    if (type == 1u) {
-        data.inv_mass = 1.0f;
-    } else if (type == 2u) {
-        data.radius = BODY_TYPE2_RADIUS;
-        data.inv_mass = 1.0f;
-    }
+    data.radius = BODY_RADIUS_BY_TYPE[idx];
+    data.inv_mass = BODY_INV_MASS_BY_TYPE[idx];
     return data;
 }
 
@@ -68,8 +87,9 @@ void begin() {
     GlobalState state = global_state[0];
     float seed = float(state.spawn_next) * 41.239f + push_constants.time * 13.73f;
     uint spawn_type = (hash11(seed) > 0.5f) ? 1u : 2u;
+    uint spawn_idx = clamp_body_type(spawn_type);
 
-    float speed = (spawn_type == 1u) ? BODY_TYPE1_SPEED : BODY_TYPE2_SPEED;
+    float speed = BODY_MOVE_SPEED_BY_TYPE[spawn_idx];
     float2 spawn_position = GAME_START_CENTER;
     float2 uv = float2(push_constants.mouse_ndc_x, push_constants.mouse_ndc_y);
     float2 pointer_world = uv_to_world(uv);
@@ -87,7 +107,7 @@ void update(uint id, float dt) {
     switch (type) {
         case 1u: {
             float speed = length(vel);
-            float target_speed = BODY_TYPE1_SPEED;
+            float target_speed = BODY_MOVE_SPEED_BY_TYPE[1u];
             if (speed > 1e-5f) {
                 float blend = saturate(dt * 2.5f);
                 float new_speed = lerp(speed, target_speed, blend);
@@ -101,9 +121,9 @@ void update(uint id, float dt) {
         case 2u: {
             float2 to_target = GAME_START_CENTER - body_pos[id];
             float2 accel_dir = safe_normalize(to_target, 1.0f);
-            vel += accel_dir * (BODY_TYPE2_ATTRACTION * dt);
+            vel += accel_dir * (BODY_ATTRACTION_BY_TYPE[2u] * dt);
             float speed = length(vel);
-            float max_speed = BODY_TYPE2_MAX_SPEED;
+            float max_speed = BODY_MAX_SPEED_BY_TYPE[2u];
             if (speed > max_speed) {
                 vel *= max_speed / max(speed, 1e-5f);
             }
