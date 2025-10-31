@@ -568,7 +568,7 @@ check_shader_reload :: proc() {
 	}
 
 	if reload {
-		fmt.println("Shader changed, IGNORE PREVIOUS BUILD ERRORS...")
+		fmt.println("Shader compiled, IGNORE BUILD ERROR ABOVE ^^^ ")
 		vk.DeviceWaitIdle(device)
 		cleanup_shaders()
 		init_shaders()

@@ -21,8 +21,6 @@ static const uint BODY_CAPACITY = 512000u;
 static const uint GRID_X        = 512u;
 static const uint GRID_Y        = 512u;
 
-static const float DYNAMIC_BODY_SPEED        = 42.0f;
-static const float DYNAMIC_BODY_RADIUS       = 0.20f;
 static const float DYNAMIC_BODY_MAX_DISTANCE = 99950.0f;
 static const float BODY_DAMPING  = 0.02f;
 static const float RELAXATION    = 1.0f;
@@ -293,7 +291,8 @@ void initialize_bodies(uint id) {
         state.spawn_active = 0u;
         global_state[0] = state;
     }
-    init_body(id, 0u, DYNAMIC_BODY_RADIUS, 1.0f, float2(0.0f, 0.0f), float2(0.0f, 0.0f));
+    const BodyInitData defaults = init(1u);
+    init_body(id, 0u, defaults.radius, defaults.inv_mass, float2(0.0f, 0.0f), float2(0.0f, 0.0f));
 }
 
 
@@ -520,7 +519,7 @@ void apply_deltas(uint id) {
 
     float2 dp = load_body_delta(id) * RELAXATION;
     float mag = length(dp);
-    float max_shift = DYNAMIC_BODY_RADIUS * 2.0f;
+    float max_shift = body_radius[id] * 2.0f;
     if (mag > max_shift) dp *= (max_shift / max(mag, 1e-4f));
 
     if (body_inv_mass[id] > 0.0f) {

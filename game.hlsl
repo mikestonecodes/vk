@@ -8,6 +8,14 @@ struct BodyInitData {
     float inv_mass;
 };
 
+static const float BODY_TYPE1_RADIUS = 0.20f;
+static const float BODY_TYPE2_RADIUS = BODY_TYPE1_RADIUS * 0.9f;
+
+static const float BODY_TYPE1_SPEED = 42.0f;
+static const float BODY_TYPE2_SPEED = BODY_TYPE1_SPEED * 0.65f;
+static const float BODY_TYPE2_ATTRACTION = BODY_TYPE1_SPEED * 0.5f;
+static const float BODY_TYPE2_MAX_SPEED = BODY_TYPE1_SPEED * 1.3f;
+
 uint collision_mask(uint type) { return (type == 2u) ? 1u : 0u; }
 
 bool can_collide(uint type_a, uint type_b) {
@@ -16,12 +24,12 @@ bool can_collide(uint type_a, uint type_b) {
 
 BodyInitData init(uint type) {
     BodyInitData data;
-    data.radius = DYNAMIC_BODY_RADIUS;
+    data.radius = BODY_TYPE1_RADIUS;
     data.inv_mass = 0.0f;
     if (type == 1u) {
         data.inv_mass = 1.0f;
     } else if (type == 2u) {
-        data.radius = DYNAMIC_BODY_RADIUS * 0.9f;
+        data.radius = BODY_TYPE2_RADIUS;
         data.inv_mass = 1.0f;
     }
     return data;
@@ -61,7 +69,7 @@ void begin() {
     float seed = float(state.spawn_next) * 41.239f + push_constants.time * 13.73f;
     uint spawn_type = (hash11(seed) > 0.5f) ? 1u : 2u;
 
-    float speed = DYNAMIC_BODY_SPEED * ((spawn_type == 1u) ? 1.0f : 0.65f);
+    float speed = (spawn_type == 1u) ? BODY_TYPE1_SPEED : BODY_TYPE2_SPEED;
     float2 spawn_position = GAME_START_CENTER;
     float2 uv = float2(push_constants.mouse_ndc_x, push_constants.mouse_ndc_y);
     float2 pointer_world = uv_to_world(uv);
@@ -79,7 +87,7 @@ void update(uint id, float dt) {
     switch (type) {
         case 1u: {
             float speed = length(vel);
-            float target_speed = DYNAMIC_BODY_SPEED;
+            float target_speed = BODY_TYPE1_SPEED;
             if (speed > 1e-5f) {
                 float blend = saturate(dt * 2.5f);
                 float new_speed = lerp(speed, target_speed, blend);
@@ -93,9 +101,9 @@ void update(uint id, float dt) {
         case 2u: {
             float2 to_target = GAME_START_CENTER - body_pos[id];
             float2 accel_dir = safe_normalize(to_target, 1.0f);
-            vel += accel_dir * (DYNAMIC_BODY_SPEED * 0.5f * dt);
+            vel += accel_dir * (BODY_TYPE2_ATTRACTION * dt);
             float speed = length(vel);
-            float max_speed = DYNAMIC_BODY_SPEED * 1.3f;
+            float max_speed = BODY_TYPE2_MAX_SPEED;
             if (speed > max_speed) {
                 vel *= max_speed / max(speed, 1e-5f);
             }
