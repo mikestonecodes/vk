@@ -89,7 +89,7 @@ void begin(){
 		float speed = (spawn_type == 1u) ? base_speed : base_speed * 0.65f;
 		float2 spawn_velocity = dir * speed;
 
-		float2 spawn_position = camera_pos();
+		float2 spawn_position = GAME_START_CENTER;
 		spawn(spawn_type, spawn_position, spawn_velocity);
 	}
 }
@@ -115,9 +115,9 @@ void update(uint id, float dt) {
             break;
         }
         case 2u: {
-            float2 cam = camera_pos();
-            float2 to_camera = cam - body_pos[id];
-            float2 accel_dir = safe_normalize(to_camera, 1.0f);
+            float2 target = GAME_START_CENTER;
+            float2 to_target = target - body_pos[id];
+            float2 accel_dir = safe_normalize(to_target, 1.0f);
             float attraction = DYNAMIC_BODY_SPEED * 0.5f;
             vel += accel_dir * (attraction * dt);
             float max_speed = DYNAMIC_BODY_SPEED * 1.3f;
