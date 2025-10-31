@@ -64,7 +64,7 @@ struct GlobalState {
     float  _pad0;
     uint   spawn_next;
     uint   spawn_active;
-    uint   _pad1;
+    uint   fire_button_prev;
     uint   _pad2;
 };
 struct WorldBody { float2 center; float radius; float softness; float3 color; float energy; };
@@ -289,6 +289,7 @@ void initialize_bodies(uint id) {
         GlobalState state = global_state[0];
         state.spawn_next = 0u;
         state.spawn_active = 0u;
+        state.fire_button_prev = 0u;
         global_state[0] = state;
     }
     const BodyInitData defaults = init(1u);

@@ -19,7 +19,7 @@ GlobalStateGPU :: struct {
 	_pad0:           f32,
 	spawn_next:      u32,
 	spawn_active:    u32,
-	_pad1:           u32,
+	fire_button_prev:u32,
 	_pad2:           u32,
 }
 

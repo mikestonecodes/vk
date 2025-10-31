@@ -2,43 +2,52 @@
 
 bool spawn(uint type, float2 position, float2 velocity);
 float2 load_body_delta(uint id);
+void deactivate_body(uint id);
 
 struct BodyInitData {
     float radius;
     float inv_mass;
 };
 
-static const float BODY_RADIUS_BY_TYPE[3] = {
-    0.20f,
-    0.20f,
-    0.20f * 0.9f
+static const uint BODY_TYPE_COUNT = 3u;
+
+static const float BODY_RADIUS_BY_TYPE[BODY_TYPE_COUNT] = {
+    0.0f,            // 0: inactive
+    0.20f,           // 1: type-1
+    0.20f * 0.9f     // 2: type-2
 };
 
-static const float BODY_INV_MASS_BY_TYPE[3] = {
+static const float BODY_INV_MASS_BY_TYPE[BODY_TYPE_COUNT] = {
     0.0f,
     1.0f,
     1.0f
 };
 
-static const float BODY_MOVE_SPEED_BY_TYPE[3] = {
+static const float BODY_MOVE_SPEED_BY_TYPE[BODY_TYPE_COUNT] = {
     0.0f,
-    92.0f,
-    42.0f * 0.65f
+    42.0f,           // shooter
+    42.0f * 0.65f    // collector drift
 };
 
-static const float BODY_ATTRACTION_BY_TYPE[3] = {
+static const float BODY_ATTRACTION_BY_TYPE[BODY_TYPE_COUNT] = {
     0.0f,
     0.0f,
     42.0f * 0.5f
 };
 
-static const float BODY_MAX_SPEED_BY_TYPE[3] = {
+static const float BODY_MAX_SPEED_BY_TYPE[BODY_TYPE_COUNT] = {
     0.0f,
     42.0f,
     42.0f * 1.3f
 };
 
-uint clamp_body_type(uint type) { return (type < 3u) ? type : 0u; }
+static const uint  START_TYPE2_COUNT      = 500u;
+static const uint  MIN_TYPE2_COUNT        = 500u;
+static const float TYPE2_READY_DISTANCE   = 6.0f;
+static const float TYPE2_SPAWN_RADIUS     = 15.0f;
+static const float TYPE1_DESTROY_DISTANCE = 60.0f;
+
+uint clamp_body_type(uint type) { return (type < BODY_TYPE_COUNT) ? type : 0u; }
 
 uint collision_mask(uint type) { return (type == 2u) ? 1u : 0u; }
 
@@ -52,6 +61,77 @@ BodyInitData init(uint type) {
     data.radius = BODY_RADIUS_BY_TYPE[idx];
     data.inv_mass = BODY_INV_MASS_BY_TYPE[idx];
     return data;
+}
+
+void apply_body_type(uint id, uint type) {
+    BodyInitData config = init(type);
+    body_type[id] = type;
+    body_radius[id] = config.radius;
+    body_inv_mass[id] = config.inv_mass;
+}
+
+void ensure_type2_population() {
+    GlobalState state = global_state[0];
+    uint target = (state.spawn_active == 0u) ? START_TYPE2_COUNT : MIN_TYPE2_COUNT;
+    target = max(target, MIN_TYPE2_COUNT);
+    if (target == 0u) return;
+
+    uint count = 0u;
+    uint capacity = BODY_CAPACITY;
+    uint start = DYNAMIC_BODY_START;
+    for (uint i = start; i < capacity && count < target; ++i) {
+        if (body_type[i] == 2u) ++count;
+    }
+
+    if (count >= target) return;
+
+    uint needed = target - count;
+    uint seed_base = state.spawn_next;
+    for (uint n = 0u; n < needed; ++n) {
+        float seed = float(seed_base + n) * 37.137f + push_constants.time;
+        float2 random = hash21(float2(seed, seed * 1.37f)) * 2.0f - 1.0f;
+        float2 dir = safe_normalize(random, 1.0f);
+        float2 position = GAME_START_CENTER + dir * TYPE2_SPAWN_RADIUS;
+        float speed = BODY_MOVE_SPEED_BY_TYPE[2u];
+        float2 velocity = -dir * speed;
+        if (!spawn(2u, position, velocity)) break;
+    }
+}
+
+bool fire_collector(float2 aim_dir) {
+    uint capacity = BODY_CAPACITY;
+    uint start = DYNAMIC_BODY_START;
+    float ready_radius_sq = TYPE2_READY_DISTANCE * TYPE2_READY_DISTANCE;
+    float2 dir = safe_normalize(aim_dir, 1.0f);
+    float speed = BODY_MOVE_SPEED_BY_TYPE[1u];
+
+    bool found = false;
+    uint candidate = capacity;
+    float best_dist_sq = ready_radius_sq;
+
+    for (uint i = start; i < capacity; ++i) {
+        if (body_type[i] != 2u) continue;
+
+        float2 offset = body_pos[i] - GAME_START_CENTER;
+        float dist_sq = dot(offset, offset);
+        if (dist_sq > ready_radius_sq) continue;
+
+        if (!found || dist_sq < best_dist_sq) {
+            found = true;
+            candidate = i;
+            best_dist_sq = dist_sq;
+        }
+    }
+
+    if (!found || candidate >= capacity) return false;
+
+    apply_body_type(candidate, 1u);
+    body_pos[candidate] = GAME_START_CENTER;
+    body_pos_pred[candidate] = GAME_START_CENTER;
+    body_vel[candidate] = dir * speed;
+    store_body_delta(candidate, float2(0.0f, 0.0f));
+
+    return true;
 }
 
 struct BodyRenderData {
@@ -82,20 +162,23 @@ BodyRenderData render(uint id, uint type) {
 }
 
 void begin() {
-    if (push_constants.spawn_body == 0u) return;
+    ensure_type2_population();
 
     GlobalState state = global_state[0];
-    float seed = float(state.spawn_next) * 41.239f + push_constants.time * 13.73f;
-    uint spawn_type = (hash11(seed) > 0.5f) ? 1u : 2u;
-    uint spawn_idx = clamp_body_type(spawn_type);
+    bool pressed = (push_constants.spawn_body != 0u);
+    bool new_press = pressed && (state.fire_button_prev == 0u);
 
-    float speed = BODY_MOVE_SPEED_BY_TYPE[spawn_idx];
-    float2 spawn_position = GAME_START_CENTER;
-    float2 uv = float2(push_constants.mouse_ndc_x, push_constants.mouse_ndc_y);
-    float2 pointer_world = uv_to_world(uv);
-    float2 aim_dir = safe_normalize(pointer_world - spawn_position, 1.0f);
+    if (new_press) {
+        float2 spawn_position = GAME_START_CENTER;
+        float2 uv = float2(push_constants.mouse_ndc_x, push_constants.mouse_ndc_y);
+        float2 pointer_world = uv_to_world(uv);
+        float2 aim_dir = safe_normalize(pointer_world - spawn_position, 1.0f);
 
-    spawn(spawn_type, spawn_position, aim_dir * speed);
+        fire_collector(aim_dir);
+    }
+
+    state.fire_button_prev = pressed ? 1u : 0u;
+    global_state[0] = state;
 }
 
 void update(uint id, float dt) {
@@ -106,8 +189,9 @@ void update(uint id, float dt) {
     float2 vel = body_vel[id];
     switch (type) {
         case 1u: {
+            uint idx = clamp_body_type(type);
             float speed = length(vel);
-            float target_speed = BODY_MOVE_SPEED_BY_TYPE[1u];
+            float target_speed = BODY_MOVE_SPEED_BY_TYPE[idx];
             if (speed > 1e-5f) {
                 float blend = saturate(dt * 2.5f);
                 float new_speed = lerp(speed, target_speed, blend);
@@ -116,6 +200,12 @@ void update(uint id, float dt) {
                 vel = float2(target_speed, 0.0f);
             }
             body_vel[id] = vel;
+
+            float dist = length(body_pos[id] - GAME_START_CENTER);
+            if (dist > TYPE1_DESTROY_DISTANCE) {
+                deactivate_body(id);
+                return;
+            }
             break;
         }
         case 2u: {
@@ -127,6 +217,14 @@ void update(uint id, float dt) {
             if (speed > max_speed) {
                 vel *= max_speed / max(speed, 1e-5f);
             }
+
+            float dist = length(to_target);
+            if (dist < TYPE2_READY_DISTANCE) {
+                float blend = saturate(dt * 4.0f);
+                body_pos[id] = lerp(body_pos[id], GAME_START_CENTER, blend);
+                vel *= 0.25f;
+            }
+
             body_vel[id] = vel;
             break;
         }
