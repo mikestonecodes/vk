@@ -166,9 +166,7 @@ void begin() {
 
     GlobalState state = global_state[0];
     bool pressed = (push_constants.spawn_body != 0u);
-    bool new_press = pressed && (state.fire_button_prev == 0u);
-
-    if (new_press) {
+    if (pressed) {
         float2 spawn_position = GAME_START_CENTER;
         float2 uv = float2(push_constants.mouse_ndc_x, push_constants.mouse_ndc_y);
         float2 pointer_world = uv_to_world(uv);
